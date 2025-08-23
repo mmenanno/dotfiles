@@ -5,12 +5,9 @@
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Load shared colors
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/bin/colors.sh"
 
 # Configuration
 DOTFILES_REPO="https://github.com/mmenanno/dotfiles.git"
@@ -57,6 +54,22 @@ check_xcode_tools() {
     fi
 }
 
+# Function to batch check required commands
+check_required_commands() {
+    local missing_commands=()
+    
+    # Check all required commands in batch
+    command_exists git || missing_commands+=("Git")
+    
+    if [[ ${#missing_commands[@]} -gt 0 ]]; then
+        log_error "Missing required commands: ${missing_commands[*]}"
+        log_info "Install missing commands using: xcode-select --install"
+        exit 1
+    fi
+    
+    log_success "All required commands available."
+}
+
 # Function to install Nix
 install_nix() {
     if command_exists nix; then
@@ -85,27 +98,26 @@ install_nix() {
     log_success "Nix installed successfully."
 }
 
-# Function to verify Git installation
-check_git() {
-    if ! command_exists git; then
-        log_error "Git is required but not installed."
-        log_info "Please install Git using: xcode-select --install"
-        exit 1
-    fi
-    log_success "Git is available."
-}
-
 # Function to clone or update dotfiles
 setup_dotfiles() {
     local clone_url="$DOTFILES_REPO"
     
     if [[ -d "$DOTFILES_DIR" ]]; then
-        log_info "Dotfiles directory exists. Updating..."
+        log_info "Dotfiles directory exists. Checking for updates..."
         cd "$DOTFILES_DIR"
         
+        # Check if repository needs updating
+        git fetch origin main >/dev/null 2>&1
+        local local_commit=$(git rev-parse HEAD)
+        local remote_commit=$(git rev-parse origin/main 2>/dev/null || echo "")
         
-        if ! git pull origin main; then
-            log_warning "Failed to update dotfiles. Continuing with existing version..."
+        if [[ -n "$remote_commit" && "$local_commit" != "$remote_commit" ]]; then
+            log_info "Updates available. Pulling changes..."
+            if ! git pull origin main; then
+                log_warning "Failed to update dotfiles. Continuing with existing version..."
+            fi
+        else
+            log_success "Dotfiles already up to date."
         fi
     else
         log_info "Cloning dotfiles repository..."
@@ -122,8 +134,8 @@ enable_flakes() {
     local nix_config_dir="$HOME/.config/nix"
     local nix_config_file="$nix_config_dir/nix.conf"
     
-    # Check if flakes are already enabled
-    if nix show-config 2>/dev/null | grep -q "experimental-features.*flakes"; then
+    # Check if flakes are already enabled by checking config file (faster than nix show-config)
+    if [[ -f "$nix_config_file" ]] && grep -q "experimental-features.*flakes" "$nix_config_file"; then
         log_success "Nix flakes already enabled."
         return 0
     fi
@@ -131,7 +143,7 @@ enable_flakes() {
     log_info "Enabling Nix flakes..."
     mkdir -p "$nix_config_dir"
     
-    # Add flakes configuration if not present
+    # Add flakes configuration
     if [[ ! -f "$nix_config_file" ]] || ! grep -q "experimental-features.*flakes" "$nix_config_file"; then
         echo "experimental-features = nix-command flakes" >> "$nix_config_file"
     fi
@@ -183,25 +195,33 @@ cleanup_on_error() {
 
 # Main installation flow
 main() {
-    # Set up error handling
+    # Set up error handling and display header in one block
     trap cleanup_on_error ERR
-
-    echo -e "${BLUE}🍎 macOS Dotfiles Bootstrap${NC}"
-    echo -e "${BLUE}================================${NC}"
-    echo
-
-    # Pre-flight checks
-    check_macos
-    check_xcode_tools
     
-    # Installation steps
+    cat << EOF
+${BLUE}🍎 macOS Dotfiles Bootstrap${NC}
+${BLUE}================================${NC}
+
+EOF
+
+    # Batch all pre-flight and environment checks
+    local checks=(
+        "check_macos:macOS compatibility"
+        "check_xcode_tools:Xcode Command Line Tools" 
+        "check_required_commands:required commands"
+    )
+    
+    for check in "${checks[@]}"; do
+        IFS=':' read -r func desc <<< "$check"
+        log_info "Checking $desc..."
+        $func
+    done
+    
+    # Installation pipeline
     install_nix
-    check_git
     setup_dotfiles
     enable_flakes
     build_configuration
-    
-    # Completion
     show_completion_message
 }
 
