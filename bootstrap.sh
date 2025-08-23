@@ -17,8 +17,6 @@ DOTFILES_REPO="https://github.com/mmenanno/dotfiles.git"
 DOTFILES_DIR="$HOME/dotfiles"
 FLAKE_CONFIG="$DOTFILES_DIR/nix#macbook_setup"
 
-# GitHub token for private repository access
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 # Logging functions
 log_info() {
@@ -102,20 +100,10 @@ check_git() {
 setup_dotfiles() {
     local clone_url="$DOTFILES_REPO"
     
-    # Use authenticated URL if GitHub token is provided
-    if [[ -n "$GITHUB_TOKEN" ]]; then
-        clone_url="https://${GITHUB_TOKEN}@github.com/mmenanno/dotfiles.git"
-        log_info "Using GitHub token for private repository access..."
-    fi
-    
     if [[ -d "$DOTFILES_DIR" ]]; then
         log_info "Dotfiles directory exists. Updating..."
         cd "$DOTFILES_DIR"
         
-        # Set up authenticated remote if token is provided
-        if [[ -n "$GITHUB_TOKEN" ]]; then
-            git remote set-url origin "$clone_url" 2>/dev/null || true
-        fi
         
         if ! git pull origin main; then
             log_warning "Failed to update dotfiles. Continuing with existing version..."
@@ -124,10 +112,6 @@ setup_dotfiles() {
         log_info "Cloning dotfiles repository..."
         if ! git clone "$clone_url" "$DOTFILES_DIR"; then
             log_error "Failed to clone dotfiles repository."
-            if [[ -z "$GITHUB_TOKEN" ]]; then
-                log_info "If this is a private repository, provide a GitHub token:"
-                log_info "GITHUB_TOKEN=your_token $0"
-            fi
             exit 1
         fi
     fi

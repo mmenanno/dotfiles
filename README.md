@@ -7,10 +7,8 @@
 ### Method 1: Bootstrap Script (Recommended)
 
 ```bash
-curl -sSL -H "Authorization: token YOUR_GITHUB_TOKEN" https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh | GITHUB_TOKEN=YOUR_GITHUB_TOKEN bash
+curl -sSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh | bash
 ```
-
-Replace `YOUR_GITHUB_TOKEN` with a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope.
 
 ### Method 2: Manual Installation
 
@@ -154,7 +152,6 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 - No secrets or credentials are stored in this repository
 - 1Password integration provides secure credential management
 - SSH keys and signing keys are managed externally
-- **GitHub Token**: Required for private repository access, create at [github.com/settings/tokens](https://github.com/settings/tokens) with `repo` scope
 
 ## ⚡ Performance
 
