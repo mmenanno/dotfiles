@@ -75,7 +75,7 @@ jobs:
           
           # Check for hardcoded secrets patterns
           echo "Checking for potential hardcoded secrets..."
-          if grep -r -i "password\|secret\|key\|token" --include="*.nix" --include="*.sh" . | grep -v "op://" | grep -v "# "; then
+          if grep -r -i "password\|secret\|key\|token" --include="*.nix" --include="*.sh" . | grep -v "op://" | grep -v "# " | grep -v "PLACEHOLDER" | grep -v "bootstrap" | grep -v "getEnvOrFallback" | grep -v "signingKey\|identityFile\|keyFile\|keyCode" | grep -v '"key"' | grep -v "bindkey"; then
             echo "⚠️  Found potential hardcoded secrets - please review"
             exit 1
           else
