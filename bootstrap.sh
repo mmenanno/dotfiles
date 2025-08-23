@@ -108,8 +108,10 @@ setup_dotfiles() {
         
         # Check if repository needs updating
         git fetch origin main >/dev/null 2>&1
-        local local_commit=$(git rev-parse HEAD)
-        local remote_commit=$(git rev-parse origin/main 2>/dev/null || echo "")
+        local local_commit
+        local remote_commit
+        local_commit=$(git rev-parse HEAD)
+        remote_commit=$(git rev-parse origin/main 2>/dev/null || echo "")
         
         if [[ -n "$remote_commit" && "$local_commit" != "$remote_commit" ]]; then
             log_info "Updates available. Pulling changes..."
