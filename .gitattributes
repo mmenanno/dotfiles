@@ -1,0 +1,12 @@
+*.dmg filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
+
+# Nix files
+*.nix diff=nix
+
+# Vendored/generated files
+nix/files/* linguist-vendored
+
+# Config files
+*.lock linguist-generated
+flake.lock linguist-generated
