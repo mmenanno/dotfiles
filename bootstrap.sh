@@ -15,7 +15,6 @@ NC='\033[0m' # No Color
 # Configuration
 DOTFILES_REPO="https://github.com/mmenanno/dotfiles.git"
 DOTFILES_DIR="$HOME/dotfiles"
-FLAKE_CONFIG="$DOTFILES_DIR/nix#macbook_setup"
 
 
 # Logging functions
