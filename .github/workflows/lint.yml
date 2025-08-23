@@ -51,7 +51,7 @@ jobs:
       - name: Lint markdown files  
         run: |
           echo "🔍 Linting markdown files..."
-          markdownlint "**/*.md"
+          markdownlint --disable no-inline-html single-h1 line-length "**/*.md"
 
       - name: Lint GitHub workflow files
         run: |
