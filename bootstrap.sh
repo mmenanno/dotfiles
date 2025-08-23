@@ -144,12 +144,12 @@ enable_flakes() {
 build_configuration() {
     cd "$DOTFILES_DIR"
     
-    log_info "Building and activating nix-darwin configuration..."
+    log_info "Building and activating nix-darwin configuration with secrets..."
     log_warning "This may take 15-20 minutes on first run (downloading applications)..."
     
-    if ! darwin-rebuild switch --flake "$FLAKE_CONFIG"; then
+    if ! "$DOTFILES_DIR/bin/nixup-with-secrets"; then
         log_error "Failed to build nix-darwin configuration."
-        log_info "You can try running manually: cd $DOTFILES_DIR && darwin-rebuild switch --flake $FLAKE_CONFIG"
+        log_info "You can try running manually: cd $DOTFILES_DIR && ./bin/nixup-with-secrets"
         exit 1
     fi
     
