@@ -13,87 +13,41 @@
     # Cleanup configuration
     cleanupPeriodDays = 20;
 
-    # Permissions
-    permissions = {
-      allow = [
-        # Development & Testing
-        "Bash(npm run lint)"
-        "Bash(npm run test:*)"
-        "Bash(npm run build)"
-        "Bash(yarn lint)"
-        "Bash(cargo check)"
-        "Bash(cargo test)"
-        "Bash(pytest:*)"
-        "Bash(go test:*)"
-        "Bash(make test)"
-        "Bash(bundle install)"
-        "Bash(bundle exec rspec:*)"
-        "Bash(bundle exec rails test:*)"
-        "Bash(bundle exec rubocop:*)"
-        "Bash(rails generate:*)"
-        "Bash(rails db:migrate)"
-        "Bash(rails db:rollback)"
-        "Bash(rails db:seed)"
-        "Bash(rake test:*)"
-        "Bash(rspec:*)"
-        "Bash(rubocop:*)"
-
-        # Safe Git Operations
-        "Bash(git status)"
-        "Bash(git diff:*)"
-        "Bash(git log:*)"
-        "Bash(git show:*)"
-        "Bash(git add:*)"
-        "Bash(git commit:*)"
-        "Bash(git config:*)"
-
-        # Safe Read Operations
-        "Read(package.json)"
-        "Read(Gemfile)"
-        "Read(Gemfile.lock)"
-        "Read(Rakefile)"
-        "Read(Makefile)"
-        "Read(README.md)"
-        "Read(~/.zshrc)"
-        "Read(~/.gitconfig)"
-        "Read(**/*.md)"
-        "Read(**/*.toml)"
-
+    # Permissions - generated programmatically for maintainability
+    permissions = 
+      let
+        # Define permission groups
+        devTools = ["npm run lint" "npm run test:*" "npm run build" "yarn lint" "cargo check" "cargo test" "pytest:*" "go test:*" "make test"];
+        rubyTools = ["bundle install" "bundle exec rspec:*" "bundle exec rails test:*" "bundle exec rubocop:*" "rails generate:*" "rails db:migrate" "rails db:rollback" "rails db:seed" "rake test:*" "rspec:*" "rubocop:*"];
+        gitOps = ["git status" "git diff:*" "git log:*" "git show:*" "git add:*" "git commit:*" "git config:*"];
+        safeReads = ["package.json" "Gemfile" "Gemfile.lock" "Rakefile" "Makefile" "README.md" "~/.zshrc" "~/.gitconfig" "**/*.md" "**/*.toml"];
+        webDomains = ["github.com" "raw.githubusercontent.com" "api.github.com" "starship.rs" "www.nerdfonts.com" "gist.github.com" "nix-darwin.github.io" "nix-community.github.io" "docs.anthropic.com"];
+        
+        # Helpers to create permissions
+        toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
+        toReadPermissions = files: map (file: "Read(${file})") files;
+        toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
+      in {
+        allow = [
+          # Development & Testing Tools
+        ] ++ toBashPermissions devTools ++ toBashPermissions rubyTools ++ [
+          # Safe Git Operations  
+        ] ++ toBashPermissions gitOps ++ [
+          # Safe Read Operations
+        ] ++ toReadPermissions safeReads ++ 
+        
         # Nix Operations
-        "Bash(nix flake update:*)"
-        "Bash(/usr/bin/env nix flake:*)"
-        "Bash(nixup:*)"
-        "Bash(nix flake metadata:*)"
-        "Bash(nix flake check:*)"
-
-        # Web Access
-        "WebSearch"
-        "Bash(gh repo view:*)"
-        "WebFetch(domain:github.com)"
-        "WebFetch(domain:raw.githubusercontent.com)"
-        "WebFetch(domain:api.github.com)"
-        "WebFetch(domain:starship.rs)"
-        "WebFetch(domain:www.nerdfonts.com)"
-        "WebFetch(domain:gist.github.com)"
-        "WebFetch(domain:nix-darwin.github.io)"
-        "WebFetch(domain:nix-community.github.io)"
-        "WebFetch(domain:docs.anthropic.com)"
-
-        # macOS Operations
-        "Bash(brew search:*)"
-        "Bash(defaults read:*)"
-
-        # System Utilities
-        "Bash(grep:*)"
-        "Bash(mkdir:*)"
-        "Bash(mise:*)"
-      ];
-      ask = [
-        "Bash(git push:*)"
-        "Bash(rm:*)"
-        "Bash(sudo:*)"
-        "Bash(chmod:*)"
-      ];
+        toBashPermissions ["nix flake update:*" "/usr/bin/env nix flake:*" "nixup:*" "nix flake metadata:*" "nix flake check:*"] ++
+        
+        # Web Access - domains and search  
+        ["WebSearch"] ++ 
+        toWebFetchPermissions webDomains ++
+        ["Bash(gh repo view:*)"] ++
+        
+        # macOS and System Operations
+        toBashPermissions ["brew search:*" "defaults read:*" "grep:*" "mkdir:*" "mise:*"];
+        
+      ask = toBashPermissions ["git push:*" "rm:*" "sudo:*" "chmod:*"];
       deny = [];
       additionalDirectories = [];
       defaultMode = "acceptEdits";

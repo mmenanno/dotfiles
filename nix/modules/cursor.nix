@@ -2,8 +2,8 @@
 
 let
   # Import shared utilities
-  libUtils = import ./lib.nix;
-  inherit (libUtils) getEnvOrFallback;
+  utilsLib = import ./lib.nix;
+  inherit (utilsLib) getEnvOrFallback;
   
   # Environment-based full name
   fullName = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
