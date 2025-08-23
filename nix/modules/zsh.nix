@@ -92,12 +92,16 @@ in
 
     sessionVariables = {
       EDITOR = "cursor";
-      
+
       # Claude Code configuration
       DISABLE_TELEMETRY = "false";
       DISABLE_ERROR_REPORTING = "false";
       CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "false";
       BASH_DEFAULT_TIMEOUT_MS = "120000";
+
+      # Homebrew configuration
+      HOMEBREW_NO_ANALYTICS = "1";
+      HOMEBREW_NO_UPDATE_REPORT_NEW = "1";
     };
   };
 
