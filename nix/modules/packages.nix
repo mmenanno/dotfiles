@@ -1,0 +1,46 @@
+{ pkgs, ... }: {
+  nixpkgs.config.allowUnfree = true;
+
+  environment.systemPackages = with pkgs; [
+    automake
+    autoconf
+    cargo
+    docker
+    ejson
+    ejson2env
+    exiftool
+    ffmpeg
+    findutils
+    fzf
+    gh
+    git
+    git-lfs
+    gmp
+    imagemagick
+    mariadb
+    mkalias
+    mkvtoolnix
+    mediainfo
+    openssl
+    pipx
+    python3
+    readline
+    rsync
+    rustc
+    scc
+    speedtest-cli
+    terminal-notifier
+    pay-respects
+    typescript
+    undmg
+    watchman
+    wget
+    wireguard-go
+    wireguard-tools
+    x264
+    x265
+    yarn
+    yt-dlp
+    zoxide
+  ];
+}
