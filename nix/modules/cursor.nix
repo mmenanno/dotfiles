@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Import shared utilities (consistent with other modules)
+  # Import shared utilities
   utilsLib = import ./lib.nix;
   inherit (utilsLib) getEnvOrFallback;
   
