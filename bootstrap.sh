@@ -7,7 +7,7 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Load shared colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=bin/colors.sh
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/bin/colors.sh"
 
 # Configuration
