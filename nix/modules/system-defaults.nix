@@ -30,12 +30,30 @@ let
     "${appsDir}/Session.app"
   ];
 
-  # Function to create dock app entry
-  createDockEntry = app:
-    "defaults write com.apple.dock persistent-apps -array-add '<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file://${app}/</string><key>_CFURLStringType</key><integer>15</integer></dict></dict><key>tile-type</key><string>file-tile</string></dict>'";
-
-  # Generate all dock commands
-  dockCommands = lib.concatMapStringsSep "\n    " createDockEntry dockApps;
+  # Optimized dock setup - batch operations for better performance
+  dockPlistEntries = map (app: ''
+    <dict>
+      <key>tile-data</key>
+      <dict>
+        <key>file-data</key>
+        <dict>
+          <key>_CFURLString</key>
+          <string>file://${app}/</string>
+          <key>_CFURLStringType</key>
+          <integer>15</integer>
+        </dict>
+      </dict>
+      <key>tile-type</key>
+      <string>file-tile</string>
+    </dict>'') dockApps;
+  
+  # Create complete dock plist in one operation
+  dockSetupCommand = ''
+    # Clear existing dock apps
+    defaults write com.apple.dock persistent-apps -array
+    
+    # Write all dock entries as a single plist
+    defaults write com.apple.dock persistent-apps -array ${lib.concatStringsSep " " (map (entry: "'" + entry + "'") dockPlistEntries)}'';
 in
 {
   system.defaults = {
@@ -113,11 +131,8 @@ in
     #!/bin/bash
     echo "Setting up dock for user $(whoami)"
 
-    # Clear existing dock apps
-    defaults delete com.apple.dock persistent-apps 2>/dev/null || true
-
-    # Add apps in order
-    ${dockCommands}
+    # Optimized dock setup - batch operation
+    ${dockSetupCommand}
 
     # Set Downloads folder
     defaults write com.apple.dock persistent-others -array '

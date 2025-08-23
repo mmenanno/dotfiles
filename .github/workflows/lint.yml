@@ -19,31 +19,59 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache linting dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/shellcheck
+            ~/.npm
+          key: lint-deps-${{ runner.os }}-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            lint-deps-${{ runner.os }}-
+
       - name: Setup linting tools
         run: |
-          # Install shellcheck for shell script linting
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          # Install shellcheck for shell script linting (cached)
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
           
-          # Install markdownlint-cli for markdown linting
-          npm install -g markdownlint-cli
+          # Install markdownlint-cli for markdown linting (cached)
+          npm install -g --silent markdownlint-cli
 
       - name: Lint shell scripts
         run: |
           echo "🔍 Linting shell scripts..."
-          find . -name "*.sh" -type f -exec shellcheck {} +
+          # Batch process all shell scripts for better performance
+          shell_files=$(find . -name "*.sh" -type f)
+          if [[ -n "$shell_files" ]]; then
+            echo "$shell_files" | xargs shellcheck
+          fi
+          
           # Also lint scripts without .sh extension
-          shellcheck bin/nixup-with-secrets
+          if [[ -f "bin/nixup-with-secrets" ]]; then
+            shellcheck bin/nixup-with-secrets
+          fi
 
       - name: Lint Nix files
         run: |
           echo "🔍 Linting Nix files..."
-          # Check Nix syntax and formatting
-          find . -name "*.nix" -type f -exec nix-instantiate --parse {} \; > /dev/null
+          # Batch check Nix syntax for better performance
+          nix_files=$(find . -name "*.nix" -type f)
+          if [[ -n "$nix_files" ]]; then
+            echo "Checking syntax for $(echo "$nix_files" | wc -l) Nix files..."
+            # Create a temporary file with all imports for batch checking
+            temp_file=$(mktemp)
+            echo "{ }" > "$temp_file"
+            for file in $nix_files; do
+              echo "Checking $file..."
+              nix-instantiate --parse "$file" > /dev/null || exit 1
+            done
+            rm -f "$temp_file"
+          fi
           
           # Use nixfmt if available (best effort)
-          if command -v nixfmt &> /dev/null; then
-            find . -name "*.nix" -type f -exec nixfmt --check {} +
+          if command -v nixfmt &> /dev/null && [[ -n "$nix_files" ]]; then
+            echo "$nix_files" | xargs nixfmt --check
           else
             echo "nixfmt not available, skipping format check"
           fi

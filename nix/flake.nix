@@ -19,9 +19,12 @@
 
   outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager }:
     let
-      # Environment-based username with fallback
-      username = let envName = builtins.getEnv "NIX_FULL_NAME";
-                  in if envName != "" then envName else "placeholder-user";
+      # Import shared utilities
+      lib = import ./modules/lib.nix;
+      inherit (lib) getEnvOrFallback;
+      
+      # Environment-based username with fallback using consistent pattern
+      username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
       homeManagerConfig = {
         inherit username homeDirectory;
