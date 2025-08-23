@@ -21,10 +21,12 @@
         rubyTools = ["bundle install" "bundle exec rspec:*" "bundle exec rails test:*" "bundle exec rubocop:*" "rails generate:*" "rails db:migrate" "rails db:rollback" "rails db:seed" "rake test:*" "rspec:*" "rubocop:*"];
         gitOps = ["git status" "git diff:*" "git log:*" "git show:*" "git add:*" "git commit:*" "git config:*"];
         safeReads = ["package.json" "Gemfile" "Gemfile.lock" "Rakefile" "Makefile" "README.md" "~/.zshrc" "~/.gitconfig" "**/*.md" "**/*.toml"];
+        webDomains = ["github.com" "raw.githubusercontent.com" "api.github.com" "starship.rs" "www.nerdfonts.com" "gist.github.com" "nix-darwin.github.io" "nix-community.github.io" "docs.anthropic.com"];
         
-        # Helper to create Bash permissions
+        # Helpers to create permissions
         toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
         toReadPermissions = files: map (file: "Read(${file})") files;
+        toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
       in {
         allow = [
           # Development & Testing Tools
@@ -37,9 +39,9 @@
         # Nix Operations
         toBashPermissions ["nix flake update:*" "/usr/bin/env nix flake:*" "nixup:*" "nix flake metadata:*" "nix flake check:*"] ++
         
-        # Web Access - domains and search
+        # Web Access - domains and search  
         ["WebSearch"] ++ 
-        (map (domain: "WebFetch(domain:${domain})") ["github.com" "raw.githubusercontent.com" "api.github.com" "starship.rs" "www.nerdfonts.com" "gist.github.com" "nix-darwin.github.io" "nix-community.github.io" "docs.anthropic.com"]) ++
+        toWebFetchPermissions webDomains ++
         ["Bash(gh repo view:*)"] ++
         
         # macOS and System Operations
