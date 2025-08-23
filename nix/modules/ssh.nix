@@ -52,36 +52,46 @@ let
 
 in
 {
-  programs.ssh = {
-    enable = true;
-    matchBlocks = {
-      "${mainServerName}" = {
-        hostname = ips.main_server;
-        user = "root";
-        port = 8822;
-        identityFile = "~/.ssh/${mainServerKeyFile}";
-      };
-      "${nvmServerName}" = {
-        hostname = ips.nvm_server;
-        inherit (common.private) user;
-        identityFile = "~/.ssh/${nvmServerKeyFile}";
-      };
-      "${nvmServerName}-up" = {
-        hostname = ips.nvm_server;
-        inherit (common.private) user;
-        identityFile = "~/.ssh/${nvmServerKeyFile}";
-        extraOptions = common.private.extraOptions // {
-          RemoteCommand = "cd /mnt/torrents/complete-seed/${privateUser}/ ${with_bash_login_command}";
+  programs.ssh = 
+    let
+      
+      # Helper for NVM server with remote commands  
+      mkNvmBlock = suffix: remoteCmd: {
+        "${nvmServerName}${suffix}" = {
+          hostname = ips.nvm_server;
+          inherit (common.private) user;
+          identityFile = "~/.ssh/${nvmServerKeyFile}";
+          extraOptions = common.private.extraOptions // {
+            RemoteCommand = "${remoteCmd} ${with_bash_login_command}";
+          };
         };
       };
-      "${nvmServerName}-down" = {
-        hostname = ips.nvm_server;
-        inherit (common.private) user;
-        identityFile = "~/.ssh/${nvmServerKeyFile}";
-        extraOptions = common.private.extraOptions // {
-          RemoteCommand = "cd /mnt/unmanic/staging ${with_bash_login_command}";
+      
+      # Base server blocks
+      baseBlocks = {
+        "${mainServerName}" = {
+          hostname = ips.main_server;
+          user = "root";  
+          port = 8822;
+          identityFile = "~/.ssh/${mainServerKeyFile}";
         };
-      };
+      } // (if mainServerName != nvmServerName then {
+        "${nvmServerName}" = {
+          hostname = ips.nvm_server;
+          inherit (common.private) user;
+          identityFile = "~/.ssh/${nvmServerKeyFile}";
+        };
+      } else {});
+      
+      # NVM-specific blocks (only if configured)
+      nvmBlocks = if ips.nvm_server != "192.168.y.y" then
+        mkNvmBlock "-up" "cd /mnt/torrents/complete-seed/${privateUser}/" //
+        mkNvmBlock "-down" "cd /mnt/unmanic/staging"
+      else {};
+      
+    in {
+      enable = true;
+      matchBlocks = baseBlocks // nvmBlocks // {
       "github.com" = {
         hostname = "github.com";
         identityFile = "~/.ssh/${mainGithubKeyFile}";
