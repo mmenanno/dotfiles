@@ -41,26 +41,29 @@
         rubyTools =
           let
             # Core Ruby tools available in multiple forms
-            coreTools = ["rspec" "rubocop" "rbs" "spoom" "srb" "toys" "tapioca" "yard"];
+            coreTools = [
+              "brakeman"
+              "erb_lint"
+              "rake"
+              "rails"
+              "rspec"
+              "rubocop"
+              "rbs"
+              "spoom"
+              "srb"
+              "toys"
+              "tapioca"
+              "yard"
+            ];
           in
           [
             # Bundle management
-            "bundle install"
-
-            # Rails commands (direct only)
-            "rails generate:*"
-            "rails db:migrate"
-            "rails db:rollback"
-            "rails db:seed"
-            "rails test:*"
+            "bundle:*"
+            "bin/bundle:*"
 
             # Additional direct commands
-            "rake test:*"
             "ruby --version"
 
-            # Additional bin commands for Rails
-            "bin/rails:*"
-            "bin/rake:*"
           ] ++ toRubyToolPermissions coreTools;
         gitOps = [
           # Status and inspection
