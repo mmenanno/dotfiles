@@ -14,7 +14,7 @@
     cleanupPeriodDays = 20;
 
     # Permissions - generated programmatically for maintainability
-    permissions = 
+    permissions =
       let
         # Define permission groups
         devTools = [
@@ -49,6 +49,8 @@
           "bundle exec spoom:*"
           "bundle exec srb:*"
           "bundle exec toys:*"
+          "bundle exec tapioca:*"
+          "bundle exec yard:*"
 
           # Rails commands
           "rails generate:*"
@@ -65,6 +67,19 @@
           "spoom:*"
           "srb:*"
           "rails test:*"
+          "tapioca:*"
+          "yard:*"
+
+          # Bin commands
+          "bin/rails:*"
+          "bin/rake:*"
+          "bin/rspec:*"
+          "bin/rubocop:*"
+          "bin/spoom:*"
+          "bin/srb:*"
+          "bin/tapioca:*"
+          "bin/yard:*"
+          "bin/toys:*"
         ];
         gitOps = [
           # Status and inspection
@@ -115,7 +130,7 @@
           # Documentation
           "docs.anthropic.com"
         ];
-        
+
         # Helpers to create permissions
         toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
         toReadPermissions = files: map (file: "Read(${file})") files;
@@ -124,11 +139,11 @@
         allow = [
           # Development & Testing Tools
         ] ++ toBashPermissions devTools ++ toBashPermissions rubyTools ++ [
-          # Safe Git Operations  
+          # Safe Git Operations
         ] ++ toBashPermissions gitOps ++ [
           # Safe Read Operations
-        ] ++ toReadPermissions safeReads ++ 
-        
+        ] ++ toReadPermissions safeReads ++
+
         # Nix Operations
         toBashPermissions [
           "nix flake update:*"
@@ -137,12 +152,12 @@
           "nix flake metadata:*"
           "nix flake check:*"
         ] ++
-        
-        # Web Access - domains and search  
-        ["WebSearch"] ++ 
+
+        # Web Access - domains and search
+        ["WebSearch"] ++
         toWebFetchPermissions webDomains ++
         ["Bash(gh repo view:*)"] ++
-        
+
         # macOS and System Operations
         toBashPermissions [
           "brew search:*"
@@ -151,7 +166,7 @@
           "mkdir:*"
           "mise:*"
         ];
-        
+
       ask = toBashPermissions [
         "git push:*"
         "rm:*"
