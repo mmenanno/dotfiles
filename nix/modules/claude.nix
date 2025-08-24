@@ -14,7 +14,7 @@
     cleanupPeriodDays = 20;
 
     # Permissions - generated programmatically for maintainability
-    permissions = 
+    permissions =
       let
         # Define permission groups
         devTools = [
@@ -37,26 +37,34 @@
           # Make
           "make test"
         ];
-        rubyTools = [
-          # Bundle management
-          "bundle install"
+        # Define Ruby tools that should be available in all forms (bundle exec, direct, bin/)
+        rubyTools =
+          let
+            # Core Ruby tools available in multiple forms
+            coreTools = [
+              "brakeman"
+              "erb_lint"
+              "rake"
+              "rails"
+              "rspec"
+              "rubocop"
+              "rbs"
+              "spoom"
+              "srb"
+              "toys"
+              "tapioca"
+              "yard"
+            ];
+          in
+          [
+            # Bundle management
+            "bundle:*"
+            "bin/bundle:*"
 
-          # Bundle exec commands (testing & linting)
-          "bundle exec rspec:*"
-          "bundle exec rails test:*"
-          "bundle exec rubocop:*"
+            # Additional direct commands
+            "ruby --version"
 
-          # Rails commands
-          "rails generate:*"
-          "rails db:migrate"
-          "rails db:rollback"
-          "rails db:seed"
-
-          # Direct commands
-          "rake test:*"
-          "rspec:*"
-          "rubocop:*"
-        ];
+          ] ++ toRubyToolPermissions coreTools;
         gitOps = [
           # Status and inspection
           "git status"
@@ -106,20 +114,26 @@
           # Documentation
           "docs.anthropic.com"
         ];
-        
+
         # Helpers to create permissions
         toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
         toReadPermissions = files: map (file: "Read(${file})") files;
         toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
+
+        # Helper to generate Ruby tool permissions in all forms (bundle exec, direct, bin/)
+        toRubyToolPermissions = tools:
+          (map (tool: "bundle exec ${tool}:*") tools) ++
+          (map (tool: "${tool}:*") tools) ++
+          (map (tool: "bin/${tool}:*") tools);
       in {
         allow = [
           # Development & Testing Tools
         ] ++ toBashPermissions devTools ++ toBashPermissions rubyTools ++ [
-          # Safe Git Operations  
+          # Safe Git Operations
         ] ++ toBashPermissions gitOps ++ [
           # Safe Read Operations
-        ] ++ toReadPermissions safeReads ++ 
-        
+        ] ++ toReadPermissions safeReads ++
+
         # Nix Operations
         toBashPermissions [
           "nix flake update:*"
@@ -128,12 +142,12 @@
           "nix flake metadata:*"
           "nix flake check:*"
         ] ++
-        
-        # Web Access - domains and search  
-        ["WebSearch"] ++ 
+
+        # Web Access - domains and search
+        ["WebSearch"] ++
         toWebFetchPermissions webDomains ++
         ["Bash(gh repo view:*)"] ++
-        
+
         # macOS and System Operations
         toBashPermissions [
           "brew search:*"
@@ -142,7 +156,7 @@
           "mkdir:*"
           "mise:*"
         ];
-        
+
       ask = toBashPermissions [
         "git push:*"
         "rm:*"
