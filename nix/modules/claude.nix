@@ -45,6 +45,10 @@
           "bundle exec rspec:*"
           "bundle exec rails test:*"
           "bundle exec rubocop:*"
+          "bundle exec rbs:*"
+          "bundle exec spoom:*"
+          "bundle exec srb:*"
+          "bundle exec toys:*"
 
           # Rails commands
           "rails generate:*"
@@ -56,6 +60,11 @@
           "rake test:*"
           "rspec:*"
           "rubocop:*"
+          "ruby --version"
+          "toys:*"
+          "spoom:*"
+          "srb:*"
+          "rails test:*"
         ];
         gitOps = [
           # Status and inspection
