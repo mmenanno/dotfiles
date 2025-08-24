@@ -17,11 +17,95 @@
     permissions = 
       let
         # Define permission groups
-        devTools = ["npm run lint" "npm run test:*" "npm run build" "yarn lint" "cargo check" "cargo test" "pytest:*" "go test:*" "make test"];
-        rubyTools = ["bundle install" "bundle exec rspec:*" "bundle exec rails test:*" "bundle exec rubocop:*" "rails generate:*" "rails db:migrate" "rails db:rollback" "rails db:seed" "rake test:*" "rspec:*" "rubocop:*"];
-        gitOps = ["git status" "git diff:*" "git log:*" "git show:*" "git add:*" "git commit:*" "git config:*"];
-        safeReads = ["package.json" "Gemfile" "Gemfile.lock" "Rakefile" "Makefile" "README.md" "~/.zshrc" "~/.gitconfig" "**/*.md" "**/*.toml"];
-        webDomains = ["github.com" "raw.githubusercontent.com" "api.github.com" "starship.rs" "www.nerdfonts.com" "gist.github.com" "nix-darwin.github.io" "nix-community.github.io" "docs.anthropic.com"];
+        devTools = [
+          # Node.js/JavaScript
+          "npm run lint"
+          "npm run test:*"
+          "npm run build"
+          "yarn lint"
+
+          # Rust
+          "cargo check"
+          "cargo test"
+
+          # Python
+          "pytest:*"
+
+          # Go
+          "go test:*"
+
+          # Make
+          "make test"
+        ];
+        rubyTools = [
+          # Bundle management
+          "bundle install"
+
+          # Bundle exec commands (testing & linting)
+          "bundle exec rspec:*"
+          "bundle exec rails test:*"
+          "bundle exec rubocop:*"
+
+          # Rails commands
+          "rails generate:*"
+          "rails db:migrate"
+          "rails db:rollback"
+          "rails db:seed"
+
+          # Direct commands
+          "rake test:*"
+          "rspec:*"
+          "rubocop:*"
+        ];
+        gitOps = [
+          # Status and inspection
+          "git status"
+          "git diff:*"
+          "git log:*"
+          "git show:*"
+
+          # Staging and committing
+          "git add:*"
+          "git commit:*"
+
+          # Configuration
+          "git config:*"
+        ];
+        safeReads = [
+          # Package/dependency files
+          "package.json"
+          "Gemfile"
+          "Gemfile.lock"
+          "Rakefile"
+          "Makefile"
+
+          # Documentation
+          "README.md"
+          "**/*.md"
+
+          # Config files
+          "~/.zshrc"
+          "~/.gitconfig"
+          "**/*.toml"
+        ];
+        webDomains = [
+          # GitHub
+          "github.com"
+          "raw.githubusercontent.com"
+          "api.github.com"
+          "gist.github.com"
+
+          # Development tools
+          "starship.rs"
+          "www.nerdfonts.com"
+
+          # Nix community
+          "nix-darwin.github.io"
+          "nix-community.github.io"
+
+          # Documentation
+          "docs.anthropic.com"
+        ];
         
         # Helpers to create permissions
         toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
@@ -37,7 +121,13 @@
         ] ++ toReadPermissions safeReads ++ 
         
         # Nix Operations
-        toBashPermissions ["nix flake update:*" "/usr/bin/env nix flake:*" "nixup:*" "nix flake metadata:*" "nix flake check:*"] ++
+        toBashPermissions [
+          "nix flake update:*"
+          "/usr/bin/env nix flake:*"
+          "nixup:*"
+          "nix flake metadata:*"
+          "nix flake check:*"
+        ] ++
         
         # Web Access - domains and search  
         ["WebSearch"] ++ 
@@ -45,9 +135,20 @@
         ["Bash(gh repo view:*)"] ++
         
         # macOS and System Operations
-        toBashPermissions ["brew search:*" "defaults read:*" "grep:*" "mkdir:*" "mise:*"];
+        toBashPermissions [
+          "brew search:*"
+          "defaults read:*"
+          "grep:*"
+          "mkdir:*"
+          "mise:*"
+        ];
         
-      ask = toBashPermissions ["git push:*" "rm:*" "sudo:*" "chmod:*"];
+      ask = toBashPermissions [
+        "git push:*"
+        "rm:*"
+        "sudo:*"
+        "chmod:*"
+      ];
       deny = [];
       additionalDirectories = [];
       defaultMode = "acceptEdits";
