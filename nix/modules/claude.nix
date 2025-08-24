@@ -37,50 +37,31 @@
           # Make
           "make test"
         ];
-        rubyTools = [
-          # Bundle management
-          "bundle install"
+        # Define Ruby tools that should be available in all forms (bundle exec, direct, bin/)
+        rubyTools =
+          let
+            # Core Ruby tools available in multiple forms
+            coreTools = ["rspec" "rubocop" "rbs" "spoom" "srb" "toys" "tapioca" "yard"];
+          in
+          [
+            # Bundle management
+            "bundle install"
 
-          # Bundle exec commands (testing & linting)
-          "bundle exec rspec:*"
-          "bundle exec rails test:*"
-          "bundle exec rubocop:*"
-          "bundle exec rbs:*"
-          "bundle exec spoom:*"
-          "bundle exec srb:*"
-          "bundle exec toys:*"
-          "bundle exec tapioca:*"
-          "bundle exec yard:*"
+            # Rails commands (direct only)
+            "rails generate:*"
+            "rails db:migrate"
+            "rails db:rollback"
+            "rails db:seed"
+            "rails test:*"
 
-          # Rails commands
-          "rails generate:*"
-          "rails db:migrate"
-          "rails db:rollback"
-          "rails db:seed"
+            # Additional direct commands
+            "rake test:*"
+            "ruby --version"
 
-          # Direct commands
-          "rake test:*"
-          "rspec:*"
-          "rubocop:*"
-          "ruby --version"
-          "toys:*"
-          "spoom:*"
-          "srb:*"
-          "rails test:*"
-          "tapioca:*"
-          "yard:*"
-
-          # Bin commands
-          "bin/rails:*"
-          "bin/rake:*"
-          "bin/rspec:*"
-          "bin/rubocop:*"
-          "bin/spoom:*"
-          "bin/srb:*"
-          "bin/tapioca:*"
-          "bin/yard:*"
-          "bin/toys:*"
-        ];
+            # Additional bin commands for Rails
+            "bin/rails:*"
+            "bin/rake:*"
+          ] ++ toRubyToolPermissions coreTools;
         gitOps = [
           # Status and inspection
           "git status"
@@ -135,6 +116,12 @@
         toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
         toReadPermissions = files: map (file: "Read(${file})") files;
         toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
+
+        # Helper to generate Ruby tool permissions in all forms (bundle exec, direct, bin/)
+        toRubyToolPermissions = tools:
+          (map (tool: "bundle exec ${tool}:*") tools) ++
+          (map (tool: "${tool}:*") tools) ++
+          (map (tool: "bin/${tool}:*") tools);
       in {
         allow = [
           # Development & Testing Tools
