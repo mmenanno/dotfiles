@@ -88,6 +88,7 @@ in
     shellAliases = {
       nixup = "nixup-with-secrets";
       nixedit = "cursor ~/dotfiles";
+      webm2mp4 = "for file in *.webm; do ffmpeg -i \"$file\" -c:v libx264 -crf 23 -c:a aac -b:a 128k \"\${file%.webm}.mp4\"; done";
     };
 
     sessionVariables = {
