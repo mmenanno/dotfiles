@@ -21,8 +21,10 @@
     mkalias
     mkvtoolnix
     mediainfo
+    nodejs
     openssl
     pipx
+    pnpm
     python3
     readline
     rsync
