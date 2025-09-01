@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC1091
-source "${BASH_SOURCE[0]%/*}/colors"
+source "${BASH_SOURCE[0]%/*}/shared"
 
 # Default configuration
 DEFAULT_CRF=23
@@ -49,63 +49,12 @@ EXAMPLES:
 EOF
 }
 
-# Logging functions
-log_info() {
-    if [[ "$QUIET" == false ]]; then
-        echo -e "${BLUE}[INFO]${NC} $*" >&2
-    fi
-}
-
-log_success() {
-    if [[ "$QUIET" == false ]]; then
-        echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
-    fi
-}
-
-log_warning() {
-    if [[ "$QUIET" == false ]]; then
-        echo -e "${YELLOW}[WARNING]${NC} $*" >&2
-    fi
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $*" >&2
-}
-
-log_verbose() {
-    if [[ "$VERBOSE" == true && "$QUIET" == false ]]; then
-        echo -e "${NC}[VERBOSE]${NC} $*" >&2
-    fi
-}
-
 # Check if required tools are available
 check_dependencies() {
-    if ! command -v ffmpeg &> /dev/null; then
-        log_error "ffmpeg is not installed or not in PATH"
-        log_error "Please install ffmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)"
-        exit 1
-    fi
+    check_command "ffmpeg" "Please install ffmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)"
 
     log_verbose "ffmpeg found: $(command -v ffmpeg)"
     log_verbose "ffmpeg version: $(ffmpeg -version 2>/dev/null | head -n1)"
-}
-
-# Validate numeric parameters
-validate_numeric() {
-    local value="$1"
-    local name="$2"
-    local min="$3"
-    local max="$4"
-
-    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
-        log_error "Invalid $name: '$value' (must be a number)"
-        exit 1
-    fi
-
-    if (( value < min || value > max )); then
-        log_error "Invalid $name: $value (must be between $min and $max)"
-        exit 1
-    fi
 }
 
 # Convert a single WebM file to MP4
@@ -318,35 +267,23 @@ parse_args() {
                 shift
                 ;;
             -o|--output)
-                if [[ -z "${2:-}" ]]; then
-                    log_error "Option $1 requires an argument"
-                    return 1
-                fi
+                require_argument "$1" "${2:-}" || return 1
                 OUTPUT_DIR="$2"
                 shift 2
                 ;;
             -c|--crf)
-                if [[ -z "${2:-}" ]]; then
-                    log_error "Option $1 requires an argument"
-                    return 1
-                fi
+                require_argument "$1" "${2:-}" || return 1
                 CRF="$2"
                 validate_numeric "$CRF" "CRF" 0 51
                 shift 2
                 ;;
             -a|--audio-bitrate)
-                if [[ -z "${2:-}" ]]; then
-                    log_error "Option $1 requires an argument"
-                    return 1
-                fi
+                require_argument "$1" "${2:-}" || return 1
                 AUDIO_BITRATE="$2"
                 shift 2
                 ;;
             -j|--jobs)
-                if [[ -z "${2:-}" ]]; then
-                    log_error "Option $1 requires an argument"
-                    return 1
-                fi
+                require_argument "$1" "${2:-}" || return 1
                 PARALLEL_JOBS="$2"
                 validate_numeric "$PARALLEL_JOBS" "jobs" 1 16
                 shift 2
@@ -406,8 +343,7 @@ main() {
     # Handle help option early
     for arg in "$@"; do
         if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
-            show_help
-            exit 0
+            show_help_and_exit
         fi
     done
 
