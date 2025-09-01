@@ -1,6 +1,6 @@
 #!/bin/bash
-# gclean - Clean up merged git branches and prune remote references
-# Usage: gclean [options]
+# gbclean - Clean up merged git branches and prune remote references
+# Usage: gbclean [options]
 
 set -euo pipefail
 
@@ -15,10 +15,10 @@ KEEP_CURRENT=true
 # Print usage information
 show_help() {
     cat << EOF
-gclean - Clean up merged git branches and prune remote references
+gbclean - Clean up merged git branches and prune remote references
 
 USAGE:
-    gclean [OPTIONS]
+    gbclean [OPTIONS]
 
 OPTIONS:
     -h, --help              Show this help message
@@ -35,9 +35,9 @@ DESCRIPTION:
     4. Delete merged local branches (except protected ones)
 
 EXAMPLES:
-    gclean                         # Standard cleanup
-    gclean -d                      # Preview what would be deleted
-    gclean --force                 # Force delete unmerged branches
+    gbclean                        # Standard cleanup
+    gbclean -d                     # Preview what would be deleted
+    gbclean --force                # Force delete unmerged branches
 
 EOF
 }
