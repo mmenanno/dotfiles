@@ -10,7 +10,7 @@ source "${BASH_SOURCE[0]%/*}/shared"
 # Default configuration
 DRY_RUN=false
 FORCE=false
-KEEP_CURRENT=true
+KEEP_CURRENT=false
 
 # Print usage information
 show_help() {
@@ -24,8 +24,8 @@ OPTIONS:
     -h, --help              Show this help message
     -d, --dry-run           Show what would be deleted without actually doing it
     -f, --force             Force delete branches (use -D instead of -d)
-    --keep-current          Keep current branch even if it would be deleted (default)
-    --no-keep-current       Allow deletion of current branch
+    -kc, --keep-current     Keep current branch even if it would be deleted
+    -nkc, --no-keep-current Allow deletion of current branch (default)
 
 DESCRIPTION:
     This script performs the following cleanup operations:
@@ -200,11 +200,11 @@ parse_args() {
                 FORCE=true
                 shift
                 ;;
-            --keep-current)
+            -kc|--keep-current)
                 KEEP_CURRENT=true
                 shift
                 ;;
-            --no-keep-current)
+            -nkc|--no-keep-current)
                 KEEP_CURRENT=false
                 shift
                 ;;
