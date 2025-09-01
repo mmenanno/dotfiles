@@ -1,6 +1,6 @@
 #!/bin/bash
-# git-cleanup - Clean up merged git branches and prune remote references
-# Usage: git-cleanup [options]
+# gclean - Clean up merged git branches and prune remote references
+# Usage: gclean [options]
 
 set -euo pipefail
 
@@ -15,10 +15,10 @@ KEEP_CURRENT=true
 # Print usage information
 show_help() {
     cat << EOF
-git-cleanup - Clean up merged git branches and prune remote references
+gclean - Clean up merged git branches and prune remote references
 
 USAGE:
-    git-cleanup [OPTIONS]
+    gclean [OPTIONS]
 
 OPTIONS:
     -h, --help              Show this help message
@@ -35,9 +35,9 @@ DESCRIPTION:
     4. Delete merged local branches (except protected ones)
 
 EXAMPLES:
-    git-cleanup                    # Standard cleanup
-    git-cleanup -d                 # Preview what would be deleted
-    git-cleanup --force            # Force delete unmerged branches
+    gclean                         # Standard cleanup
+    gclean -d                      # Preview what would be deleted
+    gclean --force                 # Force delete unmerged branches
 
 EOF
 }
