@@ -1,0 +1,206 @@
+#!/bin/bash
+# gclone - Clone git repository and optionally open in Cursor
+# Usage: gclone [options] <repository_url>
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/colors"
+
+# Default configuration
+OPEN_CURSOR=false
+
+# Print usage information
+show_help() {
+    cat << EOF
+gclone - Clone git repository and optionally open in Cursor
+
+USAGE:
+    gclone [OPTIONS] <repository_url>
+
+OPTIONS:
+    -h, --help              Show this help message
+    -c, --cursor            Open cloned directory in Cursor after cloning
+
+EXAMPLES:
+    gclone git@github.com:user/repo.git         # Clone repository
+    gclone -c git@github.com:user/repo.git      # Clone and open in Cursor
+    gclone --cursor git@github.com:user/repo    # Clone and open in Cursor
+
+NOTE:
+    Only SSH URLs are supported (git@hostname:user/repo.git format).
+    HTTPS URLs will be rejected for security reasons.
+
+EOF
+}
+
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $*" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*" >&2
+}
+
+# Validate that URL is SSH format
+validate_ssh_url() {
+    local url="$1"
+
+    # Check for HTTPS URLs and reject them
+    if [[ "$url" =~ ^https:// ]]; then
+        log_error "HTTPS URLs are not allowed. Please use SSH format instead."
+        log_error "Convert: https://github.com/user/repo.git → git@github.com:user/repo.git"
+        exit 1
+    fi
+
+    # Check for valid SSH format (git@hostname:path/to/repo or git@hostname:path/to/repo.git)
+    if [[ ! "$url" =~ ^git@[a-zA-Z0-9.-]+:[a-zA-Z0-9._/-]+$ ]]; then
+        log_error "Invalid SSH URL format: $url"
+        log_error "Expected format: git@hostname:user/repo.git"
+        log_error "Example: git@github.com:user/repo.git"
+        exit 1
+    fi
+}
+
+# Extract repository name from URL
+get_repo_name() {
+    local url="$1"
+    # Remove .git suffix if present, then extract basename
+    basename "$url" .git
+}
+
+# Check if required tools are available
+check_dependencies() {
+    if ! command -v git &> /dev/null; then
+        log_error "git is not installed or not in PATH"
+        exit 1
+    fi
+
+    if [[ "$OPEN_CURSOR" == true ]] && ! command -v cursor &> /dev/null; then
+        log_error "cursor is not installed or not in PATH"
+        log_error "Please install Cursor CLI or run without --cursor flag"
+        exit 1
+    fi
+}
+
+# Parse command line arguments
+parse_args() {
+    local repo_url=""
+
+    while (( $# > 0 )); do
+        case "$1" in
+            -c|--cursor)
+                OPEN_CURSOR=true
+                shift
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                log_error "Use -h or --help for usage information"
+                exit 1
+                ;;
+            *)
+                if [[ -z "$repo_url" ]]; then
+                    repo_url="$1"
+                    shift
+                else
+                    log_error "Multiple repository URLs provided"
+                    log_error "Use -h or --help for usage information"
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+
+    if [[ -z "$repo_url" ]]; then
+        log_error "Repository URL is required"
+        log_error "Use -h or --help for usage information"
+        exit 1
+    fi
+
+    echo "$repo_url"
+}
+
+# Main function
+main() {
+    # Handle help option early
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            show_help
+            exit 0
+        fi
+    done
+
+    # Parse arguments
+    local repo_url
+    repo_url="$(parse_args "$@")"
+
+    # Validate SSH URL format
+    validate_ssh_url "$repo_url"
+
+    # Check dependencies
+    check_dependencies
+
+    # Get repository name for directory
+    local repo_name
+    repo_name="$(get_repo_name "$repo_url")"
+
+    log_info "Cloning repository: $repo_url"
+    log_info "Directory: $repo_name"
+
+    # Check if directory already exists
+    if [[ -d "$repo_name" ]]; then
+        log_error "Directory '$repo_name' already exists"
+        log_error "Please remove it or clone to a different location"
+        exit 1
+    fi
+
+    # Clone the repository
+    if git clone "$repo_url"; then
+        log_success "Repository cloned successfully"
+    else
+        log_error "Failed to clone repository"
+        exit 1
+    fi
+
+    # Check if directory was created
+    if [[ ! -d "$repo_name" ]]; then
+        log_error "Expected directory '$repo_name' was not created"
+        exit 1
+    fi
+
+    # Change to the cloned directory
+    log_info "Changing to directory: $repo_name"
+    cd "$repo_name" || {
+        log_error "Failed to change to directory: $repo_name"
+        exit 1
+    }
+
+    log_success "Now in directory: $(pwd)"
+
+    # Open in Cursor if requested
+    if [[ "$OPEN_CURSOR" == true ]]; then
+        log_info "Opening in Cursor..."
+        if cursor .; then
+            log_success "Opened in Cursor"
+        else
+            log_error "Failed to open in Cursor"
+            exit 1
+        fi
+    fi
+
+    # If not opening in Cursor, start a new shell in the directory
+    # This allows the user to continue working in the cloned directory
+    if [[ "$OPEN_CURSOR" == false ]]; then
+        log_info "Starting new shell in cloned directory"
+        log_info "Type 'exit' to return to the previous directory"
+        exec "$SHELL"
+    fi
+}
+
+# Run main function with all arguments
+main "$@"

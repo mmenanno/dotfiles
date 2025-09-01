@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/colors"
+
 # Default configuration
 DEFAULT_CRF=23
 DEFAULT_AUDIO_BITRATE="128k"
@@ -16,13 +19,6 @@ OUTPUT_DIR=""
 CRF=$DEFAULT_CRF
 AUDIO_BITRATE=$DEFAULT_AUDIO_BITRATE
 PARALLEL_JOBS=1
-
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 # Print usage information
 show_help() {
@@ -89,7 +85,7 @@ check_dependencies() {
         log_error "Please install ffmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)"
         exit 1
     fi
-    
+
     log_verbose "ffmpeg found: $(command -v ffmpeg)"
     log_verbose "ffmpeg version: $(ffmpeg -version 2>/dev/null | head -n1)"
 }
@@ -100,12 +96,12 @@ validate_numeric() {
     local name="$2"
     local min="$3"
     local max="$4"
-    
+
     if ! [[ "$value" =~ ^[0-9]+$ ]]; then
         log_error "Invalid $name: '$value' (must be a number)"
         exit 1
     fi
-    
+
     if (( value < min || value > max )); then
         log_error "Invalid $name: $value (must be between $min and $max)"
         exit 1
@@ -118,24 +114,24 @@ convert_file() {
     local output_file="$2"
     local file_num="$3"
     local total_files="$4"
-    
+
     # Check if input file exists and is readable
     if [[ ! -f "$input_file" ]]; then
         log_error "Input file does not exist: $input_file"
         return 1
     fi
-    
+
     if [[ ! -r "$input_file" ]]; then
         log_error "Cannot read input file: $input_file"
         return 1
     fi
-    
+
     # Check if output file already exists
     if [[ -f "$output_file" && "$OVERWRITE" == false ]]; then
         log_warning "Output file already exists (use -f to overwrite): $output_file"
         return 1
     fi
-    
+
     # Create output directory if it doesn't exist
     local output_dir
     output_dir="$(dirname "$output_file")"
@@ -146,12 +142,12 @@ convert_file() {
             return 1
         fi
     fi
-    
+
     log_info "[$file_num/$total_files] Converting: $(basename "$input_file")"
     log_verbose "Input:  $input_file"
     log_verbose "Output: $output_file"
     log_verbose "CRF: $CRF, Audio bitrate: $AUDIO_BITRATE"
-    
+
     # Build ffmpeg command
     local ffmpeg_cmd=(
         ffmpeg
@@ -162,25 +158,25 @@ convert_file() {
         -b:a "$AUDIO_BITRATE"
         -threads "$DEFAULT_THREADS"
     )
-    
+
     if [[ "$OVERWRITE" == true ]]; then
         ffmpeg_cmd+=(-y)
     fi
-    
+
     if [[ "$QUIET" == true ]]; then
         ffmpeg_cmd+=(-loglevel error)
     elif [[ "$VERBOSE" == false ]]; then
         ffmpeg_cmd+=(-loglevel warning)
     fi
-    
+
     ffmpeg_cmd+=("$output_file")
-    
+
     log_verbose "Running: ${ffmpeg_cmd[*]}"
-    
+
     # Execute conversion
     local start_time
     start_time=$(date +%s)
-    
+
     if "${ffmpeg_cmd[@]}"; then
         local end_time duration
         end_time=$(date +%s)
@@ -201,28 +197,28 @@ process_files() {
     local -a results=()
     local success_count=0
     local failed_count=0
-    
+
     if (( total_files == 0 )); then
         log_warning "No WebM files found to convert"
         return 0
     fi
-    
+
     log_info "Found $total_files WebM file(s) to convert"
     log_info "Using $PARALLEL_JOBS parallel job(s)"
-    
+
     # Process files
     for i in "${!files[@]}"; do
         local input_file="${files[i]}"
         local filename
         filename="$(basename "$input_file" .webm)"
-        
+
         local output_file
         if [[ -n "$OUTPUT_DIR" ]]; then
             output_file="$OUTPUT_DIR/${filename}.mp4"
         else
             output_file="$(dirname "$input_file")/${filename}.mp4"
         fi
-        
+
         # Wait if we've reached the parallel job limit
         if (( ${#pids[@]} >= PARALLEL_JOBS )); then
             wait "${pids[0]}"
@@ -234,7 +230,7 @@ process_files() {
             fi
             pids=("${pids[@]:1}")
         fi
-        
+
         # Start conversion in background
         if (( PARALLEL_JOBS > 1 )); then
             convert_file "$input_file" "$output_file" "$((i+1))" "$total_files" &
@@ -247,7 +243,7 @@ process_files() {
             fi
         fi
     done
-    
+
     # Wait for remaining background jobs
     for pid in "${pids[@]}"; do
         wait "$pid"
@@ -258,14 +254,14 @@ process_files() {
             ((failed_count++))
         fi
     done
-    
+
     # Print summary
     log_info "Conversion complete: $success_count successful, $failed_count failed"
-    
+
     if (( failed_count > 0 )); then
         return 1
     fi
-    
+
     return 0
 }
 
@@ -273,7 +269,7 @@ process_files() {
 find_webm_files() {
     local target="$1"
     local -a files=()
-    
+
     if [[ -f "$target" ]]; then
         # Single file
         if [[ "$target" == *.webm ]]; then
@@ -292,16 +288,16 @@ find_webm_files() {
         log_error "Path does not exist: $target"
         return 1
     fi
-    
+
     if (( ${#files[@]} == 0 )); then
         log_warning "No WebM files found in: $target"
         return 1
     fi
-    
+
     # Sort files for consistent processing order
     IFS=$'\n' files=($(sort <<<"${files[*]}"))
     unset IFS
-    
+
     process_files "${files[@]}"
 }
 
@@ -369,44 +365,44 @@ parse_args() {
                 ;;
         esac
     done
-    
+
     # Validate conflicting options
     if [[ "$VERBOSE" == true && "$QUIET" == true ]]; then
         log_error "Cannot use both --verbose and --quiet options"
         return 1
     fi
-    
+
     # Validate output directory
     if [[ -n "$OUTPUT_DIR" ]]; then
         if [[ -f "$OUTPUT_DIR" ]]; then
             log_error "Output path is a file, not a directory: $OUTPUT_DIR"
             return 1
         fi
-        
+
         # Convert to absolute path
         OUTPUT_DIR="$(cd "$(dirname "$OUTPUT_DIR")" 2>/dev/null && pwd)/$(basename "$OUTPUT_DIR")" || {
             log_error "Invalid output directory: $OUTPUT_DIR"
             return 1
         }
-        
+
         log_verbose "Output directory: $OUTPUT_DIR"
     fi
-    
+
     # Determine target (file or directory)
     local target="${1:-.}"  # Default to current directory
-    
+
     if [[ ! -e "$target" ]]; then
         log_error "Target does not exist: $target"
         return 1
     fi
-    
+
     echo "$target"
 }
 
 # Main function
 main() {
     log_verbose "webm2mp4 starting with arguments: $*"
-    
+
     # Handle help option early
     for arg in "$@"; do
         if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
@@ -414,24 +410,24 @@ main() {
             exit 0
         fi
     done
-    
+
     # Check dependencies first
     check_dependencies
-    
+
     # Parse arguments
     local target
     set +e  # Temporarily disable exit on error
     target="$(parse_args "$@")"
     local parse_exit_code=$?
     set -e  # Re-enable exit on error
-    
+
     if (( parse_exit_code != 0 )); then
         exit 1
     fi
-    
+
     log_verbose "Target: $target"
     log_verbose "Configuration: CRF=$CRF, Audio=$AUDIO_BITRATE, Jobs=$PARALLEL_JOBS"
-    
+
     # Find and process files
     if find_webm_files "$target"; then
         log_success "All conversions completed successfully"
