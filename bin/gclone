@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC1091
-source "${BASH_SOURCE[0]%/*}/colors"
+source "${BASH_SOURCE[0]%/*}/shared"
 
 # Default configuration
 OPEN_CURSOR=false
@@ -32,19 +32,6 @@ NOTE:
     HTTPS URLs will be rejected for security reasons.
 
 EOF
-}
-
-# Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $*" >&2
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $*" >&2
 }
 
 # Validate that URL is SSH format
@@ -76,15 +63,10 @@ get_repo_name() {
 
 # Check if required tools are available
 check_dependencies() {
-    if ! command -v git &> /dev/null; then
-        log_error "git is not installed or not in PATH"
-        exit 1
-    fi
+    check_command "git"
 
-    if [[ "$OPEN_CURSOR" == true ]] && ! command -v cursor &> /dev/null; then
-        log_error "cursor is not installed or not in PATH"
-        log_error "Please install Cursor CLI or run without --cursor flag"
-        exit 1
+    if [[ "$OPEN_CURSOR" == true ]]; then
+        check_command "cursor" "Please install Cursor CLI or run without --cursor flag"
     fi
 }
 
@@ -130,8 +112,7 @@ main() {
     # Handle help option early
     for arg in "$@"; do
         if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
-            show_help
-            exit 0
+            show_help_and_exit
         fi
     done
 
