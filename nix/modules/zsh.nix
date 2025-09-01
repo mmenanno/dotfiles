@@ -83,6 +83,11 @@ in
 
       # Initialize zoxide only in interactive shells
       [[ $- == *i* ]] && eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
+
+      # Custom functions
+      gclone() {
+        git clone "$1" && cd "$(basename "$1" .git)"
+      }
     '';
 
     shellAliases = {
