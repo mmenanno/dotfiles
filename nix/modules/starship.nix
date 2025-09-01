@@ -21,7 +21,7 @@ let
     };
 
     cmd_duration = {
-      min_time = 500;
+      disabled = true;
     };
   };
 
