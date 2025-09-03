@@ -25,6 +25,7 @@
     openssl
     pipx
     pnpm
+    pnpm_9
     python3
     readline
     rsync
