@@ -47,6 +47,7 @@ in
       };
       init.defaultBranch = "main";
       tag.gpgsign = true;
+      core.editor = "cursor --wait";
     };
 
     includes = [{
