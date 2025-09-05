@@ -17,6 +17,7 @@
       "chatgpt"
       "claude"
       "claude-code"
+      "codex"
       "cursor"
       "daisydisk"
       "db-browser-for-sqlite"
