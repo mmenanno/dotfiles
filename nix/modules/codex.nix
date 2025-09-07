@@ -1,0 +1,35 @@
+{ config, pkgs, ... }:
+
+let
+  utilsLib = import ./lib.nix;
+  inherit (utilsLib) getEnvOrFallback;
+  githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
+in
+{
+  programs.codex = {
+    enable = true;
+    package = pkgs.codex;
+
+    settings = {
+      approval_policy = "on-request";
+      sandbox_mode = "workspace-write";
+      file_opener = "cursor";
+      tools = { web_search = true; };
+      mcp_servers = {
+        github = {
+          command = "github-mcp-server";
+          args = [ "stdio" ];
+          env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
+        };
+      };
+    };
+
+    custom-instructions = ''
+      # User Configuration
+      - Prefer object-oriented programming patterns where applicable
+      - Use descriptive variable names and clear code structure
+      - Minimize external dependencies when possible
+      - Always run linting and tests before committing
+    '';
+  };
+}

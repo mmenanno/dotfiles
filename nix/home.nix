@@ -13,6 +13,7 @@
     ./modules/mise.nix
     ./modules/onepassword.nix
     ./modules/claude.nix
+    ./modules/codex.nix
   ];
 
   # home.username and home.homeDirectory are now set in flake.nix
