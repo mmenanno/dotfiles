@@ -1,0 +1,128 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/shared"
+
+show_help() {
+  cat <<'EOF'
+Usage: rails-mcp-add-project [--auto] [--name NAME --path PATH [--env ENV]]
+
+Adds or updates a project entry in ~/.config/rails-mcp/projects.yml.
+
+Modes:
+  --auto (or no args):
+    - Detect current git repo root as PATH
+    - Infer NAME from directory basename
+    - Verify Rails app heuristics (bin/rails or config/application.rb + Gemfile)
+    - ENV defaults to development (or RAILS_ENV if set)
+
+  Manual:
+    --name NAME --path PATH [--env ENV]
+    - Defaults: --env development
+EOF
+}
+
+name=""
+path=""
+env="development"
+auto="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auto) auto="true"; shift ;;
+    -n|--name) name="${2:-}"; shift 2;;
+    -p|--path) path="${2:-}"; shift 2;;
+    -e|--env) env="${2:-}"; shift 2;;
+    -h|--help) show_help; exit 0;;
+    *) print_error "Unknown argument: $1"; show_help; exit 1;;
+  esac
+done
+
+if [[ "$auto" == "true" || ( -z "$name" && -z "$path" ) ]]; then
+  # Auto-detect mode
+  if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    print_error "Not inside a git repository; cannot auto-detect"
+    exit 1
+  fi
+  path="$git_root"
+  name="$(basename "$git_root")"
+  env="${RAILS_ENV:-$env}"
+
+  if [[ -x "$git_root/bin/rails" ]]; then
+    print_status "Detected Rails project via bin/rails"
+  elif [[ -f "$git_root/config/application.rb" && -f "$git_root/Gemfile" && $(grep -iE "^\s*gem\s+['\"]rails['\"]" "$git_root/Gemfile" || true) ]]; then
+    print_status "Detected Rails project via config/application.rb and Gemfile"
+  else
+    print_error "Current repo doesn't look like a Rails app (no bin/rails or rails gem)"
+    exit 1
+  fi
+else
+  # Manual mode requires name and path
+  if [[ -z "$name" || -z "$path" ]]; then
+    print_error "--name and --path are required in manual mode"
+    show_help
+    exit 1
+  fi
+fi
+
+config_dir="$HOME/.config/rails-mcp"
+projects_file="$config_dir/projects.yml"
+mkdir -p "$config_dir"
+
+if [[ ! -f "$projects_file" ]]; then
+  print_status "Initializing $projects_file"
+  cat > "$projects_file" <<'YAML'
+projects: []
+YAML
+fi
+
+print_status "Adding project '$name' at '$path' (env=$env)"
+
+if ! command -v mise >/dev/null 2>&1; then
+  print_error "mise is not installed; ensure nixup completed successfully"
+  exit 1
+fi
+
+# Use Ruby (via mise) to safely modify YAML preserving structure
+PROJECTS_FILE="$projects_file" PROJ_NAME="$name" PROJ_PATH="$path" PROJ_ENV="$env" \
+  mise x ruby -- ruby - <<'RUBY'
+require 'yaml'
+file = ENV['PROJECTS_FILE']
+name = ENV['PROJ_NAME']
+path = ENV['PROJ_PATH']
+env  = ENV['PROJ_ENV']
+
+loaded = nil
+if File.exist?(file)
+  begin
+    loaded = YAML.load_file(file)
+  rescue StandardError
+    loaded = nil
+  end
+end
+
+data = loaded.is_a?(Hash) ? loaded : { 'projects' => [] }
+projects = data['projects']
+projects = [] unless projects.is_a?(Array)
+projects = projects.compact.select { |p| p.is_a?(Hash) }
+
+existing_index = projects.index { |p| p['path'] == path || p['name'] == name }
+if existing_index
+  projects[existing_index]['name'] = name
+  projects[existing_index]['path'] = path
+  projects[existing_index]['env']  = env
+  data['projects'] = projects
+  File.write(file, YAML.dump(data))
+  puts "Updated project: #{name} (#{path})"
+else
+  projects << { 'name' => name, 'path' => path, 'env' => env }
+  data['projects'] = projects
+  File.write(file, YAML.dump(data))
+  puts "Added project: #{name} (#{path})"
+end
+RUBY
+
+print_success "Done"
+
+

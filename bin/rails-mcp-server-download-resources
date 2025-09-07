@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/shared"
+
+if [[ $# -eq 0 ]]; then
+  print_error "Usage: rails-mcp-server-download-resources <rails|turbo|stimulus|kamal|custom> [--file /path/to/docs]"
+  exit 1
+fi
+
+print_status "Downloading Rails MCP Server resources: $*"
+
+if ! command -v mise >/dev/null 2>&1; then
+  print_error "mise is not installed; ensure nixup completed successfully"
+  exit 1
+fi
+
+exec mise x ruby -- rails-mcp-server-download-resources "$@"
+
+

@@ -21,6 +21,11 @@ in
           args = [ "stdio" ];
           env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
         };
+        rails = {
+          command = "rails-mcp-server";
+          args = [ "stdio" ];
+          env = { };
+        };
       };
     };
 
