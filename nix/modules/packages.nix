@@ -46,6 +46,7 @@
     x264
     x265
     yarn
+    yq
     yt-dlp
     zoxide
   ];
