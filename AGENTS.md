@@ -14,8 +14,8 @@
 
 - `nixup`: Rebuild and switch configuration (alias for `darwin-rebuild switch`).
 - `darwin-rebuild switch --flake nix#macbook_setup`: Apply system config explicitly.
-- `nix flake check nix`: Validate flake and module integrity.
-- `nix flake update nix`: Update inputs; commit lockfile changes.
+- `nix flake check ./nix`: Validate flake and module integrity.
+- `nix flake update ./nix`: Update inputs; commit lockfile changes.
 - `nixedit`: Open this repo in the configured editor.
 - Troubleshooting: `brew bundle` from repo root if Homebrew casks drift.
 
@@ -30,7 +30,7 @@
 ## Testing Guidelines
 
 - Prefer functional checks over unit tests for configs:
-  
+
   - Run `nix flake check nix` locally before PRs.
   - Lint shell/markdown changes: `shellcheck bin/*` and `markdownlint **/*.md`.
 - CI: `.github/workflows/lint.yml` validates Nix syntax, shell scripts, markdown, and workflow YAML.
@@ -39,7 +39,7 @@
 
 - Conventional Commits: `feat: …`, `fix: …`, `refactor: …` (see `git log`).
 - PRs must:
-  
+
   - Describe the change and rationale; link related issues.
   - Include before/after notes for user‑visible behavior (screenshots only if relevant).
   - Update docs (`README.md`, `BOOTSTRAP.md`, or module comments) when adding modules/apps.
