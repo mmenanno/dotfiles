@@ -115,16 +115,19 @@ perform_cleanup() {
         fi
     fi
 
-    # Pull latest changes
-    log_info "Pulling latest changes..."
+    # Fetch latest changes and prune
+    log_info "Fetching latest changes and pruning..."
     if [[ "$DRY_RUN" == false ]]; then
-        git pull --prune
+        git fetch --prune
     fi
 
-    # Prune remote references
-    log_info "Pruning remote branch references..."
+    # Attempt fast-forward only to avoid merge strategy prompts on divergence
+    log_info "Fast-forwarding $default_branch if possible..."
     if [[ "$DRY_RUN" == false ]]; then
-        git remote prune origin
+        if ! git merge --ff-only "origin/$default_branch" >/dev/null 2>&1; then
+            log_warning "Local $default_branch has diverged from origin. Skipping fast-forward."
+            log_warning "Resolve manually with 'git pull --rebase' or your preferred strategy if needed."
+        fi
     fi
 
     # Get branches to delete
