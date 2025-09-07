@@ -32,6 +32,7 @@
     python3
     readline
     rsync
+    ruff
     rustc
     scc
     speedtest-cli
