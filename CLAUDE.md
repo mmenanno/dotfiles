@@ -3,8 +3,8 @@
 ## Build & Deploy Commands
 
 - Apply configuration: `nixup` (alias for darwin-rebuild switch)
-- Check flake: `nix flake check ~/dotfiles/nix`
-- Update dependencies: `nix flake update ~/dotfiles/nix`
+- Check flake: `nix flake check ./nix`
+- Update dependencies: `nix flake update ./nix`
 - Edit config: `nixedit` (opens dotfiles in Cursor)
 
 ## Project Structure
