@@ -5,6 +5,8 @@
     automake
     autoconf
     cargo
+    claude-code
+    codex
     docker
     ejson
     ejson2env
@@ -15,6 +17,7 @@
     gh
     git
     git-lfs
+    github-mcp-server
     gmp
     imagemagick
     mariadb
