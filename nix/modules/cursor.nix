@@ -4,9 +4,29 @@ let
   # Import shared utilities
   utilsLib = import ./lib.nix;
   inherit (utilsLib) getEnvOrFallback;
-  
+
   # Environment-based full name
   fullName = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
+
+  # GitHub MCP token with fallback pattern
+  githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
+
+  # Pretty-printed Cursor MCP JSON generated at build time
+  cursorMcpJson = pkgs.runCommand "cursor-mcp.json" { nativeBuildInputs = [ pkgs.jq ]; } ''
+    cat > mcp.min.json <<'JSON'
+    ${builtins.toJSON {
+      mcpServers = {
+        github = {
+          type = "stdio";
+          command = "github-mcp-server";
+          args = [ "stdio" ];
+          env = { "GITHUB_PERSONAL_ACCESS_TOKEN" = githubMcpToken; };
+        };
+      };
+    }}
+    JSON
+    jq -S . mcp.min.json > $out
+  '';
 in
 {
   # Cursor configuration files
@@ -109,6 +129,9 @@ in
         "diffEditor.maxComputationTime": 0
       }
     '';
+
+    # GitHub MCP configuration for Cursor (pretty-formatted)
+    ".cursor/mcp.json".source = cursorMcpJson;
 
     "Library/Application Support/Cursor/User/keybindings.json".text = ''
       [
