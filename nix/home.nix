@@ -5,6 +5,7 @@
     ./modules/gh.nix
     ./modules/git.nix
     ./modules/ruby.nix
+    ./modules/rails-mcp.nix
     ./modules/ssh.nix
     ./modules/zsh.nix
     ./modules/starship.nix
