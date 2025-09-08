@@ -1,0 +1,412 @@
+#!/bin/bash
+# gfsync - Sync a fork's default branch with its upstream default branch
+# Usage: gfsync [options]
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+
+# Configuration
+DRY_RUN=false
+FORCE=false
+PUSH=true
+# Internal state
+DID_SWITCH_BRANCH=false
+RESTORED=false
+
+show_help() {
+    cat << EOF
+gfsync - Sync a fork's default branch with its upstream default branch
+
+USAGE:
+    gfsync [OPTIONS]
+
+OPTIONS:
+    -h, --help         Show this help message
+    -n, --dry-run      Print actions without executing
+    -f, --force        Force reset to upstream if not fast-forward, and push with --force-with-lease
+    --no-push          Do not push changes to origin (local only)
+    -q, --quiet        Suppress non-error logs
+    -v, --verbose      Show verbose logs
+
+DESCRIPTION:
+    - Detects the default branch of 'origin' and 'upstream' remotes (works with main/master/develop/etc)
+    - If 'upstream' is missing, attempts to add it using GitHub CLI (gh) by discovering the parent repo (forks only)
+    - Fetches both remotes
+    - Checks out the local default branch matching origin's default branch, then restores your previous branch (also on errors)
+    - Fast-forwards it to upstream's default branch when possible
+    - If divergent and --force provided, hard-resets to upstream's default branch
+    - Pushes the updated default branch back to origin (unless --no-push)
+
+EXAMPLES:
+    gfsync                 # Standard fast-forward sync and push
+    gfsync --dry-run       # Show what would be done
+    gfsync --force         # Reset to upstream and push with --force-with-lease if needed
+    gfsync --no-push       # Update local branch only, do not push
+EOF
+}
+
+parse_args() {
+    while (( $# > 0 )); do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            -f|--force)
+                FORCE=true
+                shift
+                ;;
+            --no-push)
+                PUSH=false
+                shift
+                ;;
+            -q|--quiet)
+                QUIET=true
+                shift
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                log_error "Use -h or --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+run_cmd() {
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "+ $*" >&2
+    else
+        "$@"
+    fi
+}
+
+get_remote_default_branch() {
+    local remote="$1"
+    local default_branch
+
+    # Try local remote HEAD
+    if ref=$(git symbolic-ref -q "refs/remotes/${remote}/HEAD" 2>/dev/null || true); then
+        default_branch="${ref##*/}"
+    fi
+
+    # Then try ls-remote --symref
+    if [[ -z "$default_branch" ]]; then
+        default_branch=$(git ls-remote --symref "$remote" HEAD 2>/dev/null | awk '/^ref:/ {print $2}' | sed 's@refs/heads/@@') || true
+    fi
+
+    # Finally parse `git remote show`
+    if [[ -z "$default_branch" ]]; then
+        default_branch=$(git remote show "$remote" 2>/dev/null | sed -n 's/.*HEAD branch: //p' | tr -d '[:space:]') || true
+    fi
+
+    # Last resort: common branch names
+    if [[ -z "$default_branch" ]]; then
+        local candidate
+        for candidate in main master develop; do
+            if git show-ref --verify --quiet "refs/remotes/${remote}/${candidate}"; then
+                default_branch="$candidate"
+                break
+            fi
+        done
+    fi
+
+    echo "$default_branch"
+}
+
+ensure_remote_exists() {
+    local remote="$1"
+    if ! git remote get-url "$remote" >/dev/null 2>&1; then
+        log_error "Remote '$remote' not found. Please add it first: git remote add $remote <url>"
+        exit 1
+    fi
+}
+
+ensure_upstream_remote() {
+    if git remote get-url upstream >/dev/null 2>&1; then
+        return 0
+    fi
+
+    log_warning "Remote 'upstream' not found. Attempting to add via GitHub CLI (gh)..."
+
+    if ! command -v gh >/dev/null 2>&1; then
+        log_error "GitHub CLI 'gh' not found. Install it or add upstream manually: git remote add upstream <url>"
+        exit 1
+    fi
+
+    local origin_url origin_host gh_out is_fork parent_ssh parent_https parent_nwo upstream_url
+    origin_url=$(git remote get-url origin 2>/dev/null || echo "")
+
+    # Derive host from origin URL (GH Enterprise/custom hosts)
+    origin_host=""
+    case "$origin_url" in
+        git@*:* ) origin_host="${origin_url#git@}"; origin_host="${origin_host%%:*}" ;;
+        ssh://git@*/* ) origin_host="${origin_url#ssh://git@}"; origin_host="${origin_host%%/*}" ;;
+        http*://* ) origin_host="${origin_url#http*://}"; origin_host="${origin_host%%/*}" ;;
+    esac
+
+    # Query fork status and parent details (one call)
+    gh_out=$(gh repo view --json isFork,parent -q '{isFork: .isFork, ssh: .parent.sshUrl, https: .parent.url, nwo: .parent.nameWithOwner} | [ .isFork, .ssh, .https, .nwo ] | @tsv' 2>/dev/null || true)
+
+    if [[ -z "$gh_out" ]]; then
+        log_error "Failed to query repo via 'gh'. Ensure you are authenticated and inside a GitHub repo."
+        exit 1
+    fi
+
+    # Parse TSV fields
+    IFS=$'\t' read -r is_fork parent_ssh parent_https parent_nwo <<< "$gh_out"
+
+    if [[ "$is_fork" != "true" ]]; then
+        log_error "This repository is not marked as a fork on GitHub; no parent to add as upstream."
+        exit 1
+    fi
+
+    # Match origin protocol when possible
+    if [[ "$origin_url" == git@*:* || "$origin_url" == ssh://git@*/* ]]; then
+        if [[ -n "$parent_ssh" ]]; then
+            upstream_url="$parent_ssh"
+        elif [[ -n "$origin_host" && -n "$parent_nwo" ]]; then
+            upstream_url="git@${origin_host}:${parent_nwo}.git"
+        else
+            upstream_url="https://github.com/${parent_nwo}.git"
+        fi
+    else
+        if [[ -n "$parent_https" ]]; then
+            upstream_url="$parent_https"
+        elif [[ -n "$origin_host" && -n "$parent_nwo" ]]; then
+            upstream_url="https://${origin_host}/${parent_nwo}.git"
+        else
+            upstream_url="https://github.com/${parent_nwo}.git"
+        fi
+    fi
+
+    log_info "Adding upstream remote: ${upstream_url}"
+    run_cmd git remote add upstream "$upstream_url"
+    log_success "Added 'upstream' remote"
+}
+
+ensure_remote_branch_exists() {
+    local remote="$1"
+    local branch="$2"
+    if ! git show-ref --verify --quiet "refs/remotes/${remote}/${branch}"; then
+        log_error "Remote branch not found: ${remote}/${branch}"
+        exit 1
+    fi
+}
+
+checkout_local_default_branch() {
+    local branch="$1"
+    local upstream_default_branch="${2:-}"
+    # Skip checkout if already on target
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current_branch" == "$branch" ]]; then
+        log_info "Already on ${branch}"
+    elif git show-ref --verify --quiet "refs/heads/${branch}"; then
+        run_cmd git checkout "$branch" && DID_SWITCH_BRANCH=true
+    else
+        if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+            run_cmd git checkout -B "$branch" "origin/${branch}" && DID_SWITCH_BRANCH=true
+        else
+            # As a last resort, create from upstream default branch (fetched earlier)
+            if [[ -n "$upstream_default_branch" ]] && git show-ref --verify --quiet "refs/remotes/upstream/${upstream_default_branch}"; then
+                log_warning "Origin default branch '${branch}' not found locally; creating it from upstream/${upstream_default_branch}"
+                run_cmd git checkout -B "$branch" "upstream/${upstream_default_branch}" && DID_SWITCH_BRANCH=true
+            else
+                log_warning "Upstream default branch ref not found; creating a new local branch '${branch}'"
+                run_cmd git checkout -B "$branch" && DID_SWITCH_BRANCH=true
+            fi
+        fi
+    fi
+
+    # Set tracking to origin/upstream when available
+    if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+        run_cmd git branch --set-upstream-to="origin/${branch}" "$branch" || true
+    elif [[ -n "$upstream_default_branch" ]] && git show-ref --verify --quiet "refs/remotes/upstream/${upstream_default_branch}"; then
+        run_cmd git branch --set-upstream-to="upstream/${upstream_default_branch}" "$branch" || true
+    fi
+}
+
+sync_with_upstream() {
+    local origin_default_branch="$1"
+    local upstream_default_branch="$2"
+
+    # Check if fast-forward is possible (works in dry-run)
+    if git merge-base --is-ancestor "$origin_default_branch" "upstream/${upstream_default_branch}"; then
+        log_info "Attempting fast-forward from upstream/${upstream_default_branch} -> ${origin_default_branch}"
+        if [[ "$DRY_RUN" == true ]]; then
+            log_success "(dry-run) Fast-forward would be applied"
+        else
+            run_cmd git merge --ff-only "upstream/${upstream_default_branch}"
+            log_success "Fast-forward merge applied"
+        fi
+        echo "FF"
+        return 0
+    else
+        # Show ahead/behind counts
+        local ahead behind
+        ahead=$(git rev-list --left-right --count "${origin_default_branch}...upstream/${upstream_default_branch}" | awk '{print $1}')
+        behind=$(git rev-list --left-right --count "${origin_default_branch}...upstream/${upstream_default_branch}" | awk '{print $2}')
+        log_warning "Fast-forward not possible (divergent history; local ahead: ${ahead:-?}, behind: ${behind:-?})"
+        if [[ "$FORCE" == true ]]; then
+            log_warning "Using --force: resetting local '${origin_default_branch}' to upstream/${upstream_default_branch}"
+            if [[ "$DRY_RUN" == true ]]; then
+                log_info "(dry-run) Would run: git reset --hard upstream/${upstream_default_branch}"
+            else
+                run_cmd git reset --hard "upstream/${upstream_default_branch}"
+            fi
+            echo "RESET"
+            return 0
+        else
+            log_error "Divergence detected. Re-run with --force to reset to upstream, or reconcile manually."
+            return 1
+        fi
+    fi
+}
+
+push_to_origin() {
+    local origin_default_branch="$1"
+    local push_mode="$2" # FF or RESET
+
+    if [[ "$PUSH" == false ]]; then
+        log_info "--no-push specified; skipping push to origin"
+        return 0
+    fi
+
+    # If origin already equals local HEAD, skip push
+    if git show-ref --verify --quiet "refs/remotes/origin/${origin_default_branch}"; then
+        local local_sha origin_sha
+        local_sha=$(git rev-parse "refs/heads/${origin_default_branch}")
+        origin_sha=$(git rev-parse "refs/remotes/origin/${origin_default_branch}")
+        if [[ "$local_sha" == "$origin_sha" ]]; then
+            log_info "origin/${origin_default_branch} already up to date; skipping push"
+            return 0
+        fi
+    fi
+
+    local push_args=(origin "$origin_default_branch")
+    local remote_branch_exists=false
+    local ls_out
+    ls_out=$(git ls-remote --heads origin "$origin_default_branch" 2>/dev/null || true)
+    if [[ -n "$ls_out" ]]; then
+        remote_branch_exists=true
+    fi
+
+    # If the remote branch does not exist yet, set upstream (-u)
+    if [[ "$remote_branch_exists" == false ]]; then
+        push_args=(--set-upstream origin "$origin_default_branch")
+    fi
+
+    if [[ "$push_mode" == "RESET" ]]; then
+        log_info "Pushing ${origin_default_branch} to origin with --force-with-lease${remote_branch_exists:+ (existing)}${remote_branch_exists:-(new upstream)}"
+        run_cmd git push --force-with-lease "${push_args[@]}"
+    else
+        log_info "Pushing ${origin_default_branch} to origin${remote_branch_exists:+ (existing)}${remote_branch_exists:-(new upstream)}"
+        run_cmd git push "${push_args[@]}"
+    fi
+}
+
+main() {
+    parse_args "$@"
+
+    check_git_repo
+    check_command git "Install git first"
+
+    # Remember starting branch to restore later (skip if detached)
+    local starting_branch
+    starting_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
+    # Ensure we restore starting branch on exit if we switched and haven't restored yet
+    restore_on_exit() {
+        # Don't modify anything in dry-run
+        if [[ "$DRY_RUN" == true ]]; then
+            return 0
+        fi
+        if [[ "${starting_branch}" != "HEAD" && "${DID_SWITCH_BRANCH}" == true && "${RESTORED}" == false ]]; then
+            git checkout "$starting_branch" >/dev/null 2>&1 || true
+        fi
+    }
+    trap restore_on_exit EXIT
+
+    ensure_remote_exists origin
+    ensure_upstream_remote
+
+    log_info "Fetching remotes..."
+    # Unshallow if needed for accurate ancestry/merges
+    if [[ -f "$(git rev-parse --git-dir)/shallow" ]]; then
+        log_info "Repository is shallow; fetching full history for origin and upstream"
+        run_cmd git fetch --prune --unshallow origin
+        run_cmd git fetch --prune --unshallow upstream
+    else
+        run_cmd git fetch --prune --multiple origin upstream
+    fi
+
+    local origin_default_branch upstream_default_branch
+    origin_default_branch=$(get_remote_default_branch origin)
+    upstream_default_branch=$(get_remote_default_branch upstream)
+
+    if [[ -z "$origin_default_branch" ]]; then
+        log_error "Could not determine default branch for 'origin'"
+        exit 1
+    fi
+    if [[ -z "$upstream_default_branch" ]]; then
+        log_error "Could not determine default branch for 'upstream'"
+        exit 1
+    fi
+
+    log_info "Origin default branch: ${origin_default_branch}"
+    log_info "Upstream default branch: ${upstream_default_branch}"
+
+    ensure_remote_branch_exists upstream "$upstream_default_branch"
+
+    # Early no-op: skip if already up to date with upstream (only if local branch exists)
+    if git show-ref --verify --quiet "refs/heads/${origin_default_branch}"; then
+        local local_sha upstream_sha
+        local_sha=$(git rev-parse "refs/heads/${origin_default_branch}")
+        upstream_sha=$(git rev-parse "refs/remotes/upstream/${upstream_default_branch}")
+        if [[ "$local_sha" == "$upstream_sha" ]]; then
+            log_success "${origin_default_branch} is already up to date with upstream/${upstream_default_branch}"
+            return 0
+        fi
+    fi
+
+    checkout_local_default_branch "$origin_default_branch" "$upstream_default_branch"
+
+    # Warn if working tree is dirty (uncommitted changes might block checkout/merge/reset)
+    if [[ -n "$(git status --porcelain)" ]]; then
+        log_warning "Working tree has uncommitted changes; stash or commit to avoid conflicts"
+    fi
+
+    # Warn if currently in detached HEAD state
+    if [[ "$(git rev-parse --abbrev-ref HEAD)" == "HEAD" ]]; then
+        log_warning "Currently in detached HEAD state; proceeding, but branch operations may switch refs"
+    fi
+
+    local mode
+    if mode=$(sync_with_upstream "$origin_default_branch" "$upstream_default_branch"); then
+        push_to_origin "$origin_default_branch" "$mode"
+        log_success "Default branch '${origin_default_branch}' synced with upstream/${upstream_default_branch}"
+        # Restore previous branch if we switched
+        if [[ "$starting_branch" != "HEAD" && "$starting_branch" != "$origin_default_branch" ]]; then
+            run_cmd git checkout "$starting_branch"
+            RESTORED=true
+            trap - EXIT
+        fi
+    else
+        exit 1
+    fi
+}
+
+main "$@"
+
+
