@@ -7,8 +7,6 @@
       ${username} ALL=(root) NOPASSWD: /run/current-system/sw/bin/darwin-rebuild
     '';
     mode = "0440";
-    user = "root";
-    group = "wheel";
   };
 }
 
