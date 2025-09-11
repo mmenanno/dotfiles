@@ -4,7 +4,8 @@
   # Necessary for using flakes on this system.
   nix.settings.experimental-features = "nix-command flakes";
   nix.settings.download-buffer-size = 268435456; # 256 MiB
-  nix.settings.auto-optimise-store = true;
+  # Use supported optimise service instead of store-level flag
+  nix.optimise.automatic = true;
   nix.settings.extra-substituters = [
     "https://cache.nixos.org/"
     "https://nix-community.cachix.org"
