@@ -16,6 +16,4 @@
       };
     };
   };
-
-  home.file.".local/bin/mise".source = "${pkgs.mise}/bin/mise";
 }

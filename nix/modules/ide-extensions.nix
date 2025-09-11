@@ -80,9 +80,20 @@ in
       fi
       local installed
       installed="$($cli --list-extensions 2>/dev/null | tr -d '\r' | sort -u || true)"
+      # Uninstall extensions that are no longer desired
       while IFS= read -r ext; do
         [ -z "${ext:-}" ] && continue
-        if ! grep -qx "$ext" <<<"$installed"; then
+        if ! grep -qx "$ext" <<<"$desired_exts"; then
+          "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
+        fi
+      done <<<"$installed"
+      while IFS= read -r ext; do
+        [ -z "${ext:-}" ] && continue
+        if grep -qx "$ext" <<<"$installed"; then
+          # Extension already present: reinstall to ensure latest version
+          "$cli" --install-extension "$ext" --force >/dev/null 2>&1 || true
+        else
+          # Not present: install
           "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
         fi
       done <<<"$desired_exts"
