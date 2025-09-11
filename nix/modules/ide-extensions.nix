@@ -72,31 +72,55 @@ in
   home.activation.installEditorsExtensions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     set -euo pipefail
 
+    uninstall_if_present() {
+      local cli="$1"; shift
+      local ext
+      for ext in "$@"; do
+        "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
+      done
+    }
+
     install_exts() {
       local cli="$1"; shift
       local desired_exts="$1"; shift || true
       if [ ! -x "$cli" ]; then
         return 0
       fi
-      local installed
-      installed="$($cli --list-extensions 2>/dev/null | tr -d '\r' | sort -u || true)"
-      # Uninstall extensions that are no longer desired
-      while IFS= read -r ext; do
-        [ -z "${ext:-}" ] && continue
-        if ! grep -qx "$ext" <<<"$desired_exts"; then
+
+      # Compute set differences efficiently using sorted temp files
+      local tmp_installed tmp_desired
+      tmp_installed="$(mktemp)"
+      tmp_desired="$(mktemp)"
+      # Get installed extensions (unsorted, one per line) directly into temp file
+      $cli --list-extensions 2>/dev/null | tr -d '\r' | sed '/^$/d' | sort -u >"$tmp_installed" || true
+      printf '%s\n' "$desired_exts" | sed '/^$/d' | sort -u >"$tmp_desired"
+
+      # Always proceed to reconcile and update to ensure latest versions
+
+      # installed \ desired → uninstall
+      local to_uninstall
+      to_uninstall="$(comm -23 "$tmp_installed" "$tmp_desired" || true)"
+      if [ -n "$to_uninstall" ]; then
+        while IFS= read -r ext; do
+          [ -z "${ext:-}" ] && continue
           "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
-        fi
-      done <<<"$installed"
-      while IFS= read -r ext; do
-        [ -z "${ext:-}" ] && continue
-        if grep -qx "$ext" <<<"$installed"; then
-          # Extension already present: reinstall to ensure latest version
-          "$cli" --install-extension "$ext" --force >/dev/null 2>&1 || true
-        else
-          # Not present: install
+        done <<<"$to_uninstall"
+      fi
+
+      # desired \ installed → install
+      local to_install
+      to_install="$(comm -13 "$tmp_installed" "$tmp_desired" || true)"
+      if [ -n "$to_install" ]; then
+        while IFS= read -r ext; do
+          [ -z "${ext:-}" ] && continue
           "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
-        fi
-      done <<<"$desired_exts"
+        done <<<"$to_install"
+      fi
+
+      # Update installed extensions to latest
+      "$cli" --update-extensions >/dev/null 2>&1 || true
+
+      rm -f "$tmp_installed" "$tmp_desired"
     }
 
     vscode_exts='${lib.concatStringsSep "\n" vscodeExtensions}'
@@ -120,10 +144,8 @@ in
 
     if [ -n "$vscode_cli" ]; then
       # Ensure Copilot is not installed in VS Code
-      "$vscode_cli" --uninstall-extension github.copilot >/dev/null 2>&1 || true
-      "$vscode_cli" --uninstall-extension github.copilot-chat >/dev/null 2>&1 || true
-      "$vscode_cli" --uninstall-extension GitHub.copilot >/dev/null 2>&1 || true
-      "$vscode_cli" --uninstall-extension GitHub.copilot-chat >/dev/null 2>&1 || true
+      uninstall_if_present "$vscode_cli" \
+        github.copilot github.copilot-chat GitHub.copilot GitHub.copilot-chat
       install_exts "$vscode_cli" "$vscode_exts"
     fi
 
