@@ -108,6 +108,11 @@ in
     fi
 
     if [ -n "$vscode_cli" ]; then
+      # Ensure Copilot is not installed in VS Code
+      "$vscode_cli" --uninstall-extension github.copilot >/dev/null 2>&1 || true
+      "$vscode_cli" --uninstall-extension github.copilot-chat >/dev/null 2>&1 || true
+      "$vscode_cli" --uninstall-extension GitHub.copilot >/dev/null 2>&1 || true
+      "$vscode_cli" --uninstall-extension GitHub.copilot-chat >/dev/null 2>&1 || true
       install_exts "$vscode_cli" "$vscode_exts"
     fi
 
