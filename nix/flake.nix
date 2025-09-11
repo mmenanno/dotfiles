@@ -46,6 +46,7 @@
         ./modules/fonts.nix
         ./modules/applications-alias.nix
         ./modules/autoclick.nix
+        ./modules/sudo.nix
         nix-homebrew.darwinModules.nix-homebrew
         home-manager.darwinModules.home-manager
         {
