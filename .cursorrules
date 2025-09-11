@@ -1,0 +1,16 @@
+# Cursor per‑repo rules
+
+- Follow `AGENTS.md` and `CLAUDE.md` as the authoritative repo guides.
+- Prefer absolute paths in tool commands and references.
+- For macOS/Nix changes, edit files under `nix/` (modules are in `nix/modules/`).
+- Validate changes with `nix flake check ./nix` before applying.
+- Apply configuration with `nixup` (alias for `darwin-rebuild switch`).
+- Do not commit secrets; use 1Password CLI as described in `BOOTSTRAP.md`.
+- Nix style: 2‑space indentation, small focused modules, hyphenated filenames.
+- Shell scripts: `#!/bin/bash`, `set -euo pipefail`, pass shellcheck; markdown should pass markdownlint.
+
+When assisting in this repo:
+
+- Keep responses concise and skimmable; use fenced code blocks only for relevant snippets.
+- Reference files/functions with backticks (e.g., `nix/modules/ssh.nix`).
+- Default to declarative edits; avoid ad‑hoc manual system changes.
