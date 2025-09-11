@@ -19,12 +19,12 @@
       END $$;
       CREATE DATABASE ${username} OWNER ${username};
     '';
-    extraConfig = ''
-      listen_addresses = 'localhost'
-      shared_buffers = 128MB
-      max_connections = 100
-      log_min_duration_statement = 1000
-    '';
+    settings = {
+      listen_addresses = "localhost";
+      shared_buffers = "128MB";
+      max_connections = 100;
+      log_min_duration_statement = 1000;
+    };
     authentication = ''
       # type  database  user         address        method
       local   all       all                        trust
