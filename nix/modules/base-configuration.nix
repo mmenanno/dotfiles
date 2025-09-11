@@ -3,7 +3,7 @@
 {
   # Necessary for using flakes on this system.
   nix.settings.experimental-features = "nix-command flakes";
-  nix.settings.download-buffer-size = 33554432;
+  nix.settings.download-buffer-size = 268435456; # 256 MiB
 
   # Create /etc/zshrc that loads the nix-darwin environment.
   programs.zsh.enable = true;  # default shell on catalina
