@@ -22,7 +22,7 @@
       # Import shared utilities
       lib = import ./modules/lib.nix;
       inherit (lib) getEnvOrFallback;
-      
+
       # Environment-based username with fallback using consistent pattern
       username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
@@ -62,7 +62,10 @@
       specialArgs = commonConfig;
     };
 
-    # Expose the package set, including overlays, for convenience.
-    darwinPackages = self.darwinConfigurations."macbook_setup".pkgs;
+    # Expose the package set under a standard flake output to avoid warnings.
+    legacyPackages.aarch64-darwin = self.darwinConfigurations."macbook_setup".pkgs;
+
+    # Provide a formatter for `nix fmt`
+    formatter.aarch64-darwin = nixpkgs.legacyPackages.aarch64-darwin.nixfmt;
   };
 }
