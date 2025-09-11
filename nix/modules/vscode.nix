@@ -61,6 +61,8 @@ in
         "shopifyGlobal.mysqlEditor": "external",
         "workbench.editor.wrapTabs": true,
         "scm.showHistoryGraph": false,
+        "github.copilot.enable": { "*": false },
+        "github.copilot.editor.enableAutoCompletions": false,
         "editor.wordWrap": "on",
         "workbench.activityBar.orientation": "vertical",
         "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace, MesloLGS Nerd Font ",
