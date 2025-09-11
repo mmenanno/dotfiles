@@ -11,10 +11,12 @@
     ./modules/starship.nix
     ./modules/home-manager-system-defaults.nix
     ./modules/cursor.nix
+    ./modules/vscode.nix
     ./modules/mise.nix
     ./modules/onepassword.nix
     ./modules/claude.nix
     ./modules/codex.nix
+    ./modules/ide-extensions.nix
   ];
 
   # home.username and home.homeDirectory are now set in flake.nix
