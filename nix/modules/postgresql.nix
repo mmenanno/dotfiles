@@ -10,15 +10,7 @@
     # Use a dataDir in /var/lib managed by launchd; created on first start
     dataDir = "/var/lib/postgresql";
     package = pkgs.postgresql;
-    # Create a default DB matching the primary user
-    initialScript = pkgs.writeText "pgsql-init.sql" ''
-      DO $$ BEGIN
-        CREATE ROLE ${username} LOGIN SUPERUSER;
-      EXCEPTION WHEN duplicate_object THEN
-        RAISE NOTICE 'role ${username} already exists';
-      END $$;
-      CREATE DATABASE ${username} OWNER ${username};
-    '';
+    # Note: nix-darwin does not support initialScript/ensureUsers/ensureDatabases
     settings = {
       listen_addresses = "localhost";
       shared_buffers = "128MB";
