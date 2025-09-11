@@ -45,7 +45,6 @@
         ./modules/tailscale.nix
         ./modules/fonts.nix
         ./modules/applications-alias.nix
-        ./modules/postgresql.nix
         ./modules/autoclick.nix
         nix-homebrew.darwinModules.nix-homebrew
         home-manager.darwinModules.home-manager

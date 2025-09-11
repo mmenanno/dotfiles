@@ -21,7 +21,6 @@
     gmp
     imagemagick
     mariadb
-    postgresql
     mkalias
     mkvtoolnix
     mediainfo
