@@ -23,8 +23,8 @@
       lib = import ./modules/lib.nix;
       inherit (lib) getEnvOrFallback;
 
-      # Environment-based username with fallback using consistent pattern
-      username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
+      # Resolve the invoking macOS username from the environment; set by wrapper script
+      username = getEnvOrFallback "NIX_SYSTEM_USERNAME" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
       homeManagerConfig = {
         inherit username homeDirectory;
