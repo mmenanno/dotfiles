@@ -49,4 +49,4 @@
 
 - No secrets in repo; use 1Password CLI. See `BOOTSTRAP.md` for required items and envs.
 - New machine? `op signin`, then `nixup`. To force placeholders: `NIX_BOOTSTRAP_MODE=1 darwin-rebuild switch --flake nix`.
-- For Claude/agent behavior specifics, see `CLAUDE.md`.
+- **For Claude/agent behavior specifics, always refer to `CLAUDE.md` as the authoritative source of truth.**

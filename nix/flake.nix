@@ -24,7 +24,7 @@
       inherit (lib) getEnvOrFallback;
 
       # Environment-based username with fallback using consistent pattern
-      username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
+      username = getEnvOrFallback "NIX_SYSTEM_USER" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
       homeManagerConfig = {
         inherit username homeDirectory;
