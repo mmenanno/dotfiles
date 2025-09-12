@@ -39,6 +39,20 @@
 - Claude environment variables are managed in `zsh.nix`
 - All changes should be committed to git for version control
 
+### Pull Request Workflow
+
+When instructed to "make a PR for this repo", follow this complete workflow:
+
+1. **Create a new branch** for the changes
+2. **Commit the changes** to the branch
+3. **Push the branch** to the remote repository
+4. **Create a pull request** using GitHub tools
+5. **Monitor CI/CD workflows** until they complete without errors
+6. **Merge the pull request** once workflows pass
+7. **Run `gbclean`** after merging to clean up local branches
+
+This is the standard expectation when PR creation is requested - the full end-to-end process from branch creation through cleanup.
+
 ## Development Tools
 
 - Editor: Cursor (configured as $EDITOR)
