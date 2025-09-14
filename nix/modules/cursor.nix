@@ -105,7 +105,8 @@ in
         "workbench.activityBar.orientation": "vertical",
         "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace, MesloLGS Nerd Font ",
         "rubyLsp.rubyVersionManager": {
-          "identifier": "mise"
+          "identifier": "mise",
+          "path": "/Users/${fullName}/.local/bin/mise"
         },
         "diffEditor.ignoreTrimWhitespace": false,
         "rubyLsp.enabledFeatures": {
