@@ -10,9 +10,13 @@
       tools = {
         python = "latest";
         ruby = "latest";
+        node = "lts";
+        pnpm = "latest";
+        rust = "latest";
       };
       settings = {
-        idiomatic_version_file_enable_tools = ["ruby"];
+        idiomatic_version_file_enable_tools = ["ruby" "python" "node" "nodejs" "rust"];
+        auto_install = true;
       };
     };
   };
