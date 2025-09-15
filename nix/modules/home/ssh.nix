@@ -1,9 +1,8 @@
-{ config, ... }:
+{ config, dotlib, ... }:
+# Scope: Home (Home Manager). Configures SSH hosts and 1Password agent usage.
 
 let
-  # Import shared utilities
-  lib = import ./lib.nix;
-  inherit (lib) getEnvOrFallback;
+  inherit (dotlib) getEnvOrFallback;
 
   sshDir = "${config.home.homeDirectory}/.ssh";
   username = config.home.username;
@@ -50,6 +49,10 @@ let
 
   with_bash_login_command = "&& exec bash --login";
 
+  # 1Password agent socket path file (from onepassword.nix)
+  onePasswordAgentPath = "${config.home.homeDirectory}/.config/op/agent-socket";
+  onePasswordAgent = "\"$(cat ${onePasswordAgentPath} 2>/dev/null || echo \"${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\")\"";
+
 in
 {
   programs.ssh =
@@ -94,7 +97,7 @@ in
       enableDefaultConfig = false;
       matchBlocks = baseBlocks // nvmBlocks // {
         "*" = {
-          identityAgent = "\"${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\"";
+          identityAgent = onePasswordAgent;
           identitiesOnly = true;
         };
         "github.com" = {

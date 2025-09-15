@@ -1,23 +1,10 @@
 { config, pkgs, self, inputs, ... }:
 
+let
+  moduleIndex = import ./modules/default.nix;
+in
 {
-  imports = [
-    ./modules/gh.nix
-    ./modules/git.nix
-    ./modules/ruby.nix
-    ./modules/rails-mcp.nix
-    ./modules/ssh.nix
-    ./modules/zsh.nix
-    ./modules/starship.nix
-    ./modules/home-manager-system-defaults.nix
-    ./modules/cursor.nix
-    ./modules/vscode.nix
-    ./modules/mise.nix
-    ./modules/onepassword.nix
-    ./modules/claude.nix
-    ./modules/codex.nix
-    ./modules/ide-extensions.nix
-  ];
+  imports = moduleIndex.homeModules;
 
   # home.username and home.homeDirectory are now set in flake.nix
 

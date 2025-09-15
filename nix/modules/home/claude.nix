@@ -1,9 +1,7 @@
-{ config, pkgs, ... }:
+{ config, pkgs, dotlib, ... }:
 
 let
-  # Import shared utilities
-  utilsLib = import ./lib.nix;
-  inherit (utilsLib) getEnvOrFallback;
+  inherit (dotlib) getEnvOrFallback;
 
   # GitHub MCP token with fallback pattern
   githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";

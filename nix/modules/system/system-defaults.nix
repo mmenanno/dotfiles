@@ -1,4 +1,6 @@
 { username, homeDirectory, lib, ... }:
+# Scope: System (nix-darwin). Configures macOS defaults and Dock.
+# Behavior: Applies preferences via system.defaults and runs Dock setup during activation.
 let
   appsDir = "/Applications";
   localAppsDir = "${homeDirectory}${appsDir}";
@@ -46,12 +48,12 @@ let
       <key>tile-type</key>
       <string>file-tile</string>
     </dict>'') dockApps;
-  
+
   # Create complete dock plist in one operation
   dockSetupCommand = ''
     # Clear existing dock apps
     defaults write com.apple.dock persistent-apps -array
-    
+
     # Write all dock entries as a single plist
     defaults write com.apple.dock persistent-apps -array ${lib.concatStringsSep " " (map (entry: "'" + entry + "'") dockPlistEntries)}'';
 in
