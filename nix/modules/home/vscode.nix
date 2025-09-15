@@ -1,10 +1,5 @@
-{ config, lib, pkgs, ... }:
-
-let
-  utilsLib = import ./lib.nix;
-  inherit (utilsLib) getEnvOrFallback;
-  fullName = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
-in
+{ config, pkgs, homeDirectory, ... }:
+# Scope: Home (Home Manager). Configures VS Code user settings and keybindings.
 {
   home.file = {
     "Library/Application Support/Code/User/settings.json".text = ''
@@ -47,7 +42,7 @@ in
           "single-h1": false
         },
         "git.enableSmartCommit": true,
-        "projectManager.git.baseFolders": ["/Users/${fullName}/dev"],
+        "projectManager.git.baseFolders": ["${homeDirectory}/dev"],
         "projectManager.groupList": true,
         "githubPullRequests.pullBranch": "never",
         "window.zoomLevel": -1,
@@ -66,7 +61,7 @@ in
         "editor.wordWrap": "on",
         "workbench.activityBar.orientation": "vertical",
         "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace, MesloLGS Nerd Font ",
-        "rubyLsp.rubyVersionManager": { "identifier": "mise", "path": "/Users/${fullName}/.local/bin/mise" },
+        "rubyLsp.rubyVersionManager": { "identifier": "mise", "path": "${homeDirectory}/.local/bin/mise" },
         "diffEditor.ignoreTrimWhitespace": false,
         "rubyLsp.enabledFeatures": {
           "codeActions": true,

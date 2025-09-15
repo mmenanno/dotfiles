@@ -4,132 +4,81 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
-  lint:
+  lint-and-security:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+      issues: write
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Super Linter
+        uses: super-linter/super-linter@v8.1.0
+        env:
+          VALIDATE_ALL_CODEBASE: false
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_BASH: true
+          VALIDATE_MARKDOWN: true
+          VALIDATE_YAML: true
+          VALIDATE_GITHUB_ACTIONS: true
+
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@v3.90.6
+        with:
+          extra_args: --results=verified,unknown
+
+      - name: LFS Warning
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        uses: ppremk/lfs-warning@v3.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check executable permissions
+        run: |
+          missing=$(find . -name "*.sh" -type f -not -executable -print)
+          if [ -n "$missing" ]; then
+            while IFS= read -r file; do
+              printf 'Missing +x: %s\n' "$file"
+            done <<< "$missing"
+            exit 1
+          fi
+
+      - name: TODO to Issue
+        uses: alstr/todo-to-issue-action@v5.1.13
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-nix-darwin:
+    runs-on: macos-latest
+    env:
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v24
+        uses: cachix/install-nix-action@v31
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Flake checker
+        uses: DeterminateSystems/flake-checker-action@v12
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          flake-lock-path: ./nix/flake.lock
+          ignore-missing-flake-lock: false
 
-      - name: Cache linting dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/shellcheck
-            ~/.npm
-          key: lint-deps-${{ runner.os }}-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            lint-deps-${{ runner.os }}-
-
-      - name: Setup linting tools
-        run: |
-          # Install shellcheck for shell script linting (cached)
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          
-          # Install markdownlint-cli for markdown linting (cached)
-          npm install -g --silent markdownlint-cli
-
-      - name: Lint shell scripts
-        run: |
-          echo "🔍 Linting shell scripts..."
-          # Batch process all shell scripts for better performance
-          shell_files=$(find . -name "*.sh" -type f)
-          if [[ -n "$shell_files" ]]; then
-            echo "$shell_files" | xargs shellcheck
-          fi
-          
-          # Also lint scripts without .sh extension
-          if [[ -f "bin/nixup-with-secrets" ]]; then
-            shellcheck bin/nixup-with-secrets
-          fi
-
-      - name: Lint Nix files
-        run: |
-          echo "🔍 Linting Nix files..."
-          # Batch check Nix syntax for better performance
-          nix_files=$(find . -name "*.nix" -type f)
-          if [[ -n "$nix_files" ]]; then
-            echo "Checking syntax for $(echo "$nix_files" | wc -l) Nix files..."
-            # Create a temporary file with all imports for batch checking
-            temp_file=$(mktemp)
-            echo "{ }" > "$temp_file"
-            for file in $nix_files; do
-              echo "Checking $file..."
-              nix-instantiate --parse "$file" > /dev/null || exit 1
-            done
-            rm -f "$temp_file"
-          fi
-          
-          # Use nixfmt if available (best effort)
-          if command -v nixfmt &> /dev/null && [[ -n "$nix_files" ]]; then
-            echo "$nix_files" | xargs nixfmt --check
-          else
-            echo "nixfmt not available, skipping format check"
-          fi
-
-      - name: Lint markdown files  
-        run: |
-          echo "🔍 Linting markdown files..."
-          markdownlint --disable no-inline-html single-h1 line-length "**/*.md"
-
-      - name: Lint GitHub workflow files
-        run: |
-          echo "🔍 Linting GitHub workflow files..."
-          # Basic YAML syntax check for workflow files only
-          for file in .github/workflows/*.yml .github/workflows/*.yaml; do
-            if [ -f "$file" ]; then
-              echo "Checking $file"
-              # Basic YAML syntax validation using Python
-              python3 -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
-            fi
-          done
-
-      - name: Check for common issues
-        run: |
-          echo "🔍 Checking for common issues..."
-          
-          # Check for TODO/FIXME comments
-          echo "Checking for TODO/FIXME comments..."
-          grep -r "TODO\|FIXME" --exclude-dir=.git . || echo "No TODO/FIXME found"
-          
-          # Check for hardcoded secrets patterns
-          echo "Checking for potential hardcoded secrets..."
-          if grep -r -i "password\s*=\s*[\"'][^\"']*[\"']\|secret\s*=\s*[\"'][^\"']*[\"']\|token\s*=\s*[\"'][^\"']*[\"']\|key\s*=\s*[\"'][a-zA-Z0-9+/]{20,}[\"']" --include="*.nix" --include="*.sh" . | grep -v "op://" | grep -v "# " | grep -v "PLACEHOLDER" | grep -v "bootstrap"; then
-            echo "⚠️  Found potential hardcoded secrets - please review"
-            exit 1
-          else
-            echo "✅ No hardcoded secrets detected"
-          fi
-          
-          # Check for large files
-          echo "Checking for large files (>1MB)..."
-          find . -type f -size +1M -not -path "./.git/*" | while read -r file; do
-            echo "⚠️  Large file detected: $file"
-          done
-          
-          # Check file permissions
-          echo "Checking executable permissions..."
-          find . -name "*.sh" -not -executable -type f | while read -r file; do
-            echo "⚠️  Shell script without executable permission: $file"
-          done
-
-      - name: Summary
-        run: |
-          echo "✅ Linting completed successfully!"
-          echo ""
-          echo "Checked:"
-          echo "- Shell scripts (shellcheck)"
-          echo "- Nix files (syntax validation)"
-          echo "- Markdown files (markdownlint)"
-          echo "- GitHub workflows (YAML syntax)"
-          echo "- Security patterns"
-          echo "- File permissions"
+      - name: Build nix-darwin system
+        run: nix build ./nix#darwinConfigurations.macbook_setup.system

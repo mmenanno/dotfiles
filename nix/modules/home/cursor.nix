@@ -1,9 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, dotlib, ... }:
 
 let
-  # Import shared utilities
-  utilsLib = import ./lib.nix;
-  inherit (utilsLib) getEnvOrFallback;
+  inherit (dotlib) getEnvOrFallback;
 
   # Environment-based full name
   fullName = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";

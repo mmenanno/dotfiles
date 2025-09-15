@@ -23,6 +23,8 @@
       lib = import ./modules/lib.nix;
       inherit (lib) getEnvOrFallback;
 
+      moduleIndex = import ./modules/default.nix;
+
       # Environment-based username with fallback using consistent pattern
       username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
@@ -35,30 +37,23 @@
       };
     in {
     darwinConfigurations."macbook_setup" = nix-darwin.lib.darwinSystem {
-      modules = [
-        ./modules/base-configuration.nix
-        ./modules/packages.nix
-        ./modules/homebrew.nix
-        ./modules/pwa-apps.nix # run before system-defaults.nix to ensure chrome pwa apps exist for dock
-        ./modules/system-defaults.nix
-        ./modules/rectangle.nix
-        ./modules/tailscale.nix
-        ./modules/fonts.nix
-        ./modules/applications-alias.nix
-        ./modules/autoclick.nix
-        nix-homebrew.darwinModules.nix-homebrew
-        home-manager.darwinModules.home-manager
-        {
-          home-manager = {
-            useGlobalPkgs = true;
-            useUserPackages = true;
-            users.${username} = {
-              imports = [ ./home.nix ];
-              home = homeManagerConfig;
+      modules =
+        moduleIndex.systemModules
+        ++ [
+          nix-homebrew.darwinModules.nix-homebrew
+          home-manager.darwinModules.home-manager
+          {
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = commonConfig // { dotlib = lib; };
+              users.${username} = {
+                imports = [ ./home.nix ];
+                home = homeManagerConfig;
+              };
             };
-          };
-        }
-      ];
+          }
+        ];
       specialArgs = commonConfig;
     };
 
@@ -67,5 +62,21 @@
 
     # Provide a formatter for `nix fmt`
     formatter.aarch64-darwin = nixpkgs.legacyPackages.aarch64-darwin.nixfmt;
+
+    # Dev shell for local linting and formatting
+    devShells.aarch64-darwin.default =
+      let
+        pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      in pkgs.mkShell {
+        packages = [
+          pkgs.nixfmt
+          pkgs.shellcheck
+          pkgs.nodePackages.markdownlint-cli2
+        ];
+      };
+
+    # Expose module sets for reuse
+    darwinModules.default = moduleIndex.systemModules;
+    homeManagerModules.default = moduleIndex.homeModules;
   };
 }
