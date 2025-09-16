@@ -33,7 +33,7 @@ darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup
 ### Applications (85+ apps via Homebrew)
 
 - **Development**: Cursor, VS Code, Docker, Postman, Proxyman
-- **Communication**: Discord, Slack, Signal, WhatsApp, Telegram  
+- **Communication**: Discord, Slack, Signal, WhatsApp, Telegram
 - **Media**: VLC, HandBrake, Steam, Plex
 - **Productivity**: 1Password, Rectangle, Obsidian, Logseq
 - **System**: Tailscale, LuLu, Gas Mask, CleanMyMac
@@ -47,7 +47,7 @@ darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup
 ### System Configuration
 
 - **Dock**: Custom app layout and settings
-- **Trackpad**: Natural scrolling, force click settings  
+- **Trackpad**: Natural scrolling, force click settings
 - **Finder**: Show extensions, status bar configuration
 - **Fonts**: Nerd Fonts + custom fonts (PlayfairDisplay, etc.)
 
@@ -64,14 +64,14 @@ After running the bootstrap:
 
 1. **Restart your terminal** to load new shell configuration
 2. **Sign into applications** that require authentication
-3. **Configure 1Password** for SSH/Git signing
+3. **Configure 1Password** for SSH/Git signing (see `BOOTSTRAP.md` for required items and environment variables)
 4. **Run `nixup`** to rebuild configuration (alias for darwin-rebuild)
 
 ## 🛠 Customization
 
 ### Adding Applications
 
-Edit `nix/modules/homebrew.nix` to add new casks:
+Edit `nix/modules/system/homebrew.nix` to add new casks:
 
 ```nix
 casks = [
@@ -82,11 +82,11 @@ casks = [
 
 ### Modifying System Settings
 
-Edit `nix/modules/system-defaults.nix` for system preferences.
+Edit `nix/modules/system/system-defaults.nix` for system preferences.
 
 ### Updating Development Tools
 
-Edit `nix/modules/mise.nix` to manage language versions.
+Edit `nix/modules/home/mise.nix` to manage language versions.
 
 ## 📱 Available Commands
 
@@ -106,17 +106,22 @@ nixup
 
 ```text
 ├── nix/
-│   ├── flake.nix              # Main flake configuration
-│   ├── home.nix               # Home-manager config
-│   ├── modules/               # Modular configurations
-│   │   ├── homebrew.nix       # Applications
-│   │   ├── system-defaults.nix # System settings
-│   │   ├── git.nix            # Git configuration
-│   │   ├── cursor.nix         # Cursor settings
-│   │   └── ...
-│   └── files/                 # Static files (fonts, etc.)
-├── bootstrap.sh               # Setup script
-└── README.md                  # This file
+│   ├── flake.nix                      # Main flake configuration
+│   ├── home.nix                       # Home Manager imports
+│   ├── modules/
+│   │   ├── system/                    # nix-darwin (system-wide)
+│   │   │   ├── homebrew.nix           # Applications (casks)
+│   │   │   ├── system-defaults.nix    # macOS system settings
+│   │   │   ├── packages.nix           # System packages
+│   │   │   └── ...
+│   │   └── home/                      # Home Manager (user)
+│   │       ├── cursor.nix             # Cursor settings
+│   │       ├── git.nix                # Git configuration
+│   │       ├── mise.nix               # Language/runtime manager
+│   │       └── ...
+│   └── files/                         # Static files (fonts, PWAs, etc.)
+├── bootstrap.sh                       # Setup script
+└── README.md                          # This file
 ```
 
 ## 🆘 Troubleshooting
@@ -137,8 +142,8 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 
 #### Applications not found
 
-- Run `brew bundle` in the repository directory
-- Check homebrew.nix for typos in cask names
+- Run `nixup` to reapply Homebrew casks via nix-homebrew
+- Check `nix/modules/system/homebrew.nix` for typos in cask names
 
 ### Getting Help
 
@@ -162,7 +167,7 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 ## 🌟 Features
 
 - ✅ **Declarative**: Everything defined in configuration files
-- ✅ **Reproducible**: Same setup on any macOS machine  
+- ✅ **Reproducible**: Same setup on any macOS machine
 - ✅ **Rollback**: Previous configurations always available
 - ✅ **Modular**: Easy to enable/disable components
 - ✅ **Version-controlled**: Track all system changes in git
