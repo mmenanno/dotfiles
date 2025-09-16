@@ -4,7 +4,7 @@
 
 - `nix/flake.nix`: Main flake; entry point for builds.
 - `nix/home.nix`: Home Manager imports.
-- `nix/modules/*.nix`: Modular configs (e.g., `homebrew.nix`, `system-defaults.nix`, `git.nix`, `cursor.nix`).
+- `nix/modules/system/*.nix` and `nix/modules/home/*.nix`: Modular configs (e.g., `system/homebrew.nix`, `system/system-defaults.nix`, `home/git.nix`, `home/cursor.nix`).
 - `nix/files/`: Static assets (fonts, PWA apps, etc.).
 - `bin/`: Utility scripts (e.g., `nixup-with-secrets`, `gbclean`).
 - `bootstrap.sh` + `BOOTSTRAP.md`: First‑time setup and 1Password bootstrap.
