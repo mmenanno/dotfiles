@@ -2,7 +2,7 @@
 
 - Follow `AGENTS.md` and `CLAUDE.md` as the authoritative repo guides.
 - Prefer absolute paths in tool commands and references.
-- For macOS/Nix changes, edit files under `nix/` (modules are in `nix/modules/`).
+- For macOS/Nix changes, edit files under `nix/` (modules are in `nix/modules/system` and `nix/modules/home`).
 - Validate changes with `nix flake check ./nix` before applying.
 - Apply configuration with `nixup` (alias for `darwin-rebuild switch`).
 - Do not commit secrets; use 1Password CLI as described in `BOOTSTRAP.md`.

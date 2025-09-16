@@ -11,8 +11,8 @@
 
 - `nix/flake.nix`: Main flake configuration
 - `nix/home.nix`: Home Manager configuration imports
-- `nix/modules/`: Individual configuration modules
-- `nix/modules/claude.nix`: Claude Code settings and permissions
+- `nix/modules/system/` and `nix/modules/home/`: Individual configuration modules
+- `nix/modules/home/claude.nix`: Claude Code settings and permissions
 
 ## Code Standards
 
@@ -23,17 +23,17 @@
 
 ## Key Modules
 
-- `starship.nix`: Terminal prompt configuration
-- `zsh.nix`: Shell and environment setup (includes Claude env vars)
-- `claude.nix`: Claude Code settings and permissions
-- `git.nix`: Git configuration
-- `homebrew.nix`: macOS app management
-- `packages.nix`: System packages
-- `system-defaults.nix`: macOS system preferences
+- `home/starship.nix`: Terminal prompt configuration
+- `home/zsh.nix`: Shell and environment setup (includes Claude env vars)
+- `home/claude.nix`: Claude Code settings and permissions
+- `home/git.nix`: Git configuration
+- `system/homebrew.nix`: macOS app management
+- `system/packages.nix`: System packages
+- `system/system-defaults.nix`: macOS system preferences
 
 ## Workflow
 
-- Test changes with `nix flake check ~/dotfiles/nix` before applying
+- Test changes with `nix flake check ./nix` before applying
 - Use `nixup` to apply system-wide changes
 - Configuration is declarative - edit nix files, don't manually configure
 - Claude environment variables are managed in `zsh.nix`
