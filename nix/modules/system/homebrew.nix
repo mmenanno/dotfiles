@@ -58,6 +58,7 @@
       "scummvm-app"
       "sequel-ace"
       "session"
+      "shottr"
       "signal"
       "slack"
       "steam"
@@ -84,7 +85,6 @@
         "Deliveries" = 290986013;
         "JSON Peep for Safari" = 1458969831;
         "MetaDoctor" = 988250390;
-        "Monosnap - screenshot editor" = 540348655;
         "Numbers" = 409203825;
         "Pages" = 409201541;
         "Proton Pass for Safari" = 6502835663;
