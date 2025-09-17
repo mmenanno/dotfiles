@@ -49,9 +49,9 @@ let
 
   with_bash_login_command = "&& exec bash --login";
 
-  # 1Password agent socket path file (from onepassword.nix)
-  onePasswordAgentPath = "${config.home.homeDirectory}/.config/op/agent-socket";
-  onePasswordAgent = "\"$(cat ${onePasswordAgentPath} 2>/dev/null || echo \"${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\")\"";
+  # Use a stable no-spaces symlink for the 1Password agent socket to avoid
+  # quoting/subshell issues in ssh config
+  onePasswordAgentSymlink = "${config.home.homeDirectory}/.ssh/1password-agent.sock";
 
 in
 {
@@ -97,7 +97,7 @@ in
       enableDefaultConfig = false;
       matchBlocks = baseBlocks // nvmBlocks // {
         "*" = {
-          identityAgent = onePasswordAgent;
+          identityAgent = onePasswordAgentSymlink;
           identitiesOnly = true;
         };
         "github.com" = {
