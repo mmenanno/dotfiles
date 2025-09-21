@@ -30,7 +30,7 @@
       "google-chrome"
       "handbrake-app"
       "imageoptim"
-      "jordanbaird-ice"
+      "jordanbaird-ice@beta"
       "kindle-previewer"
       "logi-options+"
       "logitune"
