@@ -2,10 +2,15 @@
 
 ## Build & Deploy Commands
 
-- Apply configuration: `nixup` (alias for darwin-rebuild switch)
-- Check flake: `nix flake check ./nix`
-- Update dependencies: `nix flake update ./nix`
-- Edit config: `nixedit` (opens dotfiles in Cursor)
+- Apply configuration: `nixup` or `nx up`
+- Check flake: `nx check` or `nx c`
+- Update dependencies: `nx update` or `nx u`
+- Edit config: `nixedit` or `nx edit` or `nx e`
+- Show status: `nx status` or `nx s`
+- Build only: `nx build` or `nx b`
+- Show diff: `nx diff` or `nx d`
+- Clean old generations: `nx clean` or `nx cl`
+- Help: `nx help` or `nx h`
 
 ## Project Structure
 
@@ -33,7 +38,7 @@
 
 ## Workflow
 
-- Test changes with `nix flake check ./nix` before applying
+- Test changes with `nx check` before applying
 - Use `nixup` to apply system-wide changes
 - Configuration is declarative - edit nix files, don't manually configure
 - Claude environment variables are managed in `zsh.nix`

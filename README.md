@@ -65,7 +65,7 @@ After running the bootstrap:
 1. **Restart your terminal** to load new shell configuration
 2. **Sign into applications** that require authentication
 3. **Configure 1Password** for SSH/Git signing (see `BOOTSTRAP.md` for required items and environment variables)
-4. **Run `nixup`** to rebuild configuration (alias for darwin-rebuild)
+4. **Run `nixup` or `nx up`** to rebuild configuration
 
 ## 🛠 Customization
 
@@ -90,8 +90,14 @@ Edit `nix/modules/home/mise.nix` to manage language versions.
 
 ## 📱 Available Commands
 
-- `nixup` - Rebuild and switch configuration
-- `nixedit` - Open dotfiles in Cursor
+- `nixup` or `nx up` - Rebuild and switch configuration
+- `nixedit` or `nx edit` - Open dotfiles in Cursor
+- `nx check` or `nx c` - Validate flake configuration
+- `nx update` or `nx u` - Update flake dependencies
+- `nx status` or `nx s` - Show git status
+- `nx diff` or `nx d` - Show configuration changes (dry-run)
+- `nx clean` or `nx cl` - Clean old generations
+- `nx help` - Show all available commands
 - `mise list` - Show installed development tools
 
 ## 🔄 Updating
@@ -99,7 +105,7 @@ Edit `nix/modules/home/mise.nix` to manage language versions.
 ```bash
 cd ~/dotfiles
 git pull
-nixup
+nx up      # or nixup
 ```
 
 ## 📁 Repository Structure
@@ -120,6 +126,11 @@ nixup
 │   │       ├── mise.nix               # Language/runtime manager
 │   │       └── ...
 │   └── files/                         # Static files (fonts, PWAs, etc.)
+├── bin/                               # Utility scripts
+│   ├── nx                             # Main nix management script
+│   ├── nixup-with-secrets             # Bootstrap-aware rebuild
+│   ├── gbclean                        # Git branch cleanup
+│   └── ...                            # Other development tools
 ├── bootstrap.sh                       # Setup script
 └── README.md                          # This file
 ```
@@ -142,7 +153,7 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 
 #### Applications not found
 
-- Run `nixup` to reapply Homebrew casks via nix-homebrew
+- Run `nx up` to reapply Homebrew casks via nix-homebrew
 - Check `nix/modules/system/homebrew.nix` for typos in cask names
 
 ### Getting Help
