@@ -131,24 +131,30 @@ in
           "tapiocaAddon": true
         },
         "rubyLsp.addonSettings": {},
-        "diffEditor.maxComputationTime": 0
+        "diffEditor.maxComputationTime": 0,
+        "keyboard.dispatch": "keyCode",
+        "settingsSync.keybindingsPerPlatform": false
       }
     '';
 
     # GitHub MCP configuration for Cursor (pretty-formatted)
     ".cursor/mcp.json".source = cursorMcpJson;
 
-    "Library/Application Support/Cursor/User/keybindings.json".text = ''
-      [
-        {
-          "key": "cmd+i",
-          "command": "composerMode.agent"
-        },
-        {
-          "key": "cmd+e",
-          "command": "composerMode.background"
-        }
-      ]
-    '';
+    "Library/Application Support/Cursor/User/keybindings.json" = {
+      text = ''
+        [
+          {
+            "key": "cmd+i",
+            "command": "composerMode.agent"
+          },
+          {
+            "key": "cmd+e",
+            "command": "composerMode.background"
+          }
+        ]
+      '';
+      # Allow Cursor to modify this file
+      force = false;
+    };
   };
 }
