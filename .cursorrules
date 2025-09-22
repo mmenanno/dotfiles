@@ -3,8 +3,8 @@
 - Follow `AGENTS.md` and `CLAUDE.md` as the authoritative repo guides.
 - Prefer absolute paths in tool commands and references.
 - For macOS/Nix changes, edit files under `nix/` (modules are in `nix/modules/system` and `nix/modules/home`).
-- Validate changes with `nix flake check ./nix` before applying.
-- Apply configuration with `nixup` (alias for `darwin-rebuild switch`).
+- Validate changes with `nx check` or `nx c` before applying.
+- Apply configuration with `nixup` or `nx up` (comprehensive nx script with short commands).
 - Do not commit secrets; use 1Password CLI as described in `BOOTSTRAP.md`.
 - Nix style: 2‑space indentation, small focused modules, hyphenated filenames.
 - Shell scripts: `#!/bin/bash`, `set -euo pipefail`, pass shellcheck; markdown should pass markdownlint.

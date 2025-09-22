@@ -10,7 +10,7 @@
       tools = {
         python = "latest";
         ruby = "latest";
-        node = "lts";
+        node = "system";
         pnpm = "latest";
         rust = "latest";
       };
