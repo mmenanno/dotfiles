@@ -139,22 +139,30 @@ in
 
     # GitHub MCP configuration for Cursor (pretty-formatted)
     ".cursor/mcp.json".source = cursorMcpJson;
-
-    "Library/Application Support/Cursor/User/keybindings.json" = {
-      text = ''
-        [
-          {
-            "key": "cmd+i",
-            "command": "composerMode.agent"
-          },
-          {
-            "key": "cmd+e",
-            "command": "composerMode.background"
-          }
-        ]
-      '';
-      # Allow Cursor to modify this file
-      force = false;
-    };
   };
+
+  # Create initial keybindings file that Cursor can manage
+  home.activation.cursorKeybindings = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    $DRY_RUN_CMD mkdir -p "$HOME/Library/Application Support/Cursor/User"
+
+    KEYBINDINGS_FILE="$HOME/Library/Application Support/Cursor/User/keybindings.json"
+
+    # Only create the file if it doesn't exist or if it's a symlink (from previous Nix management)
+    if [[ ! -f "$KEYBINDINGS_FILE" || -L "$KEYBINDINGS_FILE" ]]; then
+      $VERBOSE_ECHO "Creating initial Cursor keybindings file"
+      $DRY_RUN_CMD rm -f "$KEYBINDINGS_FILE"  # Remove symlink if it exists
+      $DRY_RUN_CMD cat > "$KEYBINDINGS_FILE" << 'EOF'
+[
+  {
+    "key": "cmd+i",
+    "command": "composerMode.agent"
+  },
+  {
+    "key": "cmd+e",
+    "command": "composerMode.background"
+  }
+]
+EOF
+    fi
+  '';
 }
