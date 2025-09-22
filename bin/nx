@@ -109,14 +109,15 @@ clean_generations() {
         log_info "Starting garbage collection..."
 
         # Start background process and show progress
-        local temp_file=$(mktemp)
-        sudo nix-collect-garbage -d > "$temp_file" 2>&1 &
+        local temp_file
+        temp_file=$(mktemp)
+        sudo sh -c "nix-collect-garbage -d > \"$temp_file\" 2>&1" &
         local gc_pid=$!
 
         # Show progress while garbage collection runs
         local dots=0
         while kill -0 "$gc_pid" 2>/dev/null; do
-            printf "\r${BLUE}[INFO]${NC} Garbage collection in progress"
+            printf "\r%s[INFO]%s Garbage collection in progress" "${BLUE}" "${NC}"
             for ((i=0; i<dots; i++)); do printf "."; done
             printf "   "
             dots=$(( (dots + 1) % 4 ))
@@ -131,12 +132,14 @@ clean_generations() {
         printf "\r\033[K"
 
         if [[ $exit_code -eq 0 ]]; then
-            local output=$(cat "$temp_file")
+            local output
+            output=$(cat "$temp_file")
             echo "$output"
 
             # Extract and highlight the freed space if available
             if echo "$output" | grep -q "freed"; then
-                local freed=$(echo "$output" | grep -o "[0-9.]*\s*[KMGT]*iB freed" | tail -1)
+                local freed
+                freed=$(echo "$output" | grep -o "[0-9.]*\s*[KMGT]*iB freed" | tail -1)
                 if [[ -n "$freed" ]]; then
                     log_success "Garbage collection completed - $freed"
                 else
