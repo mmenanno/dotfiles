@@ -67,7 +67,7 @@ update_flake() {
 apply_config() {
     log_info "Applying nix-darwin configuration..."
     if nixup-with-secrets; then
-        log_success "Configuration applied successfully"
+        # nixup-with-secrets already prints success message
         return 0
     else
         log_error "Configuration apply failed"
