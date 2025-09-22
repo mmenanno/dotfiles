@@ -122,6 +122,8 @@ let
     "nix-darwin.github.io"
     "nix-community.github.io"
     "docs.anthropic.com"
+    "support.anthropic.com"
+    "github.blog"
   ];
   toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
   toReadPermissions = files: map (file: "Read(${file})") files;
@@ -154,6 +156,18 @@ in
             "nixup:*"
             "nix flake metadata:*"
             "nix flake check:*"
+            # Starship helpers for status line debugging
+            "starship config get:*"
+            "starship print-config:*"
+            "defaults:*"
+            # Common shell helpers and project scripts
+            "cp:*"
+            "bash:*"
+            "nx:*"
+            # Git quality-of-life
+            "git checkout:*"
+            "git pull:*
+            "git reset:*"
           ])
           ++ [ "WebSearch" ]
           ++ (toWebFetchPermissions webDomains)
@@ -164,7 +178,15 @@ in
             "grep:*"
             "mkdir:*"
             "mise:*"
-          ]);
+          ])
+          # GitHub MCP actions used by workflows/debugging
+          ++ [
+            "mcp__github__list_workflows"
+            "mcp__github__list_workflow_runs"
+            "mcp__github__get_workflow_run"
+            "mcp__github__list_workflow_jobs"
+            "mcp__github__create_pull_request"
+          ];
         ask = toBashPermissions [
           "git push:*"
           "rm:*"
