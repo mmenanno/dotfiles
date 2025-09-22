@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+
+# Nix Dotfiles Management Script
+# Comprehensive tool for managing nix-darwin configuration
+
+set -euo pipefail
+
+# Get script directory and source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./shared
+source "$SCRIPT_DIR/shared"
+
+DOTFILES_DIR="/Users/michaelmenanno/dotfiles"
+NIX_DIR="$DOTFILES_DIR/nix"
+
+show_help() {
+    cat << EOF
+Nix Dotfiles Management Script
+
+USAGE:
+    nix <command> [options]
+
+COMMANDS:
+    up, apply, a       Apply configuration (darwin-rebuild switch)
+    check, c          Check flake for errors
+    update, u         Update flake dependencies
+    edit, e           Open dotfiles in Cursor editor
+    status, s         Show git status of dotfiles
+    build, b          Build configuration without applying
+    diff, d           Show what would change (dry-run)
+    clean, cl         Clean old generations
+    help, h           Show this help message
+
+EXAMPLES:
+    nix up            # Apply configuration
+    nix c             # Check flake
+    nix u             # Update dependencies
+    nix e             # Edit in Cursor
+    nix s             # Git status
+    nix cl            # Clean old generations
+
+EOF
+}
+
+check_flake() {
+    log_info "Checking flake configuration..."
+    if nix flake check "$NIX_DIR"; then
+        log_success "Flake check passed"
+        return 0
+    else
+        log_error "Flake check failed"
+        return 1
+    fi
+}
+
+update_flake() {
+    log_info "Updating flake dependencies..."
+    if nix flake update --flake "$NIX_DIR"; then
+        log_success "Flake updated successfully"
+        return 0
+    else
+        log_error "Flake update failed"
+        return 1
+    fi
+}
+
+apply_config() {
+    log_info "Applying nix-darwin configuration..."
+    if nixup-with-secrets; then
+        log_success "Configuration applied successfully"
+        return 0
+    else
+        log_error "Configuration apply failed"
+        return 1
+    fi
+}
+
+build_config() {
+    log_info "Building nix-darwin configuration..."
+    if darwin-rebuild build --flake "$NIX_DIR#macbook_setup"; then
+        log_success "Configuration built successfully"
+        return 0
+    else
+        log_error "Configuration build failed"
+        return 1
+    fi
+}
+
+show_diff() {
+    log_info "Showing configuration diff (dry-run)..."
+    darwin-rebuild build --flake "$NIX_DIR#macbook_setup" --dry-run
+}
+
+edit_config() {
+    log_info "Opening dotfiles in Cursor..."
+    cursor "$DOTFILES_DIR"
+}
+
+show_status() {
+    log_info "Git status of dotfiles:"
+    git -C "$DOTFILES_DIR" status
+}
+
+clean_generations() {
+    log_info "Cleaning old nix-darwin generations..."
+    log_warning "This will remove old system generations. Continue? (y/N)"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        log_info "Starting garbage collection..."
+
+        # Start background process and show progress
+        local temp_file=$(mktemp)
+        sudo nix-collect-garbage -d > "$temp_file" 2>&1 &
+        local gc_pid=$!
+
+        # Show progress while garbage collection runs
+        local dots=0
+        while kill -0 "$gc_pid" 2>/dev/null; do
+            printf "\r${BLUE}[INFO]${NC} Garbage collection in progress"
+            for ((i=0; i<dots; i++)); do printf "."; done
+            printf "   "
+            dots=$(( (dots + 1) % 4 ))
+            sleep 0.5
+        done
+
+        # Wait for completion and get exit status
+        wait "$gc_pid"
+        local exit_code=$?
+
+        # Clear the progress line
+        printf "\r\033[K"
+
+        if [[ $exit_code -eq 0 ]]; then
+            local output=$(cat "$temp_file")
+            echo "$output"
+
+            # Extract and highlight the freed space if available
+            if echo "$output" | grep -q "freed"; then
+                local freed=$(echo "$output" | grep -o "[0-9.]*\s*[KMGT]*iB freed" | tail -1)
+                if [[ -n "$freed" ]]; then
+                    log_success "Garbage collection completed - $freed"
+                else
+                    log_success "Garbage collection completed"
+                fi
+            else
+                log_success "Garbage collection completed"
+            fi
+        else
+            log_error "Garbage collection failed"
+            cat "$temp_file"
+            rm -f "$temp_file"
+            return 1
+        fi
+
+        rm -f "$temp_file"
+    else
+        log_info "Cleaning cancelled"
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    up|apply|a)
+        apply_config
+        ;;
+    check|c)
+        check_flake
+        ;;
+    update|u)
+        update_flake
+        ;;
+    edit|e)
+        edit_config
+        ;;
+    status|s)
+        show_status
+        ;;
+    build|b)
+        build_config
+        ;;
+    diff|d)
+        show_diff
+        ;;
+    clean|cl)
+        clean_generations
+        ;;
+    help|h|--help|-h)
+        show_help
+        ;;
+    *)
+        log_error "Unknown command: $1"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

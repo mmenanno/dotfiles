@@ -86,8 +86,8 @@ in
     '';
 
     shellAliases = {
-      nixup = "nixup-with-secrets";
-      nixedit = "cursor ~/dotfiles";
+      nixup = "nx up";
+      nixedit = "nx edit";
     };
 
     sessionVariables = {
