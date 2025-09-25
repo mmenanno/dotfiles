@@ -85,13 +85,10 @@ in
       [[ $- == *i* ]] && eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
     '';
 
-    shellAliases = {
-      nixup = "nx up";
-      nixedit = "nx edit";
-    };
+    shellAliases = {};
 
     sessionVariables = {
-      EDITOR = "cursor";
+      EDITOR = "cursor --wait";
 
       # Claude Code configuration
       DISABLE_TELEMETRY = "false";
