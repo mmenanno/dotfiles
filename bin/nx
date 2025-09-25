@@ -29,6 +29,7 @@ COMMANDS:
     build, b          Build configuration without applying
     diff, d           Show what would change (dry-run)
     clean, cl         Clean old generations
+    pr                Create PR from current changes (opts: --merge, --title, --body)
     help, h           Show this help message
 
 EXAMPLES:
@@ -38,6 +39,7 @@ EXAMPLES:
     nix e             # Edit in Cursor
     nix s             # Git status
     nix cl            # Clean old generations
+    nix pr            # Create PR from current changes
 
 EOF
 }
@@ -161,6 +163,138 @@ clean_generations() {
     fi
 }
 
+# Determine default branch for origin (prefers gh if available)
+get_default_branch() {
+    local default_branch
+    if command -v gh >/dev/null 2>&1; then
+        default_branch=$(cd "$DOTFILES_DIR" && gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || true)
+    fi
+    if [[ -z "${default_branch:-}" ]]; then
+        default_branch=$(git -C "$DOTFILES_DIR" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || true)
+    fi
+    if [[ -z "${default_branch:-}" ]]; then
+        default_branch="main"
+    fi
+    echo "$default_branch"
+}
+
+# Create a PR for all current changes in the dotfiles repo
+create_pr() {
+    local auto_merge="false"
+    local pr_title=""
+    local pr_body=""
+
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --merge)
+                auto_merge="true"
+                shift
+                ;;
+            --title)
+                pr_title=${2:-}
+                shift 2 || true
+                ;;
+            --body)
+                pr_body=${2:-}
+                shift 2 || true
+                ;;
+            *)
+                log_warning "Unknown option to pr: $1"
+                shift
+                ;;
+        esac
+    done
+
+    if ! command -v git >/dev/null 2>&1; then
+        log_error "git is required but not found in PATH"
+        return 1
+    fi
+
+    if ! git -C "$DOTFILES_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        log_error "DOTFILES_DIR is not a git repository: $DOTFILES_DIR"
+        return 1
+    fi
+
+    # Check for changes
+    if [[ -z $(git -C "$DOTFILES_DIR" status --porcelain) ]]; then
+        log_warning "No changes detected in dotfiles; nothing to PR"
+        return 0
+    fi
+
+    # Ensure origin exists
+    if ! git -C "$DOTFILES_DIR" remote get-url origin >/dev/null 2>&1; then
+        log_error "No 'origin' remote configured for dotfiles repo"
+        return 1
+    fi
+
+    local default_branch
+    default_branch=$(get_default_branch)
+
+    log_info "Fetching latest from origin/$default_branch"
+    git -C "$DOTFILES_DIR" fetch origin "$default_branch" >/dev/null 2>&1 || true
+
+    # Create a unique branch name
+    local ts
+    ts=$(date +%Y%m%d-%H%M%S)
+    local branch_name="auto/pr-${ts}"
+
+    # Create branch off remote default branch if available, else current HEAD
+    if git -C "$DOTFILES_DIR" show-ref --verify --quiet "refs/remotes/origin/${default_branch}"; then
+        git -C "$DOTFILES_DIR" checkout -B "$branch_name" "origin/${default_branch}"
+    else
+        git -C "$DOTFILES_DIR" checkout -b "$branch_name"
+    fi
+
+    # Stage and commit all changes
+    git -C "$DOTFILES_DIR" add -A
+    if git -C "$DOTFILES_DIR" diff --cached --quiet; then
+        log_warning "Nothing staged after add; aborting PR creation"
+        return 0
+    fi
+
+    local commit_msg
+    if [[ -n "$pr_title" ]]; then
+        commit_msg="$pr_title"
+    else
+        commit_msg="chore: dotfiles update via nx pr (${ts})"
+    fi
+    git -C "$DOTFILES_DIR" commit -m "$commit_msg"
+
+    # Push branch
+    log_info "Pushing branch $branch_name to origin"
+    git -C "$DOTFILES_DIR" push -u origin "$branch_name"
+
+    # Create PR (prefer gh)
+    if command -v gh >/dev/null 2>&1; then
+        local gh_args=(pr create --base "$default_branch" --head "$branch_name" --title "${pr_title:-$commit_msg}")
+        if [[ -n "$pr_body" ]]; then
+            gh_args+=(--body "$pr_body")
+        else
+            gh_args+=(--body "Automated PR from nx pr on ${ts}.")
+        fi
+
+        log_info "Creating PR via GitHub CLI"
+        if (cd "$DOTFILES_DIR" && gh "${gh_args[@]}") >/dev/null; then
+            log_success "PR created successfully"
+        else
+            log_error "Failed to create PR via gh"
+            return 1
+        fi
+
+        if [[ "$auto_merge" == "true" ]]; then
+            # Enable auto-merge if possible
+            log_info "Enabling auto-merge when checks pass"
+            (cd "$DOTFILES_DIR" && gh pr merge "$branch_name" --auto --squash) || (cd "$DOTFILES_DIR" && gh pr merge "$branch_name" --auto --merge) || true
+        fi
+    else
+        log_warning "GitHub CLI (gh) not found; PR not created automatically"
+        log_info "Branch pushed: $branch_name. Create a PR on your hosting provider."
+    fi
+
+    return 0
+}
+
 # Main command handling
 case "${1:-help}" in
     up|apply|a)
@@ -186,6 +320,10 @@ case "${1:-help}" in
         ;;
     clean|cl)
         clean_generations
+        ;;
+    pr)
+        shift || true
+        create_pr "$@"
         ;;
     help|h|--help|-h)
         show_help

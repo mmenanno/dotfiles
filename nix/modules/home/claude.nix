@@ -166,7 +166,7 @@ in
             "nx:*"
             # Git quality-of-life
             "git checkout:*"
-            "git pull:*
+            "git pull:*"
             "git reset:*"
           ])
           ++ [ "WebSearch" ]
