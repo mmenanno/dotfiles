@@ -21,6 +21,7 @@
     gmp
     imagemagick
     mariadb
+    markdownlint-cli
     mkalias
     mkvtoolnix
     mediainfo
@@ -29,12 +30,14 @@
     pipx
     pnpm
     pnpm_9
+    pylint
     python3
     readline
     rsync
     ruff
     rustc
     scc
+    shellcheck
     speedtest-cli
     terminal-notifier
     pay-respects

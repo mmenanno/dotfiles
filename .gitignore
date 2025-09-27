@@ -1,1 +1,5 @@
 .DS_Store
+
+# Cursor IDE local settings (keep rules directory versioned)
+.cursor/settings.json
+.cursor/logs/
