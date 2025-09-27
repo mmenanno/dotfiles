@@ -133,7 +133,18 @@ in
         "rubyLsp.addonSettings": {},
         "diffEditor.maxComputationTime": 0,
         "keyboard.dispatch": "keyCode",
-        "settingsSync.keybindingsPerPlatform": false
+        "settingsSync.keybindingsPerPlatform": false,
+        "[dockercompose]": {
+          "editor.insertSpaces": true,
+          "editor.tabSize": 2,
+          "editor.autoIndent": "advanced",
+          "editor.quickSuggestions": {
+            "other": true,
+            "comments": false,
+            "strings": true
+          },
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        }
       }
     '';
 
