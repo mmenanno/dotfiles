@@ -1,9 +1,4 @@
-{ config, pkgs, dotlib, ... }:
-
-let
-  inherit (dotlib) getEnvOrFallback;
-  githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
-in
+{ config, pkgs, dotlib, mcpServers, ... }:
 {
   programs.codex = {
     enable = true;
@@ -14,18 +9,7 @@ in
       sandbox_mode = "workspace-write";
       file_opener = "cursor";
       tools = { web_search = true; };
-      mcp_servers = {
-        github = {
-          command = "github-mcp-server";
-          args = [ "stdio" ];
-          env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
-        };
-        rails = {
-          command = "rails-mcp-server";
-          args = [ "stdio" ];
-          env = { };
-        };
-      };
+      mcp_servers = mcpServers;
     };
 
     custom-instructions = ''

@@ -27,8 +27,10 @@
     ./home/vscode.nix
     ./home/mise.nix
     ./home/onepassword.nix
+    ./home/mcp-shared.nix
     ./home/claude.nix
     ./home/codex.nix
     ./home/ide-extensions.nix
+    ./home/ai-globals.nix
   ];
 }

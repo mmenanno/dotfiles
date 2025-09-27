@@ -1,56 +1,120 @@
-# Repository Guidelines
+# Dotfiles Repository - AI Agent Execution Playbook
 
-## Project Structure & Module Organization
+This file defines repository-specific executable constraints and validation workflows for AI programming assistants working on this Nix dotfiles configuration. It extends the global AGENTS.md with dotfiles-specific requirements.
 
-- `nix/flake.nix`: Main flake; entry point for builds.
-- `nix/home.nix`: Home Manager imports.
-- `nix/modules/system/*.nix` and `nix/modules/home/*.nix`: Modular configs (e.g., `system/homebrew.nix`, `system/system-defaults.nix`, `home/git.nix`, `home/cursor.nix`).
-- `nix/files/`: Static assets (fonts, PWA apps, etc.).
-- `bin/`: Utility scripts (e.g., `nx`, `nixup-with-secrets`, `gbclean`, `gfsync`, `gclone`, `webm2mp4`, Rails MCP tools).
-- `bootstrap.sh` + `BOOTSTRAP.md`: First‑time setup and 1Password bootstrap.
-- `.github/workflows/`: Lint and automation.
+## Mandatory Validation Commands
 
-## Build, Test, and Development Commands
+Before any code changes are submitted or merged, AI agents MUST execute these validation commands:
 
-- `nixup` or `nx up`: Rebuild and switch configuration (alias for `darwin-rebuild switch`).
-- `nx check` or `nx c`: Validate flake and module integrity.
-- `nx update` or `nx u`: Update inputs; commit lockfile changes.
-- `nx build` or `nx b`: Build configuration without applying.
-- `nx diff` or `nx d`: Show what would change (dry-run).
-- `nx clean` or `nx cl`: Clean old generations with progress indicator.
-- `nixedit` or `nx edit`: Open this repo in the configured editor.
-- `nx status` or `nx s`: Show git status of dotfiles.
-- `nx help` or `nx h`: Show available commands.
-- Troubleshooting: `brew bundle` from repo root if Homebrew casks drift.
+### Build & Check Commands
 
-## Coding Style & Naming Conventions
+```bash
+# Validate Nix configuration
+nx check
 
-- Nix: 2‑space indentation, small focused modules, hyphenated filenames (e.g., `system-defaults.nix`).
-- Shell: `#!/bin/bash`, `set -euo pipefail`, pass `shellcheck` (CI enforces).
-- Markdown: Keep sections concise; passes `markdownlint` (line length relaxed in CI).
-- Format: Use `nixfmt` if available (`nixfmt --check` runs in CI when present).
-- Scripts: Lowercase, short names (e.g., `nx`, `gbclean`, `gfsync`, `webm2mp4`); keep shared helpers in `bin/shared`.
+# Build configuration (dry-run)
+nx build
+```
 
-## Testing Guidelines
+### Linting & Style Checks
 
-- Prefer functional checks over unit tests for configs:
+```bash
+# Shell script validation
+shellcheck bin/*
 
-  - Run `nx check` locally before PRs.
-  - Lint shell/markdown changes: `shellcheck bin/*` and `markdownlint **/*.md`.
-- CI: `.github/workflows/lint.yml` validates Nix syntax, shell scripts, markdown, and workflow YAML.
+# Markdown linting
+markdownlint **/*.md
+```
 
-## Commit & Pull Request Guidelines
+### Testing Commands
 
-- Conventional Commits: `feat: …`, `fix: …`, `refactor: …` (see `git log`).
-- PRs must:
+```bash
+# No specific test commands for this infrastructure repo
+# Individual projects should define their own test suites
+```
 
-  - Describe the change and rationale; link related issues.
-  - Include before/after notes for user‑visible behavior (screenshots only if relevant).
-  - Update docs (`README.md`, `BOOTSTRAP.md`, or module comments) when adding modules/apps.
-  - Pass CI and avoid hardcoded secrets or personal paths.
+## Code Style Guidelines
 
-## Security & Configuration Tips
+### Nix Configuration
 
-- No secrets in repo; use 1Password CLI. See `BOOTSTRAP.md` for required items and envs.
-- New machine? `op signin`, then `nixup`. To force placeholders: `NIX_BOOTSTRAP_MODE=1 darwin-rebuild switch --flake nix#macbook_setup`.
-- **For Claude/agent behavior specifics, always refer to `CLAUDE.md` as the authoritative source of truth.**
+- Use 2-space indentation
+- Create small, focused modules
+- Use hyphenated filenames (e.g., `system-defaults.nix`)
+- Group related imports together
+- Add comments for complex configurations
+
+### Shell Scripts
+
+- Use `#!/bin/bash` shebang
+- Include `set -euo pipefail` for safety
+- Must pass `shellcheck` validation
+- Use lowercase, short names (e.g., `nx`, `gbclean`)
+
+### Markdown Documentation
+
+- Keep sections concise and scannable
+- Must pass `markdownlint` validation
+- Use consistent heading hierarchy
+
+## PR Validation Requirements
+
+All AI-generated pull requests MUST:
+
+1. **Pass all validation commands** listed above
+2. **Use conventional commits**: `feat:`, `fix:`, `refactor:`, etc.
+3. **Include clear descriptions** with rationale and before/after notes
+4. **Update documentation** when adding new modules or functionality
+5. **Pass CI workflows** in `.github/workflows/lint.yml`
+
+## Prohibited Operations
+
+AI agents are PROHIBITED from executing these dangerous operations:
+
+- `rm -rf` or other destructive file operations
+- `sudo` commands that modify system state
+- Database migrations or data modifications
+- External API calls with `curl`/`wget` to unknown endpoints
+- Deployment commands
+- Operations that modify production environments
+
+## Allowed Operations
+
+AI agents MAY execute these safe, idempotent operations:
+
+- Configuration validation (`nx check`)
+- Linting and style checks
+- Build operations that don't modify system state
+- File reading operations
+- Git status and diff operations
+- Documentation generation
+
+## Security Requirements
+
+- No secrets in repository files
+- Use 1Password CLI for secret management
+- All configuration changes require code review
+- Maintain principle of least privilege for AI operations
+
+## Build System Commands
+
+### Primary Commands
+
+- `nx up` or `nixup`: Apply configuration changes
+- `nx check` or `nx c`: Validate configuration
+- `nx build` or `nx b`: Build without applying
+- `nx diff` or `nx d`: Show pending changes
+
+### Development Commands
+
+- `nx edit` or `nixedit`: Open configuration in editor
+- `nx status` or `nx s`: Show git status
+- `nx clean` or `nx cl`: Clean old generations
+- `nx help` or `nx h`: Show available commands
+
+## Project Structure
+
+- `nix/flake.nix`: Main configuration entry point
+- `nix/modules/system/`: System-level configurations
+- `nix/modules/home/`: User-level configurations
+- `bin/`: Utility scripts and tools
+- `.github/workflows/`: CI/CD automation
