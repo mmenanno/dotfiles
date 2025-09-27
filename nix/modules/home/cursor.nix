@@ -1,4 +1,4 @@
-{ config, lib, pkgs, dotlib, ... }:
+{ config, lib, pkgs, dotlib, cursorMcpServers, ... }:
 
 let
   inherit (dotlib) getEnvOrFallback;
@@ -13,20 +13,7 @@ let
   cursorMcpJson = pkgs.runCommand "cursor-mcp.json" { nativeBuildInputs = [ pkgs.jq ]; } ''
     cat > mcp.min.json <<'JSON'
     ${builtins.toJSON {
-      mcpServers = {
-        github = {
-          type = "stdio";
-          command = "github-mcp-server";
-          args = [ "stdio" ];
-          env = { "GITHUB_PERSONAL_ACCESS_TOKEN" = githubMcpToken; };
-        };
-        rails = {
-          type = "stdio";
-          command = "rails-mcp-server";
-          args = [ "stdio" ];
-          env = {};
-        };
-      };
+      mcpServers = cursorMcpServers;
     }}
     JSON
     jq -S . mcp.min.json > $out
@@ -143,6 +130,9 @@ in
             "comments": false,
             "strings": true
           },
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        },
+        "[github-actions-workflow]": {
           "editor.defaultFormatter": "redhat.vscode-yaml"
         }
       }
