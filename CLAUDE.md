@@ -1,66 +1,46 @@
-# Nix Dotfiles Configuration
+# Dotfiles Repository - Claude Code Configuration
 
-## Build & Deploy Commands
+This file defines repository-specific Claude behavioral preferences for working on this Nix dotfiles configuration. It extends the global `~/.claude/CLAUDE.md` with dotfiles-specific requirements and overrides.
 
-- Apply configuration: `nixup` or `nx up`
-- Check flake: `nx check` or `nx c`
-- Update dependencies: `nx update` or `nx u`
-- Edit config: `nixedit` or `nx edit` or `nx e`
-- Show status: `nx status` or `nx s`
-- Build only: `nx build` or `nx b`
-- Show diff: `nx diff` or `nx d`
-- Clean old generations: `nx clean` or `nx cl`
-- Help: `nx help` or `nx h`
+## Dotfiles-Specific Behavioral Overrides
 
-## Project Structure
+### Nix Configuration Focus
 
-- `nix/flake.nix`: Main flake configuration
-- `nix/home.nix`: Home Manager configuration imports
-- `nix/modules/system/` and `nix/modules/home/`: Individual configuration modules
-- `nix/modules/home/claude.nix`: Claude Code settings and permissions
+- Prioritize declarative configuration over imperative changes
+- Understand the modular architecture in `nix/modules/`
+- Use `dotlib` helper functions for environment variables
+- Reference existing patterns when creating new modules
 
-## Code Standards
+### Development Workflow for Dotfiles
 
-- Use 2-space indentation for nix files
-- Group related imports together
-- Add comments for complex configurations
-- Keep modules focused and single-purpose
+- Always test with `nx check` before applying changes
+- Use `nx diff` to preview changes before `nx up`
+- Maintain separation between system and home modules
+- Keep secrets in 1Password, never in configuration files
 
-## Key Modules
+## Dotfiles-Specific Tool Integration
 
-- `home/starship.nix`: Terminal prompt configuration
-- `home/zsh.nix`: Shell and environment setup (includes Claude env vars)
-- `home/claude.nix`: Claude Code settings and permissions
-- `home/git.nix`: Git configuration
-- `system/homebrew.nix`: macOS app management
-- `system/packages.nix`: System packages
-- `system/system-defaults.nix`: macOS system preferences
+### Nix Ecosystem Deep Integration
 
-## Workflow
+- Understand nix-darwin and Home Manager relationship
+- Navigate the flake.nix structure and module system
+- Use appropriate Nix functions and patterns
+- Leverage the custom `dotlib` utility functions
 
-- Test changes with `nx check` before applying
-- Use `nixup` to apply system-wide changes
-- Configuration is declarative - edit nix files, don't manually configure
-- Claude environment variables are managed in `zsh.nix`
-- All changes should be committed to git for version control
+### Development Environment Context
 
-### Pull Request Workflow
+- Understand the multi-tool setup (Cursor, VS Code, terminal tools)
+- Work with the custom `nx` wrapper script and its commands
+- Integrate with the 1Password CLI workflow for secrets
+- Respect the declarative nature of the entire system
 
-When instructed to "make a PR for this repo", follow this complete workflow:
+## Repository Context Integration
 
-1. **Create a new branch** for the changes
-2. **Commit the changes** to the branch
-3. **Push the branch** to the remote repository
-4. **Create a pull request** using GitHub tools
-5. **Monitor CI/CD workflows** until they complete without errors
-6. **Merge the pull request** once workflows pass
-7. **Run `gbclean`** after merging to clean up local branches
+This repository-specific configuration works with the global Claude configuration:
 
-This is the standard expectation when PR creation is requested - the full end-to-end process from branch creation through cleanup.
+- **Global config** (`~/.claude/CLAUDE.md`) provides universal behavioral preferences
+- **This file** adds dotfiles-specific context and requirements
+- **AGENTS.md** (both global and local) defines execution constraints
+- **Nix modules** handle the actual system configuration management
 
-## Development Tools
-
-- Editor: Cursor (configured as $EDITOR)
-- Shell: zsh with zinit plugin manager
-- Prompt: Starship (also used in Claude status line)
-- Package manager: Nix + Home Manager for user packages, Homebrew for GUI apps
+Focus on this repository's unique aspects: Nix ecosystem, modular architecture, and declarative system management.
