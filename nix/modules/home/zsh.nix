@@ -82,7 +82,12 @@ in
       eval "$(pay-respects zsh --alias)"
 
       # Initialize zoxide only in interactive shells
-      [[ $- == *i* ]] && eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
+      if [[ $- == *i* ]]; then
+        eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
+      else
+        # Disable zoxide doctor warnings in non-interactive shells
+        export _ZO_DOCTOR=0
+      fi
     '';
 
     shellAliases = {};
