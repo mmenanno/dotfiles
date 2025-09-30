@@ -49,6 +49,13 @@ let
       "Performance considerations for production code"
       "Security-first approach to all changes"
     ];
+
+    shellScripting = [
+      "Use #!/bin/bash shebang"
+      "Include 'set -euo pipefail' for safety"
+      "Must pass shellcheck validation"
+      "**1Password Plugin Pattern**: When using CLI tools with 1Password plugin support (like 'gh') in non-interactive subshells, wrap commands with 'op plugin run --' to ensure proper authentication. Example: op plugin run -- gh repo view"
+    ];
   };
 
   # Helper function to format command lists
@@ -82,6 +89,12 @@ let
       "Avoid logging or storing credentials"
       "Respect privacy boundaries and data sensitivity"
       "Follow secure coding practices consistently"
+    ];
+
+    onePasswordIntegration = [
+      "Shell aliases don't work in non-interactive subshells"
+      "In scripts that spawn subshells, explicitly wrap plugin-enabled commands: op plugin run -- gh <command>"
+      "See: https://developer.1password.com/docs/cli/shell-plugins/troubleshooting/#if-your-script-doesnt-inherit-shell-plugin-aliases"
     ];
   };
 
@@ -163,6 +176,9 @@ in
 
       ### Universal Code Style Guidelines
       ${formatBulletList commonBehaviors.codeStyle}
+
+      ### Shell Scripting Guidelines
+      ${formatBulletList commonBehaviors.shellScripting}
 
       ### Security Requirements
 
@@ -333,6 +349,9 @@ in
       - No sudo or system modification commands
       - No access to sensitive files (.env, secrets)
       - Principle of least privilege for all operations
+
+      ### 1Password CLI Integration
+      ${formatBulletList securityGuidelines.onePasswordIntegration}
 
       ## Integration Behavior
 
