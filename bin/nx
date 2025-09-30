@@ -285,9 +285,15 @@ create_pr() {
         fi
 
         if [[ "$auto_merge" == "true" ]]; then
-            # Enable auto-merge if possible
-            log_info "Enabling auto-merge when checks pass"
-            (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --squash) || (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --merge) || true
+            # Enable auto-merge - PR will merge automatically when all checks pass
+            log_info "Enabling auto-merge (will merge automatically when checks pass)"
+            if (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --squash 2>/dev/null); then
+                log_success "Auto-merge enabled with squash"
+            elif (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --merge 2>/dev/null); then
+                log_success "Auto-merge enabled with merge commit"
+            else
+                log_warning "Could not enable auto-merge. Repository may require branch protection rules or admin access."
+            fi
         fi
     else
         log_warning "GitHub CLI (gh) not found; PR not created automatically"
