@@ -156,7 +156,8 @@ ensure_upstream_remote() {
     esac
 
     # Query fork status and parent details (one call)
-    gh_out=$(gh repo view --json isFork,parent -q '{isFork: .isFork, ssh: .parent.sshUrl, https: .parent.url, nwo: .parent.nameWithOwner} | [ .isFork, .ssh, .https, .nwo ] | @tsv' 2>/dev/null || true)
+    # Use op plugin run to ensure 1Password plugin works in subshell
+    gh_out=$(op plugin run -- gh repo view --json isFork,parent -q '{isFork: .isFork, ssh: .parent.sshUrl, https: .parent.url, nwo: .parent.nameWithOwner} | [ .isFork, .ssh, .https, .nwo ] | @tsv' 2>/dev/null || true)
 
     if [[ -z "$gh_out" ]]; then
         log_error "Failed to query repo via 'gh'. Ensure you are authenticated and inside a GitHub repo."
