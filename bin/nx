@@ -167,7 +167,8 @@ clean_generations() {
 get_default_branch() {
     local default_branch
     if command -v gh >/dev/null 2>&1; then
-        default_branch=$(cd "$DOTFILES_DIR" && gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || true)
+        # Use op plugin run to ensure 1Password plugin works in subshell
+        default_branch=$(cd "$DOTFILES_DIR" && op plugin run -- gh repo view --json defaultBranchRef -q '.defaultBranchRef.name' 2>/dev/null || true)
     fi
     if [[ -z "${default_branch:-}" ]]; then
         default_branch=$(git -C "$DOTFILES_DIR" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || true)
@@ -275,7 +276,8 @@ create_pr() {
         fi
 
         log_info "Creating PR via GitHub CLI"
-        if (cd "$DOTFILES_DIR" && gh "${gh_args[@]}") >/dev/null; then
+        # Use op plugin run to ensure 1Password plugin works in subshell
+        if (cd "$DOTFILES_DIR" && op plugin run -- gh "${gh_args[@]}") >/dev/null; then
             log_success "PR created successfully"
         else
             log_error "Failed to create PR via gh"
@@ -285,7 +287,7 @@ create_pr() {
         if [[ "$auto_merge" == "true" ]]; then
             # Enable auto-merge if possible
             log_info "Enabling auto-merge when checks pass"
-            (cd "$DOTFILES_DIR" && gh pr merge "$branch_name" --auto --squash) || (cd "$DOTFILES_DIR" && gh pr merge "$branch_name" --auto --merge) || true
+            (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --squash) || (cd "$DOTFILES_DIR" && op plugin run -- gh pr merge "$branch_name" --auto --merge) || true
         fi
     else
         log_warning "GitHub CLI (gh) not found; PR not created automatically"
