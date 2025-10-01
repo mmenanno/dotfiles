@@ -102,6 +102,7 @@ This repository uses 1Password CLI plugins for secure credential management. Whe
 
 1. **Aliases don't work in subshells**: Shell aliases (like `alias gh="op plugin run -- gh"`) don't inherit into non-interactive subshells used by scripts
 2. **Explicit wrapping required**: In scripts that spawn subshells, explicitly wrap plugin-enabled commands:
+
    ```bash
    # ✅ CORRECT - Works in scripts and subshells
    gh_output=$(op plugin run -- gh repo view --json ...)
@@ -109,6 +110,7 @@ This repository uses 1Password CLI plugins for secure credential management. Whe
    # ❌ WRONG - Alias won't work in subshell
    gh_output=$(gh repo view --json ...)
    ```
+
 3. **Plugin initialization**: Before using plugins, run `op plugin init <tool>` (e.g., `op plugin init gh`)
 4. **Configuration location**: Plugin aliases are defined in `nix/modules/home/onepassword.nix`
 
