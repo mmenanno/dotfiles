@@ -4,6 +4,7 @@
     brews = [
       "libyaml"
       "mas"
+      "pandoc"
     ];
 
     casks = [

@@ -49,6 +49,7 @@
     wireguard-tools
     x264
     x265
+    texliveFull
     yarn
     yq
     yt-dlp
