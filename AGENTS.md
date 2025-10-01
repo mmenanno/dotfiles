@@ -112,7 +112,7 @@ This repository uses 1Password CLI plugins for secure credential management. Whe
 3. **Plugin initialization**: Before using plugins, run `op plugin init <tool>` (e.g., `op plugin init gh`)
 4. **Configuration location**: Plugin aliases are defined in `nix/modules/home/onepassword.nix`
 
-For more details, see: https://developer.1password.com/docs/cli/shell-plugins/troubleshooting/#if-your-script-doesnt-inherit-shell-plugin-aliases
+For more details, see: <https://developer.1password.com/docs/cli/shell-plugins/troubleshooting/#if-your-script-doesnt-inherit-shell-plugin-aliases>
 
 ## Build System Commands
 
