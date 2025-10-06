@@ -14,6 +14,7 @@
     ffmpeg
     findutils
     fzf
+    gemini-cli
     gh
     git
     git-lfs
@@ -33,6 +34,7 @@
     pylint
     python3
     readline
+    rclone
     rsync
     ruff
     rustc

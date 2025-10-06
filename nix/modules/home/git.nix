@@ -29,6 +29,71 @@ in
       key = signingKey;
       signByDefault = true;
     };
+
+    # Delta - beautiful diffs with syntax highlighting
+    delta = {
+      enable = true;
+      options = {
+        features = "line-numbers decorations";
+        navigate = true;
+        light = false;
+        side-by-side = true;
+        line-numbers-left-format = "";
+        line-numbers-right-format = "│ ";
+        syntax-theme = "TwoDark";
+
+        decorations = {
+          commit-decoration-style = "bold yellow box ul";
+          file-style = "bold yellow ul";
+          file-decoration-style = "none";
+        };
+      };
+    };
+
+    # Git LFS configuration
+    lfs = {
+      enable = true;
+    };
+
+    # Global gitignore patterns
+    ignores = [
+      # OS files
+      ".DS_Store"
+      "Thumbs.db"
+
+      # Editor files
+      ".vscode/"
+      ".idea/"
+      "*.swp"
+      "*.swo"
+      "*~"
+
+      # Environment files
+      ".env"
+      ".env.local"
+
+      # Dependencies
+      "node_modules/"
+      ".pnp/"
+      ".pnp.js"
+
+      # Build outputs
+      "dist/"
+      "build/"
+      "*.log"
+
+      # Misc
+      ".direnv/"
+      ".mise.toml.local"
+
+      # Nix build artifacts
+      "result"
+      "result-*"
+
+      # AI tool settings
+      "**/.claude/settings.local.json"
+    ];
+
     extraConfig = {
       push.autoSetupRemote = true;
       gpg = {
@@ -47,6 +112,13 @@ in
       init.defaultBranch = "main";
       tag.gpgsign = true;
       core.editor = "cursor --wait";
+
+      # URL rewrites for faster cloning (use SSH instead of HTTPS)
+      url = {
+        "git@github.com:" = {
+          insteadOf = "https://github.com/";
+        };
+      };
     };
 
     includes = [{

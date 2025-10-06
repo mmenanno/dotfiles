@@ -48,6 +48,10 @@ check_flake() {
     log_info "Checking flake configuration..."
     if nix flake check "$NIX_DIR"; then
         log_success "Flake check passed"
+        # Clean up any result symlinks from check
+        if [[ -L "$NIX_DIR/result" ]]; then
+            rm -f "$NIX_DIR/result"
+        fi
         return 0
     else
         log_error "Flake check failed"
@@ -81,6 +85,11 @@ build_config() {
     log_info "Building nix-darwin configuration..."
     if darwin-rebuild build --flake "$NIX_DIR#macbook_setup"; then
         log_success "Configuration built successfully"
+        # Clean up result symlink automatically
+        if [[ -L "$NIX_DIR/result" ]]; then
+            rm -f "$NIX_DIR/result"
+            log_info "Cleaned up result symlink"
+        fi
         return 0
     else
         log_error "Configuration build failed"
