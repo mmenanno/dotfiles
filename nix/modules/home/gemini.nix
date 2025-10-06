@@ -6,7 +6,7 @@
     package = pkgs.gemini-cli;
 
     settings = {
-      theme = "dark";
+      theme = "GitHub";
 
       history_limit = 20;
       max_tokens = 8192;
