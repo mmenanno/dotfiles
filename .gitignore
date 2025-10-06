@@ -3,3 +3,7 @@
 # Cursor IDE local settings (keep rules directory versioned)
 .cursor/settings.json
 .cursor/logs/
+
+# Nix build artifacts
+result
+result-*

@@ -84,13 +84,19 @@ in
       # Initialize zoxide only in interactive shells
       if [[ $- == *i* ]]; then
         eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
-      else
-        # Disable zoxide doctor warnings in non-interactive shells
-        export _ZO_DOCTOR=0
       fi
     '';
 
-    shellAliases = {};
+    shellAliases = {
+      # Modern CLI tool replacements
+      cat = "bat";
+      grep = "rg";
+      find = "fd";
+
+      # Additional convenience aliases
+      man = "batman";  # Man pages with syntax highlighting
+      diff = "batdiff";  # Diffs with syntax highlighting
+    };
 
     sessionVariables = {
       EDITOR = "cursor --wait";
@@ -104,6 +110,9 @@ in
       # Homebrew configuration
       HOMEBREW_NO_ANALYTICS = "1";
       HOMEBREW_NO_UPDATE_REPORT_NEW = "1";
+
+      # Zoxide configuration
+      _ZO_DOCTOR = "0";  # Disable zoxide doctor warnings
     };
   };
 

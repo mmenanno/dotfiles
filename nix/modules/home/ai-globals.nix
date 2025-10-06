@@ -73,6 +73,14 @@ let
     gitCommand = "cursor --wait";
     shell = "zsh with modern plugin management";
     terminalFont = "MesloLGS Nerd Font";
+    modernCliTools = [
+      "bat - cat with syntax highlighting (use instead of cat for viewing files)"
+      "eza - modern ls with git integration (use instead of ls)"
+      "ripgrep (rg) - fast grep alternative (use for searching code)"
+      "fd - fast find alternative (use for finding files)"
+      "atuin - magical shell history with sync (Ctrl+R for search)"
+      "direnv - automatic environment activation for .envrc files"
+    ];
   };
 
   # Common security guidelines template
@@ -235,6 +243,9 @@ in
       - Use descriptive command aliases
       - Prefer structured output for complex commands
 
+      ### Available Modern CLI Tools
+      ${formatBulletList commonToolPreferences.modernCliTools}
+
       ### Permission Preferences
 
       - Always validate operations against AGENTS.md constraints
@@ -288,6 +299,9 @@ in
       - Emphasize human-in-the-loop throughout execution chain
       - Break down complex tasks into reviewable steps
       - Provide comprehensive explanations for suggested changes
+
+      ### Available Modern CLI Tools
+      ${formatBulletList commonToolPreferences.modernCliTools}
 
       ### Memory Management
 
