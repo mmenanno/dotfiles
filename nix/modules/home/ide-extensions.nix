@@ -45,7 +45,7 @@ let
     "sorbet.sorbet-vscode-extension"
     "stylelint.vscode-stylelint"
     "tamasfe.even-better-toml"
-    "wakatime.vscode-wakatime"
+    "tomoki1207.pdf"
     "wayou.vscode-todo-highlight"
     "yzhang.markdown-all-in-one"
   ];
