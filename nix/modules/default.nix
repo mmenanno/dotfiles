@@ -26,10 +26,12 @@
     ./home/cursor.nix
     ./home/vscode.nix
     ./home/mise.nix
+    ./home/modern-cli-tools.nix
     ./home/onepassword.nix
     ./home/mcp-shared.nix
     ./home/claude.nix
     ./home/codex.nix
+    ./home/gemini.nix
     ./home/ide-extensions.nix
     ./home/ai-globals.nix
   ];

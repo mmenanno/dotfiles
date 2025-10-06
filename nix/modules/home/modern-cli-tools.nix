@@ -1,0 +1,73 @@
+{ pkgs, ... }:
+
+# Modern CLI replacements for traditional Unix tools
+# These provide enhanced functionality while maintaining familiar interfaces
+
+{
+  # bat - cat with syntax highlighting and git integration
+  programs.bat = {
+    enable = true;
+    config = {
+      theme = "TwoDark";
+      style = "numbers,changes,header";
+    };
+    extraPackages = with pkgs.bat-extras; [
+      batdiff  # Diff with syntax highlighting
+      batman   # Man pages with syntax highlighting
+      batgrep  # Grep with syntax highlighting
+    ];
+  };
+
+  # eza - modern ls replacement with better defaults
+  programs.eza = {
+    enable = true;
+    git = true;
+  };
+
+  # ripgrep - fast grep alternative
+  programs.ripgrep = {
+    enable = true;
+  };
+
+  # direnv - automatic environment switching
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+    config = {
+      global = {
+        load_dotenv = true;
+      };
+    };
+  };
+
+  # atuin - magical shell history
+  programs.atuin = {
+    enable = true;
+    settings = {
+      auto_sync = true;
+      sync_frequency = "5m";
+      search_mode = "fuzzy";
+      style = "compact";
+      inline_height = 20;
+      show_preview = true;
+      exit_mode = "return-query";
+    };
+  };
+
+  # nix-index - locate which package provides a command
+  programs.nix-index = {
+    enable = true;
+  };
+
+  # fd - modern find alternative (useful with fzf and other tools)
+  programs.fd = {
+    enable = true;
+    hidden = true;
+    ignores = [
+      ".git/"
+      "node_modules/"
+      "*.pyc"
+    ];
+  };
+}
+
