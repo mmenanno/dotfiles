@@ -6,7 +6,7 @@
 
     settings = {
       approval_policy = "on-request";
-      sandbox_mode = "workspace-write";
+      sandbox_mode = "danger-full-access";
       file_opener = "cursor";
       tools = { web_search = true; };
       mcp_servers = mcpServers;
