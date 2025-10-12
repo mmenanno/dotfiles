@@ -30,4 +30,10 @@ in
   };
 
   home.file.".ruby-version".text = latestRubyVersion;
+
+  # Bundler global configuration
+  home.file.".bundle/config".text = ''
+    ---
+    BUNDLE_IGNORE_FUNDING_REQUESTS: "true"
+  '';
 }
