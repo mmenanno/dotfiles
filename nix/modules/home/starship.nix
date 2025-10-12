@@ -11,6 +11,9 @@ let
   customSettings = {
     add_newline = false;
 
+    # Increase timeout for slow git operations
+    command_timeout = 2000;  # 2 seconds (default is 500ms)
+
     character = {
       success_symbol = "[➜](bold green)";
       error_symbol = "[➜](bold red)";
