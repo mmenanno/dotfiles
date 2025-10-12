@@ -11,6 +11,7 @@ source "${BASH_SOURCE[0]%/*}/shared"
 DRY_RUN=false
 FORCE=false
 PUSH=true
+CLEAN_LOCKS=false
 # Internal state
 DID_SWITCH_BRANCH=false
 RESTORED=false
@@ -27,6 +28,7 @@ OPTIONS:
     -n, --dry-run      Print actions without executing
     -f, --force        Force reset to upstream if not fast-forward, and push with --force-with-lease
     --no-push          Do not push changes to origin (local only)
+    -cl, --clean-locks Force removal of stale .lock files (use when git processes exist)
     -q, --quiet        Suppress non-error logs
     -v, --verbose      Show verbose logs
 
@@ -64,6 +66,10 @@ parse_args() {
                 ;;
             --no-push)
                 PUSH=false
+                shift
+                ;;
+            -cl|--clean-locks)
+                CLEAN_LOCKS=true
                 shift
                 ;;
             -q|--quiet)
@@ -129,6 +135,68 @@ ensure_remote_exists() {
     if ! git remote get-url "$remote" >/dev/null 2>&1; then
         log_error "Remote '$remote' not found. Please add it first: git remote add $remote <url>"
         exit 1
+    fi
+}
+
+check_and_clean_lock_files() {
+    local git_dir
+    git_dir=$(git rev-parse --git-dir)
+    local lock_files
+
+    # Find all .lock files in refs
+    lock_files=$(find "${git_dir}/refs" -name "*.lock" 2>/dev/null || true)
+
+    if [[ -z "$lock_files" ]]; then
+        return 0
+    fi
+
+    log_warning "Found stale .lock files in .git/refs/"
+
+    # Check if git processes are running
+    local git_processes
+    git_processes=$(pgrep -f "git" || true)
+
+    if [[ -n "$git_processes" && "$CLEAN_LOCKS" == false ]]; then
+        log_error "Git processes are running. If you're sure they're not using this repo,"
+        log_error "run with --clean-locks to force cleanup:"
+        echo "$lock_files" >&2
+        return 1
+    fi
+
+    if [[ "$CLEAN_LOCKS" == true && -n "$git_processes" ]]; then
+        log_warning "Forcing cleanup despite running Git processes (--clean-locks)"
+    fi
+
+    # Safe to clean
+    log_info "Removing stale lock files..."
+    echo "$lock_files" | while IFS= read -r lock_file; do
+        log_verbose "Removing: $lock_file"
+        rm -f "$lock_file"
+    done
+    log_success "Cleaned up stale lock files"
+}
+
+handle_case_insensitive_refs() {
+    # On case-insensitive filesystems (like macOS), refs with different cases
+    # (e.g., README-update vs readme-update) can conflict at the filesystem level.
+    # Solution: remove all loose refs in the conflicting area, then pack all refs.
+    local git_dir
+    git_dir=$(git rev-parse --git-dir)
+
+    log_info "Fixing case-insensitive filesystem ref conflicts..."
+
+    # Remove all loose remote refs (they'll be preserved in packed-refs)
+    log_verbose "Removing loose remote refs to eliminate conflicts..."
+    if [[ -d "${git_dir}/refs/remotes" ]]; then
+        # First pack all refs to ensure nothing is lost
+        run_cmd git pack-refs --all
+        # Then remove all loose remote refs
+        find "${git_dir}/refs/remotes" -type f -delete 2>/dev/null || true
+        log_success "Removed conflicting loose refs; all refs preserved in packed-refs"
+        return 0
+    else
+        log_error "refs/remotes directory not found"
+        return 1
     fi
 }
 
@@ -333,7 +401,9 @@ main() {
         if [[ "$DRY_RUN" == true ]]; then
             return 0
         fi
-        if [[ "${starting_branch}" != "HEAD" && "${DID_SWITCH_BRANCH}" == true && "${RESTORED}" == false ]]; then
+        # Check if variables are set (they won't be in subshells)
+        if [[ "${starting_branch:-}" != "" && "${starting_branch}" != "HEAD" && \
+              "${DID_SWITCH_BRANCH}" == true && "${RESTORED}" == false ]]; then
             git checkout "$starting_branch" >/dev/null 2>&1 || true
         fi
     }
@@ -342,15 +412,75 @@ main() {
     ensure_remote_exists origin
     ensure_upstream_remote
 
+    # Check and clean lock files if needed
+    check_and_clean_lock_files
+
     log_info "Fetching remotes..."
     # Unshallow if needed for accurate ancestry/merges
+    local fetch_failed=false
+    local fetch_output
+    fetch_output=$(mktemp)
     if [[ -f "$(git rev-parse --git-dir)/shallow" ]]; then
         log_info "Repository is shallow; fetching full history for origin and upstream"
-        run_cmd git fetch --prune --unshallow origin
-        run_cmd git fetch --prune --unshallow upstream
+        if ! run_cmd git fetch --prune --unshallow origin 2>&1 | tee "$fetch_output" || \
+           ! run_cmd git fetch --prune --unshallow upstream 2>&1 | tee -a "$fetch_output"; then
+            fetch_failed=true
+        fi
     else
-        run_cmd git fetch --prune --multiple origin upstream
+        if ! run_cmd git fetch --prune --multiple origin upstream 2>&1 | tee "$fetch_output"; then
+            fetch_failed=true
+        fi
     fi
+
+    # If fetch failed, diagnose and fix the issue
+    if [[ "$fetch_failed" == true ]]; then
+        local error_content
+        error_content=$(cat "$fetch_output")
+
+        # Check for case-insensitive filesystem conflict
+        if echo "$error_content" | grep -q "cannot lock ref.*File exists"; then
+            log_warning "Detected case-insensitive filesystem ref conflict"
+            handle_case_insensitive_refs
+            log_info "Retrying fetch after fixing refs..."
+
+            # Fetch each remote separately to avoid conflicts
+            # Fetch upstream without writing refs, then manually update packed-refs
+            local git_dir
+            git_dir=$(git rev-parse --git-dir)
+
+            log_info "Fetching with packed refs only..."
+            # Use a different approach: fetch into FETCH_HEAD, then manually update packed-refs
+            # This avoids Git trying to create loose refs that conflict
+            (
+                cd "${git_dir}/.." || exit 1
+                # Fetch origin normally (no conflict expected there)
+                git fetch --prune origin 2>/dev/null || true
+
+                # For upstream, fetch into FETCH_HEAD and manually update packed-refs
+                log_verbose "Fetching upstream refs..."
+                git fetch --prune --no-write-fetch-head upstream '+refs/heads/*:refs/remotes/upstream/*' 2>&1 | grep -v "cannot lock ref" || true
+
+                # Pack all refs and remove loose refs
+                git pack-refs --all --prune
+                log_success "All refs stored in packed-refs format"
+            )
+        else
+            # Try cleaning lock files for other lock-related issues
+            log_warning "Fetch failed, checking for lock files..."
+            check_and_clean_lock_files
+            log_info "Retrying fetch..."
+
+            # Retry fetch
+            if [[ -f "$(git rev-parse --git-dir)/shallow" ]]; then
+                run_cmd git fetch --prune --unshallow origin
+                run_cmd git fetch --prune --unshallow upstream
+            else
+                run_cmd git fetch --prune --multiple origin upstream
+            fi
+        fi
+    fi
+
+    rm -f "$fetch_output"
 
     local origin_default_branch upstream_default_branch
     origin_default_branch=$(get_remote_default_branch origin)
