@@ -16,6 +16,7 @@ let
     "github.vscode-github-actions"
     "github.vscode-pull-request-github"
     "golang.go"
+    "google.gemini-cli-vscode-ide-companion"
     "graphql.vscode-graphql"
     "graphql.vscode-graphql-syntax"
     "gruntfuggly.todo-tree"
