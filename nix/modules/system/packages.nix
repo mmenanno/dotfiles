@@ -20,6 +20,7 @@
     git-lfs
     github-mcp-server
     gmp
+    hugo
     imagemagick
     mariadb
     markdownlint-cli
