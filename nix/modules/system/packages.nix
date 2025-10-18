@@ -20,6 +20,7 @@
     git-lfs
     github-mcp-server
     gmp
+    go
     hugo
     imagemagick
     mariadb
