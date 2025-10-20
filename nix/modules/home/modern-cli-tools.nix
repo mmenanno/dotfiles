@@ -55,9 +55,8 @@
   };
 
   # nix-index - locate which package provides a command
-  programs.nix-index = {
-    enable = true;
-  };
+  # Configured via nix-index-database flake input for automatic weekly updates
+  programs.nix-index.enable = true;
 
   # fd - modern find alternative (useful with fzf and other tools)
   programs.fd = {
