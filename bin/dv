@@ -1,0 +1,310 @@
+#!/usr/bin/env zsh
+# shellcheck disable=SC1071
+
+# dv - Superpowered Development Workflow Script
+# Smart navigation between development directories with collision handling.
+
+if [[ "${ZSH_EVAL_CONTEXT:-}" == *:file ]]; then
+    typeset -g DV_RUNTIME_MODE="function"
+else
+    emulate -L zsh
+    setopt err_exit pipe_fail nounset extended_glob
+    typeset -g DV_RUNTIME_MODE="script"
+fi
+
+0=${(%):-%N}
+SCRIPT_DIR=${0:A:h}
+
+if ! typeset -f log_error >/dev/null 2>&1; then
+    source "$SCRIPT_DIR/shared"
+fi
+
+typeset -gA SPECIAL_DIRS=(
+    dotfiles "$HOME/dotfiles"
+    dev "$HOME/dev"
+    writing "$HOME/writing"
+)
+
+typeset -ga PROJECT_PATHS=(
+    "$HOME/dev"
+    "$HOME/dev/git"
+    "$HOME/writing"
+)
+
+typeset -gA PROJECT_MAP=()
+
+show_help() {
+    cat <<'EOT'
+dv - Superpowered Development Workflow Script
+
+USAGE:
+    dv <command> [options]
+
+COMMANDS:
+    cd <target>       Navigate to a project or special directory
+                      Special targets: dotfiles, dev, writing
+                      Or any project name from indexed directories
+
+    list, ls          List all available projects
+    help, h           Show this help message
+
+EXAMPLES:
+    dv cd dotfiles          # Go to dotfiles
+    dv cd dev               # Go to ~/dev root
+    dv cd calendar_hub      # Go to calendar_hub project
+    dv ls                   # List all available projects
+
+NOTES:
+    - Projects are auto-discovered from ~/dev, ~/dev/git, ~/writing
+    - If multiple projects share a name, you'll be prompted to choose
+    - Use with zsh completion for best experience (tab to complete project names)
+    - When sourced in your shell, 'dv cd' changes directory directly
+EOT
+}
+
+index_projects() {
+    typeset -gA PROJECT_MAP=()
+    local search_path project_dir project_name
+
+    for search_path in "${PROJECT_PATHS[@]}"; do
+        [[ -d $search_path ]] || continue
+        setopt localoptions null_glob
+        for project_dir in "$search_path"/*(/N); do
+            project_name="${project_dir:t}"
+            if [[ -n ${PROJECT_MAP[$project_name]:-} ]]; then
+                PROJECT_MAP[$project_name]+=",$project_dir"
+            else
+                PROJECT_MAP[$project_name]="$project_dir"
+            fi
+        done
+    done
+}
+
+resolve_collision() {
+    local project_name="$1"
+    local paths_csv="$2"
+    local selection
+    local -a paths
+
+    IFS=',' read -rA paths <<< "$paths_csv"
+    if (( ${#paths[@]} == 0 )); then
+        log_error "No matching paths found for $project_name"
+        return 1
+    fi
+
+    if command -v fzf >/dev/null 2>&1 && [[ -t 0 ]]; then
+        selection=$(printf '%s\n' "${paths[@]}" | fzf --prompt="Select ${project_name}> " --ansi --no-multi)
+        if [[ -z $selection ]]; then
+            log_error "Selection cancelled"
+            return 1
+        fi
+        printf '%s\n' "$selection"
+        return 0
+    fi
+
+    log_warning "Multiple projects found for '$project_name':"
+    echo "" >&2
+
+    local index=1 path
+    for path in "${paths[@]}"; do
+        printf '  %d) %s\n' "$index" "$path" >&2
+        ((index++))
+    done
+
+    echo "" >&2
+    printf 'Select project (1-%d): ' "${#paths[@]}" >&2
+    if ! read -r selection; then
+        log_error "Selection cancelled"
+        return 1
+    fi
+
+    if [[ $selection != <-> ]] || (( selection < 1 || selection > ${#paths[@]} )); then
+        log_error "Invalid selection: $selection"
+        return 1
+    fi
+
+    printf '%s\n' "${paths[$selection]}"
+}
+
+cmd_cd() {
+    local target="${1:-}"
+    local target_path
+
+    if [[ -z $target ]]; then
+        log_error "No target specified"
+        log_info "Usage: dv cd <target>"
+        return 1
+    fi
+
+    if [[ -n ${SPECIAL_DIRS[$target]:-} ]]; then
+        target_path="${SPECIAL_DIRS[$target]}"
+    else
+        index_projects
+        if [[ -z ${PROJECT_MAP[$target]:-} ]]; then
+            log_error "Project not found: $target"
+            log_info "Run 'dv ls' to see available projects"
+            return 1
+        fi
+        target_path="${PROJECT_MAP[$target]}"
+        if [[ $target_path == *,* ]]; then
+            if ! target_path="$(resolve_collision "$target" "$target_path")"; then
+                return 1
+            fi
+        fi
+    fi
+
+    if [[ ${DV_RUNTIME_MODE} == "function" ]]; then
+        builtin cd -- "$target_path" || return 1
+    else
+        printf '%s\n' "$target_path"
+    fi
+}
+
+cmd_list() {
+    local filter_dev=false
+    local filter_writing=false
+
+    local invalid_arg=""
+    for arg in "$@"; do
+        case "$arg" in
+            -d|--dev)
+                filter_dev=true
+                ;;
+            -w|--writing)
+                filter_writing=true
+                ;;
+            *)
+                invalid_arg="$arg"
+                break
+                ;;
+        esac
+    done
+
+    if [[ -n $invalid_arg ]]; then
+        log_error "Unknown option: $invalid_arg"
+        echo ""
+        show_help
+        return 1
+    fi
+
+    should_include_path() {
+        local path="$1"
+        if [[ $filter_dev == false && $filter_writing == false ]]; then
+            return 0
+        fi
+
+        local include=false
+        if [[ $filter_dev == true ]]; then
+            if [[ $path == */dev || $path == */dev/* ]]; then
+                include=true
+            fi
+        fi
+
+        if [[ $filter_writing == true ]]; then
+            if [[ $path == */writing || $path == */writing/* ]]; then
+                include=true
+            fi
+        fi
+
+        [[ $include == true ]]
+    }
+
+    log_info "Special directories:"
+    local -a special_names sorted_special
+    special_names=("${(@k)SPECIAL_DIRS}")
+    sorted_special=("${(@o)special_names}")
+    local name
+    local printed_special=false
+    for name in "${sorted_special[@]}"; do
+        local special_path="${SPECIAL_DIRS[$name]}"
+        if should_include_path "$special_path"; then
+            printf '  %-20s -> %s\n' "$name" "$special_path"
+            printed_special=true
+        fi
+    done
+    if [[ $printed_special == false ]]; then
+        echo "  (no special directories match filters)"
+    fi
+
+    echo ""
+    log_info "Indexed projects:"
+
+    index_projects
+    local -a project_names sorted_projects
+    project_names=("${(@k)PROJECT_MAP}")
+    if (( ${#project_names[@]} == 0 )); then
+        echo "  (no projects found)"
+    else
+        sorted_projects=("${(@o)project_names}")
+        local paths path
+        local printed_project=false
+        for name in "${sorted_projects[@]}"; do
+            paths="${PROJECT_MAP[$name]}"
+            if [[ $paths == *,* ]]; then
+                local -a path_array filtered_paths
+                IFS=',' read -rA path_array <<< "$paths"
+                for path in "${path_array[@]}"; do
+                    if should_include_path "$path"; then
+                        filtered_paths+=("$path")
+                    fi
+                done
+
+                if (( ${#filtered_paths[@]} == 0 )); then
+                    continue
+                fi
+
+                if (( ${#filtered_paths[@]} == 1 )); then
+                    printf '  %-20s -> %s\n' "$name" "${filtered_paths[1]}"
+                else
+                    printf '  %-20s -> %s\n' "$name" "[MULTIPLE]"
+                    for path in "${filtered_paths[@]}"; do
+                        printf '  %-20s    - %s\n' "" "$path"
+                    done
+                fi
+            else
+                if should_include_path "$paths"; then
+                    printf '  %-20s -> %s\n' "$name" "$paths"
+                else
+                    continue
+                fi
+            fi
+            printed_project=true
+        done
+
+        if [[ $printed_project == false ]]; then
+            echo "  (no projects match filters)"
+        fi
+    fi
+
+    unset -f should_include_path
+}
+
+dv_main() {
+    local command="${1:-help}"
+    shift $(( $# ? 1 : 0 ))
+    case "$command" in
+        cd)
+            cmd_cd "$@"
+            ;;
+        list|ls)
+            cmd_list "$@"
+            ;;
+        help|h|--help|-h)
+            show_help
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            echo ""
+            show_help
+            return 1
+            ;;
+    esac
+}
+
+if [[ ${DV_RUNTIME_MODE} == "function" ]]; then
+    dv() {
+        dv_main "$@"
+    }
+else
+    dv_main "$@"
+fi

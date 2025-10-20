@@ -1,0 +1,70 @@
+#compdef dv
+
+# Zsh completion for dv (superpowered development script)
+
+_dv() {
+    local -a commands
+    commands=(
+        'cd:Navigate to a project or special directory'
+        'list:List all available projects'
+        'ls:List all available projects (alias)'
+        'help:Show help message'
+        'h:Show help message (alias)'
+    )
+
+    local -a special_dirs
+    special_dirs=(
+        'dotfiles'
+        'dev'
+        'writing'
+    )
+
+    # Function to get all project names
+    _dv_projects() {
+        setopt localoptions null_glob
+        local -a projects
+        local search_paths=(
+            "$HOME/dev"
+            "$HOME/dev/git"
+            "$HOME/writing"
+        )
+
+        # Add special directories
+        projects+=("${special_dirs[@]}")
+
+        # Index all projects from search paths
+        for search_path in $search_paths; do
+            if [[ -d "$search_path" ]]; then
+                # Get basename of each directory
+                for dir in ${search_path}/*(/N); do
+                    projects+=("${dir:t}")
+                done
+            fi
+        done
+
+        # Remove duplicates and sort
+        projects=(${(u)${(o)projects}})
+        _describe 'project' projects
+    }
+
+    # Main completion logic
+    if (( CURRENT == 2 )); then
+        # Complete main commands
+        _describe 'command' commands
+    elif (( CURRENT == 3 )); then
+        # Complete subcommand arguments
+        case "$words[2]" in
+            cd)
+                _dv_projects
+                ;;
+            ls|list)
+                _values 'option' \
+                    '-d[Show only projects within ~/dev]' \
+                    '-w[Show only projects within ~/writing]'
+                ;;
+        esac
+    fi
+}
+
+_dv "$@"
+compdef _dv dv
