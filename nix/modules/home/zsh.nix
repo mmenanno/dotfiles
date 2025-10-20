@@ -50,6 +50,17 @@ in
       # Add custom shell scripts to path
       export PATH=${config.home.homeDirectory}/dotfiles/bin:$PATH
 
+      # Add custom completions to fpath
+      fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
+
+      # Initialize zsh completion system with custom cache path
+      autoload -Uz compinit
+      mkdir -p "$HOME/.cache/zsh"
+      compinit -d "$HOME/.cache/zsh/compdump"
+
+      # Source dv script to enable 'dv cd' functionality
+      source ${config.home.homeDirectory}/dotfiles/bin/dv
+
       # qlty
       export PATH="${config.home.homeDirectory}/.qlty/bin:$PATH"
 

@@ -4,7 +4,9 @@ let
   moduleIndex = import ./modules/default.nix;
 in
 {
-  imports = moduleIndex.homeModules;
+  imports = moduleIndex.homeModules ++ [
+    inputs.nix-index-database.homeModules.nix-index
+  ];
 
   # home.username and home.homeDirectory are now set in flake.nix
 
