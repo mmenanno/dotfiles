@@ -105,6 +105,7 @@ in
       # Additional convenience aliases
       man = "batman";  # Man pages with syntax highlighting
       diff = "batdiff";  # Diffs with syntax highlighting
+      c = "cursor .";  # Open Cursor in current directory
     };
 
     sessionVariables = {

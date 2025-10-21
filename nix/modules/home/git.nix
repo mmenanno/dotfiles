@@ -23,31 +23,9 @@ in
 {
   programs.git = {
     enable = true;
-    userName = githubUser;
-    userEmail = personalEmail;
     signing = {
       key = signingKey;
       signByDefault = true;
-    };
-
-    # Delta - beautiful diffs with syntax highlighting
-    delta = {
-      enable = true;
-      options = {
-        features = "line-numbers decorations";
-        navigate = true;
-        light = false;
-        side-by-side = true;
-        line-numbers-left-format = "";
-        line-numbers-right-format = "│ ";
-        syntax-theme = "TwoDark";
-
-        decorations = {
-          commit-decoration-style = "bold yellow box ul";
-          file-style = "bold yellow ul";
-          file-decoration-style = "none";
-        };
-      };
     };
 
     # Git LFS configuration
@@ -94,7 +72,11 @@ in
       "**/.claude/settings.local.json"
     ];
 
-    extraConfig = {
+    settings = {
+      user = {
+        name = githubUser;
+        email = personalEmail;
+      };
       push.autoSetupRemote = true;
       gpg = {
         format = "ssh";
@@ -129,5 +111,26 @@ in
         signingKey = privateSigningKey;
       };
     }];
+  };
+
+  # Delta - beautiful diffs with syntax highlighting
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      features = "line-numbers decorations";
+      navigate = true;
+      light = false;
+      side-by-side = true;
+      line-numbers-left-format = "";
+      line-numbers-right-format = "│ ";
+      syntax-theme = "TwoDark";
+
+      decorations = {
+        commit-decoration-style = "bold yellow box ul";
+        file-style = "bold yellow ul";
+        file-decoration-style = "none";
+      };
+    };
   };
 }
