@@ -45,20 +45,33 @@ COMMANDS:
                       Special targets: dotfiles, dev, writing
                       Or any project name from indexed directories
 
+    up [--force]      Install/update dependencies in current project
+                      - Ruby projects: runs bundle install
+                      - Rails projects: also runs pending migrations
+                      - Node projects: runs npm/yarn/pnpm install
+                      Use --force to reinstall even if up-to-date
+
     list, ls          List all available projects
     help, h           Show this help message
+
+    <any-command>     Passthrough to project bin/ or toys commands
+                      Priority: bin/<command> → toys <command>
 
 EXAMPLES:
     dv cd dotfiles          # Go to dotfiles
     dv cd dev               # Go to ~/dev root
     dv cd calendar_hub      # Go to calendar_hub project
     dv ls                   # List all available projects
+    dv up                   # Install dependencies in current project
+    dv checks               # Run bin/checks or toys checks
+    dv rails console        # Run bin/rails console
 
 NOTES:
     - Projects are auto-discovered from ~/dev, ~/dev/git, ~/writing
     - If multiple projects share a name, you'll be prompted to choose
     - Use with zsh completion for best experience (tab to complete project names)
     - When sourced in your shell, 'dv cd' changes directory directly
+    - Project commands (up, passthrough) work in current directory
 EOT
 }
 
@@ -126,6 +139,73 @@ resolve_collision() {
     printf '%s\n' "${paths[$selection]}"
 }
 
+# Project detection helpers
+is_ruby_project() {
+    [[ -f Gemfile ]]
+}
+
+is_rails_project() {
+    [[ -f config/application.rb ]] || [[ -f bin/rails ]]
+}
+
+is_node_project() {
+    [[ -f package.json ]]
+}
+
+has_toys() {
+    [[ -f .toys.rb ]] || [[ -d .toys ]]
+}
+
+has_pending_migrations() {
+    if ! is_rails_project; then
+        return 1
+    fi
+
+    local rails_cmd=""
+    if [[ -x bin/rails ]]; then
+        rails_cmd="bin/rails"
+    elif command -v bundle >/dev/null 2>&1; then
+        rails_cmd="bundle exec rails"
+    else
+        return 1
+    fi
+
+    local status_output
+    if status_output=$($rails_cmd db:migrate:status 2>&1); then
+        echo "$status_output" | grep -q "^\s*down"
+    else
+        # If we can't check status, assume no pending migrations
+        return 1
+    fi
+}
+
+find_project_command() {
+    local command_name="$1"
+
+    # Priority 1: Project bin/ directory
+    if [[ -x "bin/$command_name" ]]; then
+        printf 'bin/%s' "$command_name"
+        return 0
+    fi
+
+    # Priority 2: Toys
+    if has_toys && command -v toys >/dev/null 2>&1; then
+        # Check .toys directory for command files first (more reliable)
+        if [[ -d .toys && -f ".toys/${command_name}.rb" ]]; then
+            printf 'toys %s' "$command_name"
+            return 0
+        fi
+
+        # Fall back to checking toys --commands (may fail if toys config has errors)
+        if toys --commands 2>/dev/null | grep -q "^${command_name}\$"; then
+            printf 'toys %s' "$command_name"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 cmd_cd() {
     local target="${1:-}"
     local target_path
@@ -158,6 +238,113 @@ cmd_cd() {
     else
         printf '%s\n' "$target_path"
     fi
+}
+
+cmd_up() {
+    local force=false
+    local did_something=false
+
+    # Parse arguments
+    for arg in "$@"; do
+        case "$arg" in
+            --force|-f)
+                force=true
+                ;;
+            *)
+                log_error "Unknown option: $arg"
+                log_info "Usage: dv up [--force]"
+                return 1
+                ;;
+        esac
+    done
+
+    # Ruby/Rails project handling
+    if is_ruby_project; then
+        if ! command -v bundle >/dev/null 2>&1; then
+            log_warning "Bundler not found, skipping bundle install"
+        else
+            log_info "Running bundle install..."
+            if [[ $force == true ]]; then
+                bundle install --redownload
+            else
+                bundle install
+            fi
+            if [[ $? -eq 0 ]]; then
+                log_success "Bundle install completed"
+                did_something=true
+            else
+                log_error "Bundle install failed"
+                return 1
+            fi
+
+            # Check for pending migrations
+            if is_rails_project; then
+                if has_pending_migrations; then
+                    log_info "Running pending migrations..."
+                    local rails_cmd=""
+                    if [[ -x bin/rails ]]; then
+                        rails_cmd="bin/rails"
+                    else
+                        rails_cmd="bundle exec rails"
+                    fi
+
+                    $rails_cmd db:migrate
+                    if [[ $? -eq 0 ]]; then
+                        log_success "Migrations completed"
+                    else
+                        log_error "Migrations failed"
+                        return 1
+                    fi
+                else
+                    log_info "No pending migrations"
+                fi
+            fi
+        fi
+    fi
+
+    # Node.js project handling
+    if is_node_project; then
+        local pkg_manager=""
+
+        # Detect package manager
+        if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+            pkg_manager="pnpm"
+        elif [[ -f yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
+            pkg_manager="yarn"
+        elif command -v npm >/dev/null 2>&1; then
+            pkg_manager="npm"
+        else
+            log_warning "No Node.js package manager found, skipping install"
+        fi
+
+        if [[ -n $pkg_manager ]]; then
+            log_info "Running $pkg_manager install..."
+            if [[ $force == true ]]; then
+                # Force reinstall by removing node_modules first
+                if [[ -d node_modules ]]; then
+                    log_info "Removing node_modules for clean install..."
+                    rm -rf node_modules
+                fi
+            fi
+
+            $pkg_manager install
+            if [[ $? -eq 0 ]]; then
+                log_success "$pkg_manager install completed"
+                did_something=true
+            else
+                log_error "$pkg_manager install failed"
+                return 1
+            fi
+        fi
+    fi
+
+    if [[ $did_something == false ]]; then
+        log_warning "No recognized project type in current directory"
+        log_info "Supported: Ruby (Gemfile), Node.js (package.json)"
+        return 1
+    fi
+
+    log_success "All dependencies up to date!"
 }
 
 cmd_list() {
@@ -279,12 +466,32 @@ cmd_list() {
     unset -f should_include_path
 }
 
+cmd_passthrough() {
+    local command_name="$1"
+    shift
+
+    local resolved_command
+    if ! resolved_command="$(find_project_command "$command_name")"; then
+        log_error "Command not found: $command_name"
+        log_info "No bin/$command_name or toys $command_name available in current directory"
+        return 1
+    fi
+
+    # Execute the resolved command with all remaining arguments
+    # resolved_command may be "bin/foo" or "toys foo", so we need to split it properly
+    log_info "Running: $resolved_command $*"
+    eval "$resolved_command \"\$@\""
+}
+
 dv_main() {
     local command="${1:-help}"
     shift $(( $# ? 1 : 0 ))
     case "$command" in
         cd)
             cmd_cd "$@"
+            ;;
+        up)
+            cmd_up "$@"
             ;;
         list|ls)
             cmd_list "$@"
@@ -293,10 +500,8 @@ dv_main() {
             show_help
             ;;
         *)
-            log_error "Unknown command: $command"
-            echo ""
-            show_help
-            return 1
+            # Try passthrough to bin/ or toys
+            cmd_passthrough "$command" "$@"
             ;;
     esac
 }
