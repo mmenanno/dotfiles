@@ -1,4 +1,4 @@
-{ config, pkgs, dotlib, mcpServers, ... }:
+{ config, pkgs, dotlib, mcpServers, mkHomebrewWrapper, ... }:
 
 let
   # Define permission groups and helpers reused in settings
@@ -127,6 +127,12 @@ in
 {
   programs.claude-code = {
     enable = true;
+    # Use Homebrew-installed claude-code for faster updates
+    package = mkHomebrewWrapper {
+      name = "claude-code";
+      homebrewBinary = "claude";
+      nixBinary = "claude";
+    };
 
     settings = {
       statusLine = {
