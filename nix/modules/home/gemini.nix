@@ -1,9 +1,14 @@
-{ config, pkgs, dotlib, mcpServers, ... }:
+{ config, pkgs, dotlib, mcpServers, mkHomebrewWrapper, ... }:
 
 {
   programs.gemini-cli = {
     enable = true;
-    package = pkgs.gemini-cli;
+    # Use Homebrew-installed gemini-cli for faster updates
+    package = mkHomebrewWrapper {
+      name = "gemini-cli";
+      homebrewBinary = "gemini";
+      nixBinary = "gemini-cli";
+    };
 
     settings = {
       ui = {

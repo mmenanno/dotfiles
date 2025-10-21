@@ -5,8 +5,6 @@
     automake
     autoconf
     cargo
-    claude-code
-    codex
     docker
     ejson
     ejson2env
@@ -14,7 +12,6 @@
     ffmpeg
     findutils
     fzf
-    gemini-cli
     gh
     git
     git-lfs

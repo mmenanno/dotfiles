@@ -1,8 +1,12 @@
-{ config, pkgs, dotlib, mcpServers, ... }:
+{ config, pkgs, dotlib, mcpServers, mkHomebrewWrapper, ... }:
 {
   programs.codex = {
     enable = true;
-    package = pkgs.codex;
+    # Use Homebrew-installed codex for faster updates
+    package = mkHomebrewWrapper {
+      name = "codex";
+      homebrewBinary = "codex";
+    };
 
     settings = {
       approval_policy = "on-request";
