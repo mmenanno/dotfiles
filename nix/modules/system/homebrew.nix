@@ -2,6 +2,7 @@
   homebrew = {
     enable = true;
     brews = [
+      "gemini-cli"
       "libyaml"
       "mas"
       "pandoc"
@@ -17,6 +18,8 @@
       "battle-net"
       "chatgpt"
       "claude"
+      "claude-code"
+      "codex"
       "cursor"
       "daisydisk"
       "db-browser-for-sqlite"
