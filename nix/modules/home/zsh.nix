@@ -23,22 +23,20 @@ in
           zdharma-continuum/zinit-annex-patch-dl \
           zdharma-continuum/zinit-annex-rust
 
-      # Zinit plugins
-      zinit light-mode for \
+      # Load all plugins with turbo mode for fastest prompt appearance
+      zinit wait lucid light-mode for \
+          atload"_zsh_autosuggest_start" \
           zsh-users/zsh-autosuggestions \
           zdharma-continuum/fast-syntax-highlighting \
           zsh-users/zsh-completions \
           Aloxaf/fzf-tab \
           zsh-users/zsh-history-substring-search \
-          MichaelAquilina/zsh-you-should-use \
-          supercrabtree/k
+          MichaelAquilina/zsh-you-should-use
 
       # Add in snippets
       zinit snippet OMZL::git.zsh
       zinit snippet OMZP::git
       zinit snippet OMZP::sudo
-      zinit snippet OMZP::command-not-found
-      zinit snippet OMZP::colored-man-pages
       zinit snippet OMZP::extract
       zinit snippet OMZP::copypath
       zinit snippet OMZP::copyfile
@@ -53,16 +51,13 @@ in
       # Add custom completions to fpath
       fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
 
-      # Initialize zsh completion system with custom cache path
+      # Initialize zsh completion system
       autoload -Uz compinit
       mkdir -p "$HOME/.cache/zsh"
-      compinit -d "$HOME/.cache/zsh/compdump"
+      compinit -C -d "$HOME/.cache/zsh/compdump"
 
       # Source dv script to enable 'dv cd' functionality
       source ${config.home.homeDirectory}/dotfiles/bin/dv
-
-      # qlty
-      export PATH="${config.home.homeDirectory}/.qlty/bin:$PATH"
 
       # Source 1Password plugins (managed by home-manager)
       source ${config.home.homeDirectory}/.config/op/plugins.sh
@@ -91,6 +86,9 @@ in
       zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
       eval "$(pay-respects zsh --alias)"
+
+      # Initialize mise with lazy loading via shims for faster startup
+      eval "$(${pkgs.mise}/bin/mise activate zsh --shims)"
 
       # Initialize zoxide only in interactive shells
       if [[ $- == *i* ]]; then

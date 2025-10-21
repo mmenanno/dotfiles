@@ -30,6 +30,7 @@
       "filebot"
       "firefox"
       "gas-mask"
+      "ghostty"
       "git-credential-manager"
       "google-chrome"
       "handbrake-app"
