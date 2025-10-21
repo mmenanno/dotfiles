@@ -19,6 +19,7 @@
     gmp
     go
     hugo
+    hyperfine
     imagemagick
     mariadb
     markdownlint-cli
