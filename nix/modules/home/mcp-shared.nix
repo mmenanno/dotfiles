@@ -9,14 +9,16 @@ let
 
   # Helper to create a wrapper package for Homebrew-installed binaries
   # This allows Nix to manage configuration while Homebrew manages updates
+  # Gracefully handles missing Homebrew binaries (e.g., in CI environments)
   mkHomebrewWrapper = { name, homebrewBinary, nixBinary ? homebrewBinary }:
-    pkgs.runCommand "${name}-homebrew" {} ''
-      mkdir -p $out/bin
-      cat > $out/bin/${nixBinary} <<'EOF'
-#!/bin/sh
-exec /opt/homebrew/bin/${homebrewBinary} "$@"
-EOF
-      chmod +x $out/bin/${nixBinary}
+    pkgs.writeShellScriptBin nixBinary ''
+      # Check if Homebrew binary exists before executing
+      if [ -x "/opt/homebrew/bin/${homebrewBinary}" ]; then
+        exec /opt/homebrew/bin/${homebrewBinary} "$@"
+      else
+        echo "Warning: ${name} is not available (Homebrew binary not found at /opt/homebrew/bin/${homebrewBinary})" >&2
+        exit 0
+      fi
     '';
 
   # Shared environment variables
