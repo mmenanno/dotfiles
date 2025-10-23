@@ -1,0 +1,239 @@
+#!/bin/bash
+# allow-app - Remove macOS quarantine flag from downloaded applications
+# Usage: allow-app [options] <app_or_file>...
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+
+# Default configuration
+VERBOSE=false
+QUIET=false
+DRY_RUN=false
+
+# Print usage information
+show_help() {
+    cat << EOF
+allow-app - Remove macOS quarantine flag from downloaded applications
+
+USAGE:
+    allow-app [OPTIONS] <app_or_file>...
+
+DESCRIPTION:
+    Removes the com.apple.quarantine extended attribute from files and
+    applications, which prevents macOS Gatekeeper from blocking them.
+
+    This is particularly useful for unsigned games and applications from
+    trusted sources that you want to run without the "App Store & Known
+    Developers" security warning.
+
+OPTIONS:
+    -h, --help              Show this help message
+    -v, --verbose           Enable verbose output
+    -q, --quiet             Suppress all output except errors
+    -d, --dry-run           Show what would be done without making changes
+
+ARGUMENTS:
+    app_or_file             One or more files or .app bundles to process
+                           Supports multiple arguments and wildcards
+
+EXAMPLES:
+    allow-app BackToThePast.app              # Single application
+    allow-app game1.app game2.app            # Multiple applications
+    allow-app ~/Downloads/*.app              # All apps in Downloads
+    allow-app game.app lib.dylib helper      # Apps and other files
+
+NOTES:
+    - This script does NOT disable Gatekeeper system-wide
+    - Only removes the quarantine flag from specified files
+    - Requires the files to already be on your system
+    - Works recursively for .app bundles (processes all contents)
+
+SECURITY:
+    Only use this on applications from sources you trust. Removing the
+    quarantine flag bypasses an important security check.
+
+EOF
+}
+
+# Remove quarantine flag from a file or directory
+remove_quarantine() {
+    local target="$1"
+    local file_num="$2"
+    local total_files="$3"
+
+    # Check if target exists
+    if [[ ! -e "$target" ]]; then
+        log_error "[$file_num/$total_files] Target does not exist: $target"
+        return 1
+    fi
+
+    local basename_target
+    basename_target="$(basename "$target")"
+
+    log_info "[$file_num/$total_files] Processing: $basename_target"
+    log_verbose "Full path: $target"
+
+    # Check if the quarantine attribute exists
+    if xattr -p com.apple.quarantine "$target" &>/dev/null; then
+        log_verbose "Quarantine flag found on $basename_target"
+
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "Would remove quarantine flag from: $basename_target"
+            return 0
+        fi
+
+        # Remove the quarantine flag recursively
+        if xattr -rd com.apple.quarantine "$target" 2>/dev/null; then
+            log_success "Removed quarantine flag from: $basename_target"
+            return 0
+        else
+            log_error "Failed to remove quarantine flag from: $basename_target"
+            return 1
+        fi
+    else
+        log_verbose "No quarantine flag on $basename_target (already allowed or never quarantined)"
+        log_success "Already allowed: $basename_target"
+        return 0
+    fi
+}
+
+# Process all provided files
+process_files() {
+    local -a files=("$@")
+    local total_files=${#files[@]}
+    local success_count=0
+    local failed_count=0
+
+    if (( total_files == 0 )); then
+        log_error "No files or applications specified"
+        log_error "Use -h or --help for usage information"
+        return 1
+    fi
+
+    log_info "Processing $total_files file(s)/app(s)..."
+
+    for i in "${!files[@]}"; do
+        local target="${files[i]}"
+
+        if remove_quarantine "$target" "$((i+1))" "$total_files"; then
+            ((success_count++))
+        else
+            ((failed_count++))
+        fi
+    done
+
+    # Print summary
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "DRY RUN complete: $total_files file(s) would be processed"
+    else
+        log_info "Processing complete: $success_count succeeded, $failed_count failed"
+
+        if (( failed_count > 0 )); then
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+# Parse command line arguments
+parse_args() {
+    local -a files=()
+
+    while (( $# > 0 )); do
+        case "$1" in
+            -h|--help)
+                show_help_and_exit
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -q|--quiet)
+                QUIET=true
+                shift
+                ;;
+            -d|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                log_error "Use -h or --help for usage information"
+                return 1
+                ;;
+            *)
+                files+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Add any remaining arguments after -- as files
+    files+=("$@")
+
+    # Validate conflicting options
+    if [[ "$VERBOSE" == true && "$QUIET" == true ]]; then
+        log_error "Cannot use both --verbose and --quiet options"
+        return 1
+    fi
+
+    # Return files as output (one per line)
+    if (( ${#files[@]} == 0 )); then
+        log_error "No files or applications specified"
+        log_error "Use -h or --help for usage information"
+        return 1
+    fi
+
+    printf '%s\n' "${files[@]}"
+}
+
+# Main function
+main() {
+    log_verbose "allow-app starting with arguments: $*"
+
+    # Handle help option early
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            show_help_and_exit
+        fi
+    done
+
+    # Parse arguments
+    local -a files=()
+    set +e  # Temporarily disable exit on error
+    while IFS= read -r file; do
+        files+=("$file")
+    done < <(parse_args "$@")
+    local parse_exit_code=$?
+    set -e  # Re-enable exit on error
+
+    if (( parse_exit_code != 0 )); then
+        exit 1
+    fi
+
+    log_verbose "Files to process: ${#files[@]}"
+
+    # Show dry run notice
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "DRY RUN MODE - No changes will be made"
+    fi
+
+    # Process files
+    if process_files "${files[@]}"; then
+        log_success "All files processed successfully"
+        exit 0
+    else
+        log_error "Some files failed to process"
+        exit 1
+    fi
+}
+
+# Run main function with all arguments
+main "$@"
