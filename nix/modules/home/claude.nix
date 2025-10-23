@@ -125,6 +125,10 @@ let
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
 in
 {
+  # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
+  # This is needed because the TUI checks for the binary at this location when install method is "native"
+  home.file.".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
+
   programs.claude-code = {
     enable = true;
     # Use Homebrew-installed claude-code for faster updates
