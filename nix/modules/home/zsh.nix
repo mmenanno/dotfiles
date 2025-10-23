@@ -106,6 +106,7 @@ in
       man = "batman";  # Man pages with syntax highlighting
       diff = "batdiff";  # Diffs with syntax highlighting
       c = "cursor .";  # Open Cursor in current directory
+      allow = "allow-app";  # Quick alias for removing quarantine flags
     };
 
     sessionVariables = {
