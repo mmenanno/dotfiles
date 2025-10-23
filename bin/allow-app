@@ -105,7 +105,6 @@ process_files() {
     local total_files=${#files[@]}
     local success_count=0
     local failed_count=0
-    local skipped_count=0
 
     if (( total_files == 0 )); then
         log_error "No files or applications specified"
