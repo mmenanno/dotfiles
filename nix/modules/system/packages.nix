@@ -18,6 +18,7 @@
     github-mcp-server
     gmp
     go
+    gum
     hugo
     hyperfine
     imagemagick
