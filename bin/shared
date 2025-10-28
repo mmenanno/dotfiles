@@ -3,34 +3,54 @@
 # Source this file to get colors and common logging functions
 
 # Colors for output - exported for use in other scripts
-export RED='\033[0;31m'
-export GREEN='\033[0;32m'
-export YELLOW='\033[1;33m'
-export BLUE='\033[0;34m'
-export NC='\033[0m' # No Color
+export RED=$'\033[0;31m'
+export GREEN=$'\033[0;32m'
+export YELLOW=$'\033[1;33m'
+export BLUE=$'\033[0;34m'
+export CYAN=$'\033[0;36m'
+export BOLD=$'\033[1m'
+export DIM=$'\033[2m'
+export NC=$'\033[0m' # No Color
 
 # Standard logging functions with QUIET/VERBOSE support
+# Set USE_ICON_STYLE=true to use visual icons instead of bracketed all-caps labels
 log_info() {
     if [[ "${QUIET:-false}" == false ]]; then
-        echo -e "${BLUE}[INFO]${NC} $*" >&2
+        if [[ "${USE_ICON_STYLE:-false}" == true ]]; then
+            echo -e "${BLUE}ℹ${NC} $*" >&2
+        else
+            echo -e "${BLUE}[INFO]${NC} $*" >&2
+        fi
     fi
 }
 
 log_success() {
     if [[ "${QUIET:-false}" == false ]]; then
-        echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
+        if [[ "${USE_ICON_STYLE:-false}" == true ]]; then
+            echo -e "${GREEN}✓${NC} $*" >&2
+        else
+            echo -e "${GREEN}[SUCCESS]${NC} $*" >&2
+        fi
     fi
 }
 
 log_warning() {
     if [[ "${QUIET:-false}" == false ]]; then
-        echo -e "${YELLOW}[WARNING]${NC} $*" >&2
+        if [[ "${USE_ICON_STYLE:-false}" == true ]]; then
+            echo -e "${YELLOW}!${NC} $*" >&2
+        else
+            echo -e "${YELLOW}[WARNING]${NC} $*" >&2
+        fi
     fi
 }
 
 log_error() {
     # Always show errors regardless of QUIET flag
-    echo -e "${RED}[ERROR]${NC} $*" >&2
+    if [[ "${USE_ICON_STYLE:-false}" == true ]]; then
+        echo -e "${RED}✗${NC} $*" >&2
+    else
+        echo -e "${RED}[ERROR]${NC} $*" >&2
+    fi
 }
 
 log_verbose() {
@@ -131,5 +151,257 @@ validate_numeric() {
     if (( value < min || value > max )); then
         log_error "Invalid $name: $value (must be between $min and $max)"
         exit 1
+    fi
+}
+
+# ============================================================================
+# Colored Help Formatting Functions
+# ============================================================================
+
+# Print a section header in bold white
+print_help_header() {
+    echo -e "${BOLD}$*${NC}"
+}
+
+# Print a command with multi-line description
+# Usage: print_help_command "command" "args" "line1" "line2" ...
+# First line is the main description, subsequent lines are indented details
+print_help_command() {
+    local cmd="$1"
+    local args="$2"
+    shift 2
+
+    # Format command with colored args
+    local cmd_display
+    if [[ -n "$args" ]]; then
+        cmd_display="${CYAN}${cmd}${NC} ${YELLOW}${args}${NC}"
+    else
+        cmd_display="${CYAN}${cmd}${NC}"
+    fi
+
+    # Calculate plain text length (without color codes)
+    local plain_length=$((${#cmd} + ${#args}))
+    [[ -n "$args" ]] && plain_length=$((plain_length + 1))
+
+    # If command + args is too long (>25 chars), print on separate lines for readability
+    if [[ $plain_length -gt 25 && $# -gt 0 ]]; then
+        # Print command on its own line
+        printf "    %s\n" "$cmd_display"
+        # Print description indented to align with other descriptions
+        printf "    %-20s%s\n" "" "$1"
+        shift
+    else
+        # Command is short enough - print on same line with padding
+        local padding=$((20 - plain_length))
+        # Ensure minimum 2 spaces between command and description
+        [[ $padding -lt 2 ]] && padding=2
+
+        # Print first line (main description)
+        if [[ $# -gt 0 ]]; then
+            printf "    %s%*s%s\n" "$cmd_display" "$padding" "" "$1"
+            shift
+        fi
+    fi
+
+    # Print remaining lines (details) with extra indentation
+    while [[ $# -gt 0 ]]; do
+        printf "    %-20s ${DIM}%s${NC}\n" "" "$1"
+        shift
+    done
+
+    echo ""
+}
+
+# Print an example in green
+print_help_example() {
+    echo -e "    ${GREEN}$*${NC}"
+}
+
+# Show focused help for a specific command (looks up from centralized data)
+# Usage: show_command_help "command_name" ["script_name"]
+# If script_name is not provided, extracts from $0
+show_command_help() {
+    local cmd="$1"
+    local script_name="${2:-$(basename "$0")}"
+
+    # Look up command data from centralized arrays
+    local args="${CMD_HELP_ARGS[$cmd]:-}"
+    local description="${CMD_HELP_DESC[$cmd]:-}"
+    local examples="${CMD_HELP_EXAMPLES[$cmd]:-}"
+
+    # Validate command exists
+    if [[ -z "$description" ]]; then
+        echo -e "${RED}Error: No help data found for command '$cmd'${NC}" >&2
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}${CYAN}COMMAND:${NC}"
+    echo ""
+
+    # Show command with args
+    if [[ -n "$args" ]]; then
+        echo -e "    ${CYAN}${script_name} $cmd${NC} ${YELLOW}$args${NC}"
+    else
+        echo -e "    ${CYAN}${script_name} $cmd${NC}"
+    fi
+    echo ""
+
+    # Show description (properly indent multi-line descriptions)
+    echo -e "${BOLD}${CYAN}DESCRIPTION:${NC}"
+    echo ""
+    # Use printf to indent each line of the description
+    printf '%s\n' "$description" | while IFS= read -r line; do
+        echo "    $line"
+    done
+    echo ""
+
+    # Show examples if available
+    if [[ -n "$examples" ]]; then
+        echo -e "${BOLD}${CYAN}EXAMPLES:${NC}"
+        echo ""
+        # Split examples by newline and display each
+        printf '%s\n' "$examples" | while IFS= read -r example; do
+            [[ -n "$example" ]] && echo -e "    ${GREEN}$example${NC}"
+        done
+        echo ""
+    fi
+
+    # Hint about main help (generic for any script)
+    echo -e "${DIM}Run '${script_name} help' to see all available commands${NC}"
+    echo ""
+}
+
+# Check if help was requested and show command-specific help
+# Usage: check_and_show_help "command_name" "script_name" "$@"
+# Returns: 0 if help was shown (caller should return), 1 if no help flag found
+check_and_show_help() {
+    local cmd="$1"
+    local script_name="$2"
+    shift 2
+
+    # Check if any arg is a help flag
+    local arg
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+            show_command_help "$cmd" "$script_name"
+            return 0
+        fi
+    done
+
+    # No help flag found
+    return 1
+}
+
+# Print dimmed/secondary text
+print_help_note() {
+    echo -e "${DIM}$*${NC}"
+}
+
+# ============================================================================
+# Log Management Functions
+# ============================================================================
+
+DV_LOG_DIR="${HOME}/.cache/dv/logs"
+DV_LOG_RETENTION_DAYS=7
+
+# Get project name from current directory
+get_project_name() {
+    basename "$(pwd)"
+}
+
+# Initialize log file for current run
+# Sets DV_CURRENT_LOG_FILE
+init_log_file() {
+    local project_name
+    project_name=$(get_project_name)
+    local project_log_dir="${DV_LOG_DIR}/${project_name}"
+
+    mkdir -p "$project_log_dir"
+
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local log_file="${project_log_dir}/${timestamp}.log"
+
+    export DV_CURRENT_LOG_FILE="$log_file"
+
+    # Create symlink to latest
+    ln -sf "$log_file" "${project_log_dir}/latest.log"
+
+    # Initialize log file with header
+    {
+        echo "========================================="
+        echo "dv up - $(date)"
+        echo "Project: $project_name"
+        echo "Directory: $(pwd)"
+        echo "========================================="
+        echo ""
+    } > "$log_file"
+
+    echo "$log_file"
+}
+
+# Get path to latest log file
+get_log_path() {
+    local project_name="${1:-$(get_project_name)}"
+    local latest_log="${DV_LOG_DIR}/${project_name}/latest.log"
+
+    if [[ -L "$latest_log" && -f "$latest_log" ]]; then
+        readlink -f "$latest_log" 2>/dev/null || echo "$latest_log"
+    else
+        echo ""
+    fi
+}
+
+# Cleanup old logs
+cleanup_old_logs() {
+    local project_name="${1:-}"
+    local force_all="${2:-false}"
+
+    if [[ -z "$project_name" ]]; then
+        # Clean all projects
+        if [[ -d "$DV_LOG_DIR" ]]; then
+            if [[ "$force_all" == "true" ]]; then
+                # Delete ALL logs regardless of age
+                find "$DV_LOG_DIR" -type f -name "*.log" -delete 2>/dev/null || true
+            else
+                # Delete only old logs
+                find "$DV_LOG_DIR" -type f -name "*.log" -mtime "+${DV_LOG_RETENTION_DAYS}" -delete 2>/dev/null || true
+            fi
+            # Clean up empty directories
+            find "$DV_LOG_DIR" -type d -empty -delete 2>/dev/null || true
+        fi
+    else
+        # Clean specific project
+        local project_log_dir="${DV_LOG_DIR}/${project_name}"
+        if [[ -d "$project_log_dir" ]]; then
+            if [[ "$force_all" == "true" ]]; then
+                # Delete ALL logs regardless of age
+                find "$project_log_dir" -type f -name "*.log" -delete 2>/dev/null || true
+            else
+                # Delete only old logs
+                find "$project_log_dir" -type f -name "*.log" -mtime "+${DV_LOG_RETENTION_DAYS}" -delete 2>/dev/null || true
+            fi
+        fi
+    fi
+}
+
+# List all available log files
+list_logs() {
+    local project_name="${1:-}"
+
+    if [[ ! -d "$DV_LOG_DIR" ]]; then
+        return 0
+    fi
+
+    if [[ -z "$project_name" ]]; then
+        # List all projects and their logs
+        find "$DV_LOG_DIR" -type f -name "*.log" ! -name "latest.log" | sort -r
+    else
+        # List logs for specific project
+        local project_log_dir="${DV_LOG_DIR}/${project_name}"
+        if [[ -d "$project_log_dir" ]]; then
+            find "$project_log_dir" -type f -name "*.log" ! -name "latest.log" | sort -r
+        fi
     fi
 }
