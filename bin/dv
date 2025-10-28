@@ -2,79 +2,629 @@
 # shellcheck disable=SC1071
 
 # dv - Superpowered Development Workflow Script
-# Smart navigation between development directories with collision handling.
+# ============================================
+# Provides smart project navigation, dependency installation with TUI progress tracking,
+# and development workflow automation. Supports Ruby/Rails, Node.js projects with
+# automatic detection of project types and collision handling for duplicate project names.
 
+# Detect if sourced as function or executed as script to determine behavior
+# When sourced: 'dv cd' changes directory in current shell
+# When executed: 'dv cd' outputs path for use in shell scripts
 if [[ "${ZSH_EVAL_CONTEXT:-}" == *:file ]]; then
     typeset -g DV_RUNTIME_MODE="function"
 else
     emulate -L zsh
-    setopt err_exit pipe_fail nounset extended_glob
+    setopt err_exit pipe_fail extended_glob
     typeset -g DV_RUNTIME_MODE="script"
 fi
 
 0=${(%):-%N}
 SCRIPT_DIR=${0:A:h}
 
-if ! typeset -f log_error >/dev/null 2>&1; then
-    source "$SCRIPT_DIR/shared"
-fi
+source "$SCRIPT_DIR/shared"
 
+export USE_ICON_STYLE=true
+typeset -g VERBOSE=false
+
+# ============================================================================
+# TUI Progress Functions
+# ============================================================================
+# Interactive terminal UI for displaying real-time progress during 'dv up'.
+# Uses absolute cursor positioning and buffered output to eliminate flicker.
+
+# Unicode status indicators for different step states
+ICON_PENDING="•"
+ICON_SUCCESS="✓"
+ICON_ERROR="✗"
+ICON_WARNING="!"
+
+# Braille dot spinner animation frames for visual feedback during running steps
+declare -ga SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+declare -g SPINNER_INDEX=1      # Zsh arrays are 1-indexed
+declare -g CURRENT_SPINNER=""
+
+# Advance to next spinner frame (called during step execution to show progress)
+advance_spinner() {
+    CURRENT_SPINNER="${SPINNER_FRAMES[$SPINNER_INDEX]}"
+    SPINNER_INDEX=$(( (SPINNER_INDEX % ${#SPINNER_FRAMES[@]}) + 1 ))
+}
+
+# ANSI escape codes for cursor manipulation and screen control
+# Used to implement flicker-free TUI updates via absolute positioning
+typeset -g ANSI_SAVE_CURSOR=$'\033[s'
+typeset -g ANSI_RESTORE_CURSOR=$'\033[u'
+typeset -g ANSI_HIDE_CURSOR=$'\033[?25l'
+typeset -g ANSI_SHOW_CURSOR=$'\033[?25h'
+typeset -g ANSI_CLEAR_LINE=$'\033[2K'
+typeset -g ANSI_MOVE_UP=$'\033[1A'
+
+typeset -g LOG_SEPARATOR="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Step tracking state (using declare for proper scoping in nested functions)
+declare -gA STEP_STATUS=()          # Maps step_id -> "status|name|duration"
+declare -ga STEP_ORDER=()           # Ordered list of step IDs for display
+declare -g CURRENT_STEP=""          # Currently executing step ID
+declare -ga CURRENT_STEP_OUTPUT=()  # Buffered output lines from current step
+declare -g TUI_LINE_COUNT=0         # Lines rendered (for clearing previous draw)
+typeset -g TUI_FD=-1                # File descriptor for /dev/tty (-1=disabled)
+declare -g TUI_OUTPUT_BUFFER=""     # Pre-rendered TUI content
+
+# Register a new step in pending state
+# Args: step_id (unique identifier), step_name (display name)
+step_init() {
+    local step_id="$1"
+    local step_name="$2"
+    STEP_STATUS[$step_id]="pending|$step_name"
+    STEP_ORDER+=("$step_id")
+}
+
+# Begin executing a step and record start time for duration tracking
+step_start() {
+    local step_id="$1"
+    local step_name="${STEP_STATUS[$step_id]:-unknown}"
+    step_name="${step_name#*|}"
+    local start_time=$(date +%s.%N)
+    STEP_STATUS[$step_id]="running|$step_name|$start_time"
+    CURRENT_STEP="$step_id"
+}
+
+# Calculate elapsed time since step started (returns seconds with 1 decimal place)
+# Args: status_info string in format "status|name|start_time"
+calculate_step_duration() {
+    local status_info="$1"
+    local start_time="${status_info##*|}"
+    if [[ "$start_time" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        local end_time=$(date +%s.%N)
+        awk "BEGIN {printf \"%.1f\", $end_time - $start_time}"
+    fi
+}
+
+# Mark step as completed successfully
+step_success() {
+    local step_id="$1"
+    local status_info="${STEP_STATUS[$step_id]:-unknown}"
+    local step_name="${status_info#*|}"
+    step_name="${step_name%%|*}"
+
+    local duration
+    duration=$(calculate_step_duration "$status_info")
+
+    STEP_STATUS[$step_id]="success|$step_name|$duration"
+}
+
+# Mark step as failed (command returned non-zero exit code)
+step_error() {
+    local step_id="$1"
+    local status_info="${STEP_STATUS[$step_id]:-unknown}"
+    local step_name="${status_info#*|}"
+    step_name="${step_name%%|*}"
+
+    local duration
+    duration=$(calculate_step_duration "$status_info")
+
+    STEP_STATUS[$step_id]="error|$step_name|$duration"
+}
+
+# Mark step as warning (succeeded but produced stderr with error keywords)
+step_warning() {
+    local step_id="$1"
+    local status_info="${STEP_STATUS[$step_id]:-unknown}"
+    local step_name="${status_info#*|}"
+    step_name="${step_name%%|*}"
+
+    local duration
+    duration=$(calculate_step_duration "$status_info")
+
+    STEP_STATUS[$step_id]="warning|$step_name|$duration"
+}
+
+# Draw a bordered box with title and content lines
+# Used for error/warning summaries and running step progress display
+# Args: title (string), color (ANSI color code, optional), lines... (content)
+# Respects BOX_FIXED_WIDTH if set, otherwise calculates width dynamically
+draw_box() {
+    local title="$1"
+    local color="${2:-${CYAN}}"
+    shift 2
+    local lines=("$@")
+
+    # Use fixed width if set, otherwise calculate dynamically
+    local max_width
+    if [[ -n "${BOX_FIXED_WIDTH:-}" && "${BOX_FIXED_WIDTH:-0}" -gt 0 ]]; then
+        max_width=$BOX_FIXED_WIDTH
+    else
+        # Calculate box width (minimum 40, max 80, or longest line + padding)
+        max_width=40
+        local line
+        for line in "$title" "${lines[@]}"; do
+            # Strip ANSI codes for length calculation
+            local clean_line=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g')
+            local line_len=${#clean_line}
+            if ((line_len + 4 > max_width)); then
+                max_width=$((line_len + 4))
+                if ((max_width > 80)); then
+                    max_width=80
+                    break
+                fi
+            fi
+        done
+    fi
+
+    # Strip ANSI codes from title for accurate length calculation
+    local clean_title=$(echo "$title" | sed 's/\x1b\[[0-9;]*m//g')
+    local title_len=${#clean_title}
+    local padding_total=$((max_width - title_len - 4))
+    local padding_right=$((padding_total / 2))
+    local padding_left=$((padding_total - padding_right))
+
+    # Top border with title
+    echo -n "${BOLD}${color}╭─ ${title} "
+    printf '─%.0s' $(seq 1 $padding_left)
+    printf '─%.0s' $(seq 1 $padding_right)
+    echo "╮${NC}"
+
+    # Content lines
+    for line in "${lines[@]}"; do
+        # Strip ANSI codes for length calculation
+        local clean_line=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g')
+        local line_len=${#clean_line}
+
+        # Truncate if line is too long for the box
+        local max_content_width=$((max_width - 4))  # Account for "│ " and " │"
+        if ((line_len > max_content_width)); then
+            # Truncate visible text and add ellipsis
+            clean_line="${clean_line:0:$((max_content_width - 3))}..."
+            line="$clean_line"
+            line_len=${#clean_line}
+        fi
+
+        local padding=$((max_width - line_len - 2))
+        echo -n "${BOLD}${color}│${NC} ${line}"
+        printf ' %.0s' $(seq 1 $padding)
+        echo "${BOLD}${color}│${NC}"
+    done
+
+    # Bottom border
+    echo -n "${BOLD}${color}╰"
+    printf '─%.0s' $(seq 1 $((max_width - 1)))
+    echo "╯${NC}"
+}
+
+# Render the current TUI state to TUI_OUTPUT_BUFFER
+# Generates header, step list with status icons, and live output box for running step
+# Updates TUI_LINE_COUNT and TUI_OUTPUT_BUFFER globals (no subshell for performance)
+display_steps() {
+    setopt local_options no_err_exit
+    local step_id step_status status_info name icon duration
+    local line_count=0
+    local output_buffer=""
+
+    # Header
+    output_buffer+="${BOLD}Running: dv up${NC}"$'\n'
+    ((line_count++))
+    output_buffer+=""$'\n'
+    ((line_count++))
+
+    for step_id in "${STEP_ORDER[@]:-}"; do
+        # Skip if step_id is empty or not in STEP_STATUS
+        [[ -z "${step_id:-}" ]] && continue
+        [[ -z "${STEP_STATUS[$step_id]:-}" ]] && continue
+
+        status_info="${STEP_STATUS[$step_id]}"
+        step_status="${status_info%%|*}"
+
+        # Parse name and duration
+        local rest="${status_info#*|}"
+        name="${rest%%|*}"
+        duration="${rest##*|}"
+        [[ "$duration" == "$name" ]] && duration=""
+
+        case "$step_status" in
+            pending)
+                icon="$ICON_PENDING"
+                output_buffer+="  ${DIM}${icon} ${name}${NC}"$'\n'
+                ((line_count++))
+                ;;
+            running)
+                if [[ "$step_id" == "${CURRENT_STEP:-}" ]]; then
+                    # Draw box for running step with live output
+                    # Advance spinner (updates CURRENT_SPINNER globally)
+                    advance_spinner
+                    local spinner="$CURRENT_SPINNER"
+                    local output_lines=()
+
+                    # Get last 3-5 lines of output
+                    local max_lines=5
+                    local start_idx=$((${#CURRENT_STEP_OUTPUT[@]} - max_lines))
+                    ((start_idx < 0)) && start_idx=0
+
+                    local i
+                    for ((i=start_idx; i<${#CURRENT_STEP_OUTPUT[@]}; i++)); do
+                        output_lines+=("${DIM}${CURRENT_STEP_OUTPUT[$i]}${NC}")
+                    done
+
+                    # If no output yet, show a placeholder
+                    if [[ ${#output_lines[@]} -eq 0 ]]; then
+                        output_lines=("${DIM}Running...${NC}")
+                    fi
+
+                    local box_output
+                    box_output=$(draw_box "${spinner} ${name}" "" "${output_lines[@]}")
+                    output_buffer+="$box_output"$'\n'
+                    local -a box_lines
+                    box_lines=("${(@f)box_output}")
+                    local box_line_count=${#box_lines[@]}
+                    ((box_line_count == 0)) && box_line_count=1
+                    line_count=$((line_count + box_line_count + 1))  # +1 for the newline after box
+                else
+                    icon="${ICON_PENDING}"
+                    output_buffer+="  ${icon} ${name}"$'\n'
+                    ((line_count++))
+                fi
+                ;;
+            success)
+                icon="${GREEN}${ICON_SUCCESS}${NC}"
+                if [[ -n "$duration" && "$duration" != "$name" ]]; then
+                    output_buffer+="  ${icon} ${name} ${DIM}(${duration}s)${NC}"$'\n'
+                else
+                    output_buffer+="  ${icon} ${name}"$'\n'
+                fi
+                ((line_count++))
+                ;;
+            error)
+                icon="${RED}${ICON_ERROR}${NC}"
+                if [[ -n "$duration" && "$duration" != "$name" ]]; then
+                    output_buffer+="  ${icon} ${name} ${DIM}(${duration}s)${NC}"$'\n'
+                else
+                    output_buffer+="  ${icon} ${name}"$'\n'
+                fi
+                ((line_count++))
+                ;;
+            warning)
+                icon="${YELLOW}${ICON_WARNING}${NC}"
+                if [[ -n "$duration" && "$duration" != "$name" ]]; then
+                    output_buffer+="  ${icon} ${name} ${DIM}(${duration}s)${NC}"$'\n'
+                else
+                    output_buffer+="  ${icon} ${name}"$'\n'
+                fi
+                ((line_count++))
+                ;;
+        esac
+    done
+
+    # Store line count and output buffer globally for clear logic
+    TUI_LINE_COUNT=$line_count
+    TUI_OUTPUT_BUFFER="$output_buffer"
+}
+
+# Update TUI display atomically to prevent flicker
+# Restores cursor to saved position, clears below, and redraws current state
+# Must be called instead of display_steps directly to maintain cursor positioning
+update_tui() {
+    (( TUI_FD >= 0 )) || return
+
+    display_steps
+
+    # Single atomic write prevents flicker (restore cursor, clear below, redraw)
+    local tui_buffer=""
+    tui_buffer+=$'\033[u\033[J'
+    tui_buffer+="$TUI_OUTPUT_BUFFER"
+
+    printf '%s' "$tui_buffer" >&$TUI_FD
+}
+
+# Execute a command with live TUI progress or verbose logging
+# In TUI mode: Displays spinner and last few output lines in real-time
+# In verbose mode: Streams output directly to terminal
+# Args: step_id, step_name, command, [args...]
+# Returns: Command exit code (0=success, 130=interrupted, other=failure)
+# Exports: STEP_OUTPUT (stdout), STEP_ERRORS (stderr) for post-processing
+run_step() {
+    setopt local_options local_traps no_xtrace no_verbose
+
+    local step_id="$1"
+    local step_name="$2"
+    shift 2
+
+    if [[ "${VERBOSE:-false}" == "true" ]]; then
+        step_start "$step_id"
+        log_command_header "$step_name" "$@" >&2
+
+        if "$@"; then
+            step_success "$step_id"
+            return 0
+        else
+            step_error "$step_id"
+            return 1
+        fi
+    fi
+
+    # TUI mode: capture output in background, poll for updates, display in box
+    local temp_output
+    temp_output=$(mktemp)
+    local temp_errors
+    temp_errors=$(mktemp)
+
+    step_start "$step_id"
+
+    log_command_header "$step_name" "$@"
+
+    CURRENT_STEP_OUTPUT=()
+
+    # Execute command in background, store exit code in temp file
+    setopt local_options no_notify no_monitor no_xtrace no_verbose
+    (
+        "$@" > "$temp_output" 2> "$temp_errors"
+        echo $? > "${temp_output}.exit"
+    ) &
+    local cmd_pid=$!
+    local previous_line_count=0
+    local interrupted=false
+
+    trap 'interrupted=true; kill -INT "$cmd_pid" 2>/dev/null; wait "$cmd_pid" 2>/dev/null' INT
+
+    if (( TUI_FD >= 0 )); then
+        printf '%s' "${ANSI_HIDE_CURSOR}" >&$TUI_FD
+        update_tui
+        previous_line_count=$TUI_LINE_COUNT
+    fi
+
+    # Poll command output and update TUI every 200ms
+    while kill -0 "$cmd_pid" 2>/dev/null; do
+        [[ $interrupted == true ]] && break
+        sleep 0.2
+
+        if [[ -f "$temp_output" && -s "$temp_output" ]]; then
+            CURRENT_STEP_OUTPUT=()
+            while IFS= read -r line; do
+                [[ -z "${line// /}" ]] && continue
+                if ((${#line} > 75)); then
+                    line="${line:0:72}..."
+                fi
+                CURRENT_STEP_OUTPUT+=("$line")
+            done < <(command tail -n 10 "$temp_output" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        fi
+
+        if (( TUI_FD >= 0 )); then
+            update_tui
+        fi
+    done
+
+    trap - INT
+
+    if (( TUI_FD >= 0 )); then
+        print -u"$TUI_FD" -n -- "${ANSI_SHOW_CURSOR}"
+    fi
+
+    local exit_code
+    if [[ $interrupted == true ]]; then
+        exit_code=130
+    else
+        wait "$cmd_pid"
+        exit_code=$(command cat "${temp_output}.exit" 2>/dev/null || echo 1)
+    fi
+
+    export STEP_OUTPUT
+    STEP_OUTPUT=$(command cat "$temp_output")
+    export STEP_ERRORS
+    STEP_ERRORS=$(command cat "$temp_errors")
+
+    # Echo to tee pipe for log file capture (doesn't interfere with TUI on /dev/tty)
+    if [[ -n "$STEP_OUTPUT" ]]; then
+        echo "$STEP_OUTPUT"
+    fi
+    if [[ -n "$STEP_ERRORS" ]]; then
+        echo "$STEP_ERRORS" >&2
+    fi
+
+    rm -f "$temp_output" "$temp_errors" "${temp_output}.exit"
+
+    if (( TUI_FD >= 0 )); then
+        printf '\033[u\033[J' >&$TUI_FD
+    fi
+
+    # Success with stderr warnings vs clean success vs failure
+    if [[ $exit_code -eq 0 ]]; then
+        if has_error_keywords "$STEP_ERRORS"; then
+            step_warning "$step_id"
+        else
+            step_success "$step_id"
+        fi
+        return 0
+    else
+        step_error "$step_id"
+        return "$exit_code"
+    fi
+}
+
+# Special directory shortcuts (always available, not indexed)
 typeset -gA SPECIAL_DIRS=(
     dotfiles "$HOME/dotfiles"
     dev "$HOME/dev"
     writing "$HOME/writing"
 )
 
+# Directories to scan for projects during indexing
 typeset -ga PROJECT_PATHS=(
     "$HOME/dev"
     "$HOME/dev/git"
     "$HOME/writing"
 )
 
+# Project name -> path mapping (populated by index_projects)
+# When multiple projects share a name, paths are comma-separated
 typeset -gA PROJECT_MAP=()
 
+# ============================================================================
+# Command Help Data - Single Source of Truth for dv commands
+# ============================================================================
+
+# Command argument syntax
+typeset -gA CMD_HELP_ARGS=(
+    [cd]="<target>"
+    [up]="[--force|-f] [--verbose|-v]"
+    [list]=""
+    [logs]="[clean [-a] [-ap] [-A]]"
+)
+
+# Command descriptions (can be multi-line with bullets)
+typeset -gA CMD_HELP_DESC=(
+    [cd]="Navigate to a project or special directory
+• Special targets: dotfiles, dev, writing
+• Or use any project name from indexed directories
+• When sourced in your shell, changes directory directly
+• When run as script, outputs path"
+
+    [up]="Install and update project dependencies, prepare databases, and build assets
+• Ruby projects: Runs bundle install
+• Rails projects: Prepares database (create + migrate) and compiles assets
+• Node projects: Runs npm/yarn/pnpm install and builds assets
+• Use --force to reinstall all dependencies
+• Use -v/--verbose for detailed output instead of TUI"
+
+    [list]="List all available projects and special directories
+• Shows special directories (dotfiles, dev, writing)
+• Shows all indexed projects from ~/dev, ~/dev/git, ~/writing
+• Projects are auto-discovered and sorted alphabetically
+• Use 'dv cd <name>' to navigate to any listed project"
+
+    [logs]="View or manage log files from 'dv up' runs
+• Default action: View latest log for current project
+• clean: Remove old logs (>7 days by default)
+• Flags:
+  -a, --all: Delete all logs (regardless of age)
+  -ap, --all-projects: Target all projects (not just current)
+  -A: Shorthand for -a -ap (delete everything)"
+)
+
+# Command examples (newline-delimited, will be split for display)
+typeset -gA CMD_HELP_EXAMPLES=(
+    [cd]="dv cd dotfiles           # Go to ~/dotfiles
+dv cd dev                # Go to ~/dev root
+dv cd calendar_hub       # Go to calendar_hub project
+dv cd leviathan          # Go to leviathan project"
+
+    [up]="dv up                    # Install/update with TUI progress
+dv up -v                 # Install with verbose output
+dv up --force            # Force reinstall all dependencies
+dv up -f -v              # Force reinstall with verbose output"
+
+    [list]="dv list                  # List all projects
+dv ls                    # Short alias for list"
+
+    [logs]="dv logs                  # View latest log
+dv logs clean            # Clean logs >7 days (current project)
+dv logs clean -a         # Delete ALL logs (current project)
+dv logs clean -ap        # Clean logs >7 days (all projects)
+dv logs clean -A         # Delete ALL logs (all projects)"
+)
+
 show_help() {
-    cat <<'EOT'
-dv - Superpowered Development Workflow Script
+    # Main title with visual flair
+    local title="dv - Superpowered Development Workflow Script"
+    local title_length=${#title}
+    local box_width=$((title_length + 2))  # +2 for spaces on each side
 
-USAGE:
-    dv <command> [options]
+    echo ""
+    # Top border
+    printf "${BOLD}${CYAN}╭"
+    printf "─%.0s" $(seq 1 $box_width)
+    printf "╮${NC}\n"
 
-COMMANDS:
-    cd <target>       Navigate to a project or special directory
-                      Special targets: dotfiles, dev, writing
-                      Or any project name from indexed directories
+    # Title line with padding
+    printf "${BOLD}${CYAN}│${NC} ${BOLD}%-${title_length}s${NC} ${BOLD}${CYAN}│${NC}\n" "$title"
 
-    up [--force]      Install/update dependencies in current project
-                      - Ruby projects: runs bundle install
-                      - Rails projects: also runs pending migrations
-                      - Node projects: runs npm/yarn/pnpm install
-                      Use --force to reinstall even if up-to-date
+    # Bottom border
+    printf "${BOLD}${CYAN}╰"
+    printf "─%.0s" $(seq 1 $box_width)
+    printf "╯${NC}\n"
+    echo ""
 
-    list, ls          List all available projects
-    help, h           Show this help message
+    print_help_header "USAGE:"
+    echo -e "    ${CYAN}dv${NC} ${YELLOW}[--verbose|-v]${NC} ${YELLOW}<command>${NC} ${YELLOW}[options]${NC}"
+    echo ""
 
-    <any-command>     Passthrough to project bin/ or toys commands
-                      Priority: bin/<command> → toys <command>
+    print_help_header "COMMANDS:"
 
-EXAMPLES:
-    dv cd dotfiles          # Go to dotfiles
-    dv cd dev               # Go to ~/dev root
-    dv cd calendar_hub      # Go to calendar_hub project
-    dv ls                   # List all available projects
-    dv up                   # Install dependencies in current project
-    dv checks               # Run bin/checks or toys checks
-    dv rails console        # Run bin/rails console
+    # Use centralized help data - extract first line of description for main help
+    local cmd desc_first_line
 
-NOTES:
-    - Projects are auto-discovered from ~/dev, ~/dev/git, ~/writing
-    - If multiple projects share a name, you'll be prompted to choose
-    - Use with zsh completion for best experience (tab to complete project names)
-    - When sourced in your shell, 'dv cd' changes directory directly
-    - Project commands (up, passthrough) work in current directory
-EOT
+    # cd command
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[cd]}" | head -1)
+    print_help_command "cd" "${CMD_HELP_ARGS[cd]}" "$desc_first_line" \
+        "Use 'dv cd --help' for details"
+
+    # up command
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[up]}" | head -1)
+    print_help_command "up" "${CMD_HELP_ARGS[up]}" "$desc_first_line" \
+        "Use 'dv up --help' for details"
+
+    # list command
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[list]}" | head -1)
+    print_help_command "list, ls" "${CMD_HELP_ARGS[list]}" "$desc_first_line" \
+        "Use 'dv list --help' for details"
+
+    # logs command
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[logs]}" | head -1)
+    print_help_command "logs" "${CMD_HELP_ARGS[logs]}" "$desc_first_line" \
+        "Use 'dv logs --help' for details"
+
+    print_help_command "help, h" "" \
+        "Show this help message"
+
+    print_help_command "<command>" "..." \
+        "Pass through to project bin/ or toys commands" \
+        "Priority: bin/<command> → toys <command>"
+
+    print_help_header "EXAMPLES:"
+    # Show select examples from centralized data (first example from each command)
+    printf '%s\n' "${CMD_HELP_EXAMPLES[cd]}" | head -2 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+    printf '%s\n' "${CMD_HELP_EXAMPLES[list]}" | head -1 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+    printf '%s\n' "${CMD_HELP_EXAMPLES[up]}" | head -2 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+    printf '%s\n' "${CMD_HELP_EXAMPLES[logs]}" | head -2 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+    print_help_example "dv checks               # Run bin/checks or toys checks"
+    print_help_example "dv rails console        # Run bin/rails console"
+    echo ""
+
+    print_help_header "NOTES:"
+    print_help_note "  • Projects are auto-discovered from ~/dev, ~/dev/git, ~/writing"
+    print_help_note "  • If multiple projects share a name, you'll be prompted to choose"
+    print_help_note "  • Use with zsh completion for best experience (tab to complete)"
+    print_help_note "  • When sourced in your shell, 'dv cd' changes directory directly"
+    print_help_note "  • Logs are stored in ~/.cache/dv/logs/ and auto-cleaned after 7 days"
+    print_help_note "  • Log flags: -a (--all), -ap (--all-projects), -A (both combined)"
 }
 
+# Scan PROJECT_PATHS and build name->path mapping in PROJECT_MAP
+# When multiple projects share a name, paths are stored comma-separated
 index_projects() {
     typeset -gA PROJECT_MAP=()
     local search_path project_dir project_name
@@ -93,6 +643,9 @@ index_projects() {
     done
 }
 
+# Handle project name collisions via fzf (if available) or numbered menu
+# Args: project_name, paths_csv (comma-separated paths)
+# Returns: Selected path on stdout, exit 1 on cancel/error
 resolve_collision() {
     local project_name="$1"
     local paths_csv="$2"
@@ -139,7 +692,10 @@ resolve_collision() {
     printf '%s\n' "${paths[$selection]}"
 }
 
-# Project detection helpers
+# ============================================================================
+# Project Type Detection
+# ============================================================================
+
 is_ruby_project() {
     [[ -f Gemfile ]]
 }
@@ -156,48 +712,47 @@ has_toys() {
     [[ -f .toys.rb ]] || [[ -d .toys ]]
 }
 
-has_pending_migrations() {
-    if ! is_rails_project; then
-        return 1
-    fi
-
-    local rails_cmd=""
+get_rails_cmd() {
     if [[ -x bin/rails ]]; then
-        rails_cmd="bin/rails"
+        echo "bin/rails"
     elif command -v bundle >/dev/null 2>&1; then
-        rails_cmd="bundle exec rails"
+        echo "bundle exec rails"
     else
-        return 1
-    fi
-
-    local status_output
-    if status_output=$($rails_cmd db:migrate:status 2>&1); then
-        echo "$status_output" | grep -q "^\s*down"
-    else
-        # If we can't check status, assume no pending migrations
         return 1
     fi
 }
 
+# Detect package manager based on lockfile presence (pnpm > yarn > npm)
+detect_package_manager() {
+    if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
+        echo "pnpm"
+    elif [[ -f yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
+        echo "yarn"
+    elif command -v npm >/dev/null 2>&1; then
+        echo "npm"
+    else
+        return 1
+    fi
+}
+
+# Find project-specific command in bin/ or toys
+# Priority: bin/<command> > toys <command>
+# Returns: Command string to execute, or failure if not found
 find_project_command() {
     local command_name="$1"
 
-    # Priority 1: Project bin/ directory
     if [[ -x "bin/$command_name" ]]; then
         printf 'bin/%s' "$command_name"
         return 0
     fi
 
-    # Priority 2: Toys
     if has_toys && command -v toys >/dev/null 2>&1; then
-        # Check .toys directory for command files first (more reliable)
         if [[ -d .toys && -f ".toys/${command_name}.rb" ]]; then
             printf 'toys %s' "$command_name"
             return 0
         fi
 
-        # Fall back to checking toys --commands (may fail if toys config has errors)
-        if toys --commands 2>/dev/null | grep -q "^${command_name}\$"; then
+        if toys --commands 2>/dev/null | command grep -q "^${command_name}\$"; then
             printf 'toys %s' "$command_name"
             return 0
         fi
@@ -206,7 +761,339 @@ find_project_command() {
     return 1
 }
 
+# ============================================================================
+# Error Detection and Logging Utilities
+# ============================================================================
+
+# Check stderr for actual error keywords (not just informational output)
+# Many tools write version info, progress, etc. to stderr without errors
+has_error_keywords() {
+    local stderr_text="$1"
+    [[ -n "$stderr_text" ]] && echo "$stderr_text" | command grep -qi '\(error\|warning\|failed\|fatal\|exception\)'
+}
+
+get_first_error_line() {
+    local stderr_text="$1"
+    local first_line=""
+    while IFS= read -r line; do
+        if [[ -n "${line// /}" ]]; then
+            first_line="$line"
+            break
+        fi
+    done <<< "$stderr_text"
+    echo "$first_line"
+}
+
+log_command_header() {
+    local step_name="$1"
+    shift
+    local command="$*"
+    echo ""
+    echo "$LOG_SEPARATOR"
+    echo "Running: $step_name"
+    echo "Command: $command"
+    echo "$LOG_SEPARATOR"
+    echo ""
+}
+
+# Wrapper for run_step that updates step status and TUI after completion
+# Tracks failures/warnings in arrays passed by variable name
+handle_step_completion() {
+    local step_id="$1"
+    local step_name="$2"
+    shift 2
+
+    local rc=0
+    if ! run_step "$step_id" "$step_name" "$@"; then
+        rc=$?
+        failed_steps+=("$step_name")
+        if (( rc == 130 )); then
+            interrupted=true
+        fi
+    elif has_error_keywords "${STEP_ERRORS:-}"; then
+        warning_steps+=("$step_name")
+        local first_line
+        first_line=$(get_first_error_line "$STEP_ERRORS")
+        [[ -n "$first_line" ]] && warning_messages["$step_name"]="$first_line"
+    fi
+
+    if (( TUI_FD >= 0 )); then
+        update_tui
+    fi
+
+    return $rc
+}
+
+# Determine if project needs asset compilation step
+# Checks for: Rails Tailwind, Rails asset pipeline, Node.js build script
+needs_asset_build() {
+    local is_rails is_node
+    is_rails=$(is_rails_project && echo "true" || echo "false")
+    is_node=$(is_node_project && echo "true" || echo "false")
+
+    if [[ "$is_rails" == "true" ]] && [[ -f config/tailwind.config.js || -f tailwind.config.js ]]; then
+        return 0
+    fi
+
+    if [[ "$is_rails" == "true" ]] && [[ -d app/assets ]]; then
+        if [[ -d public/assets ]]; then
+            local newest_source=$(find app/assets -type f -newer public/assets 2>/dev/null | head -1)
+            [[ -n "$newest_source" ]] && return 0
+        else
+            return 0
+        fi
+    fi
+
+    if [[ "$is_node" == "true" ]] && [[ -f package.json ]]; then
+        if command grep -q '"build":' package.json 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# ============================================================================
+# dv up Workflow Functions
+# ============================================================================
+
+# Initialize logging infrastructure and TUI if terminal supports it
+# Creates log file, opens /dev/tty for TUI, sets up tee pipe for dual logging
+# Sets: _SETUP_LOG_FILE, _SETUP_OPENED_TUI_FD, _SETUP_TEE_PID, _SETUP_TEE_PIPE, TUI_FD
+# Saves original stdout/stderr to FDs 3,4 for later restoration
+setup_tui_and_logging() {
+    _SETUP_LOG_FILE=$(init_log_file)
+    cleanup_old_logs
+
+    exec 3>&1 4>&2
+
+    _SETUP_OPENED_TUI_FD=""
+    if [[ "${VERBOSE}" != "true" && -t 2 ]]; then
+        if exec {_SETUP_OPENED_TUI_FD}<> /dev/tty 2>/dev/null; then
+            TUI_FD=$_SETUP_OPENED_TUI_FD
+        else
+            TUI_FD=-1
+        fi
+    else
+        TUI_FD=-1
+    fi
+
+    # Calculate optimal box width for current terminal (90% width, 60-100 range)
+    if [[ $TUI_FD -ge 0 ]]; then
+        local term_width
+        term_width=$(tput cols 2>/dev/null || echo "80")
+        local calculated_width=$(( term_width * 9 / 10 ))
+        if ((calculated_width > 100)); then
+            export BOX_FIXED_WIDTH=100
+        elif ((calculated_width < 60)); then
+            export BOX_FIXED_WIDTH=60
+        else
+            export BOX_FIXED_WIDTH=$calculated_width
+        fi
+    else
+        export BOX_FIXED_WIDTH=80
+    fi
+
+    # Pipe for dual logging: step output goes to both TUI and log file via tee
+    _SETUP_TEE_PIPE=$(mktemp -u)
+    mkfifo "$_SETUP_TEE_PIPE"
+
+    if [[ "${VERBOSE}" != "true" ]]; then
+        tee -a "$_SETUP_LOG_FILE" < "$_SETUP_TEE_PIPE" > /dev/null &
+    else
+        tee -a "$_SETUP_LOG_FILE" < "$_SETUP_TEE_PIPE" &
+    fi
+    _SETUP_TEE_PID=$!
+}
+
+# Scan project and register all required steps based on detected project type
+# Args: force (bool) - if true, adds clean steps before install
+# Sets: _DETECT_HAS_STEPS (bool), _DETECT_RAILS_CMD (string)
+# Calls: step_init for each detected requirement
+detect_and_init_steps() {
+    local force="$1"
+    _DETECT_HAS_STEPS=false
+    _DETECT_RAILS_CMD=""
+
+    if is_ruby_project && command -v bundle >/dev/null 2>&1; then
+        step_init "bundle" "Bundle install"
+        _DETECT_HAS_STEPS=true
+
+        if is_rails_project; then
+            step_init "db_prepare" "Prepare database"
+            { _DETECT_RAILS_CMD=$(get_rails_cmd); } >/dev/null 2>&1
+        fi
+    fi
+
+    if is_node_project; then
+        local pkg_manager
+        if pkg_manager=$(detect_package_manager); then
+            if [[ $force == true && -d node_modules ]]; then
+                step_init "clean_node_modules" "Clean node_modules"
+            fi
+            step_init "node_install" "$pkg_manager install"
+            _DETECT_HAS_STEPS=true
+        fi
+    fi
+
+    if needs_asset_build; then
+        if is_rails_project; then
+            if [[ -f config/tailwind.config.js || -f tailwind.config.js ]]; then
+                step_init "assets" "Build Tailwind CSS"
+            else
+                step_init "assets" "Precompile assets"
+            fi
+            _DETECT_HAS_STEPS=true
+        elif is_node_project; then
+            step_init "assets" "Build assets"
+            _DETECT_HAS_STEPS=true
+        fi
+    fi
+}
+
+# Execute all initialized steps in order, respecting dependencies
+# Steps are skipped if earlier critical steps failed
+# Args: force, rails_cmd, failed_steps (var name), warning_steps (var name),
+#       warning_messages (var name), interrupted (var name)
+# Modifies: Arrays passed by name via eval (zsh compatibility pattern)
+execute_project_steps() {
+    local force="$1"
+    local rails_cmd="$2"
+    local failed_var="$3"
+    local warning_var="$4"
+    local warning_msg_var="$5"
+    local interrupted_var="$6"
+
+    if is_ruby_project && command -v bundle >/dev/null 2>&1; then
+        if [[ $force == true ]]; then
+            handle_step_completion "bundle" "Bundle install" bundle install --redownload
+        else
+            handle_step_completion "bundle" "Bundle install" bundle install
+        fi
+
+        eval "local failed_count=\${#${failed_var}[@]}"
+        if [[ $failed_count -eq 0 ]] && is_rails_project && [[ -n "$rails_cmd" ]]; then
+            handle_step_completion "db_prepare" "Prepare database" $rails_cmd db:prepare
+        fi
+    fi
+
+    if is_node_project; then
+        local pkg_manager
+        if pkg_manager=$(detect_package_manager); then
+            if [[ $force == true && -d node_modules ]]; then
+                handle_step_completion "clean_node_modules" "Clean node_modules" rm -rf node_modules
+            fi
+
+            eval "local failed_count=\${#${failed_var}[@]}"
+            if [[ $failed_count -eq 0 ]]; then
+                handle_step_completion "node_install" "$pkg_manager install" $pkg_manager install
+            fi
+        fi
+    fi
+
+    eval "local failed_count=\${#${failed_var}[@]}"
+    if [[ $failed_count -eq 0 ]] && needs_asset_build; then
+        if is_rails_project && [[ -n "$rails_cmd" ]]; then
+            if [[ -f config/tailwind.config.js || -f tailwind.config.js ]]; then
+                handle_step_completion "assets" "Tailwind build" $rails_cmd tailwindcss:build
+            else
+                handle_step_completion "assets" "Asset precompilation" $rails_cmd assets:precompile
+            fi
+        elif is_node_project && grep -q '"build":' package.json 2>/dev/null; then
+            local pkg_manager
+            if pkg_manager=$(detect_package_manager); then
+                handle_step_completion "assets" "Asset build" $pkg_manager run build
+            fi
+        fi
+    fi
+}
+
+# Teardown logging/TUI infrastructure and display final summary
+# Restores stdout/stderr, closes file descriptors, shows colored result boxes
+# Args: log_file, opened_tui_fd, tee_pid, tee_pipe, previous_tui_fd,
+#       failed_steps (var name), warning_steps (var name),
+#       warning_messages (var name), interrupted (bool)
+# Returns: 0 (success), 1 (failure), 130 (interrupted)
+cleanup_and_summarize() {
+    local log_file="$1"
+    local opened_tui_fd="$2"
+    local tee_pid="$3"
+    local tee_pipe="$4"
+    local previous_tui_fd="$5"
+    local failed_var="$6"
+    local warning_var="$7"
+    local warning_msg_var="$8"
+    local interrupted="$9"
+
+    exec >&3 2>&4
+
+    if (( TUI_FD >= 0 )); then
+        printf '%s\n' "${ANSI_SHOW_CURSOR}" >&$TUI_FD
+    fi
+
+    if [[ -n $opened_tui_fd ]]; then
+        exec {opened_tui_fd}>&-
+    fi
+    TUI_FD=$previous_tui_fd
+
+    wait "$tee_pid" 2>/dev/null || true
+    rm -f "$tee_pipe"
+    exec 3>&- 4>&-
+
+    eval "local failed_count=\${#${failed_var}[@]}"
+    eval "local warning_count=\${#${warning_var}[@]}"
+    if [[ $failed_count -gt 0 ]]; then
+        echo ""
+        local error_lines=()
+        eval "for step in \"\${${failed_var}[@]}\"; do
+            error_lines+=(\"\${RED}✗\${NC} \$step\")
+        done"
+        draw_box "ERRORS" "${RED}" "${error_lines[@]}"
+        echo ""
+        if [[ $interrupted == true ]]; then
+            log_error "dv up interrupted by user"
+        fi
+        log_info "Full logs available at: $log_file"
+        if [[ $interrupted == true ]]; then
+            return 130
+        fi
+        return 1
+    fi
+    if [[ $warning_count -gt 0 ]]; then
+        echo ""
+        local warning_lines=()
+        eval "for step in \"\${${warning_var}[@]}\"; do
+            warning_lines+=(\"\${YELLOW}!\${NC} \$step\")
+            if [[ -n \"\${${warning_msg_var}[\"\$step\"]:-}\" ]]; then
+                local msg=\"\${${warning_msg_var}[\"\$step\"]}\"
+                if (( \${#msg} > 70 )); then
+                    msg=\"\${msg:0:67}...\"
+                fi
+                warning_lines+=(\"\${DIM}\${msg}\${NC}\")
+            fi
+        done"
+        draw_box "WARNINGS" "${YELLOW}" "${warning_lines[@]}"
+        echo ""
+        log_info "Full logs available at: $log_file"
+        log_success "All dependencies installed!"
+        return 0
+    fi
+
+    log_success "All dependencies up to date!"
+    log_info "Logs: $log_file"
+    return 0
+}
+
+# ============================================================================
+# Command Implementations
+# ============================================================================
+
+# Navigate to a project or special directory
+# When sourced: Changes directory in current shell
+# When executed: Prints path for shell wrappers/scripts
 cmd_cd() {
+    check_and_show_help "cd" "dv" "$@" && return 0
+
     local target="${1:-}"
     local target_path
 
@@ -240,114 +1127,90 @@ cmd_cd() {
     fi
 }
 
+# Install and update project dependencies with TUI progress tracking
+# Detects project type (Ruby/Rails, Node.js) and runs appropriate setup steps
+# Flags: --force|-f (reinstall), --verbose|-v (disable TUI, show all output)
 cmd_up() {
-    local force=false
-    local did_something=false
+    check_and_show_help "up" "dv" "$@" && return 0
 
-    # Parse arguments
+    setopt local_options no_monitor no_notify no_xtrace no_verbose no_err_exit
+
+    local force=false
+    export VERBOSE=false
+
     for arg in "$@"; do
         case "$arg" in
             --force|-f)
                 force=true
                 ;;
+            --verbose|-v)
+                export VERBOSE=true
+                ;;
             *)
                 log_error "Unknown option: $arg"
-                log_info "Usage: dv up [--force]"
+                log_info "Usage: dv up [--force] [--verbose|-v]"
                 return 1
                 ;;
         esac
     done
 
-    # Ruby/Rails project handling
-    if is_ruby_project; then
-        if ! command -v bundle >/dev/null 2>&1; then
-            log_warning "Bundler not found, skipping bundle install"
-        else
-            log_info "Running bundle install..."
-            if [[ $force == true ]]; then
-                bundle install --redownload
-            else
-                bundle install
-            fi
-            if [[ $? -eq 0 ]]; then
-                log_success "Bundle install completed"
-                did_something=true
-            else
-                log_error "Bundle install failed"
-                return 1
-            fi
+    local previous_tui_fd=$TUI_FD
+    setup_tui_and_logging
+    local log_file="$_SETUP_LOG_FILE"
+    local opened_tui_fd="$_SETUP_OPENED_TUI_FD"
+    local tee_pid="$_SETUP_TEE_PID"
+    local tee_pipe="$_SETUP_TEE_PIPE"
 
-            # Check for pending migrations
-            if is_rails_project; then
-                if has_pending_migrations; then
-                    log_info "Running pending migrations..."
-                    local rails_cmd=""
-                    if [[ -x bin/rails ]]; then
-                        rails_cmd="bin/rails"
-                    else
-                        rails_cmd="bundle exec rails"
-                    fi
+    exec > "$tee_pipe" 2>&1
 
-                    $rails_cmd db:migrate
-                    if [[ $? -eq 0 ]]; then
-                        log_success "Migrations completed"
-                    else
-                        log_error "Migrations failed"
-                        return 1
-                    fi
-                else
-                    log_info "No pending migrations"
-                fi
-            fi
-        fi
-    fi
+    set -A STEP_STATUS
+    set -A STEP_ORDER
+    CURRENT_STEP=""
+    set -A CURRENT_STEP_OUTPUT
 
-    # Node.js project handling
-    if is_node_project; then
-        local pkg_manager=""
+    local -a failed_steps=()
+    local -a warning_steps=()
+    typeset -A warning_messages
+    warning_messages=()
+    local interrupted=false
 
-        # Detect package manager
-        if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
-            pkg_manager="pnpm"
-        elif [[ -f yarn.lock ]] && command -v yarn >/dev/null 2>&1; then
-            pkg_manager="yarn"
-        elif command -v npm >/dev/null 2>&1; then
-            pkg_manager="npm"
-        else
-            log_warning "No Node.js package manager found, skipping install"
-        fi
+    detect_and_init_steps "$force"
+    local has_steps="$_DETECT_HAS_STEPS"
+    local rails_cmd="$_DETECT_RAILS_CMD"
 
-        if [[ -n $pkg_manager ]]; then
-            log_info "Running $pkg_manager install..."
-            if [[ $force == true ]]; then
-                # Force reinstall by removing node_modules first
-                if [[ -d node_modules ]]; then
-                    log_info "Removing node_modules for clean install..."
-                    rm -rf node_modules
-                fi
-            fi
-
-            $pkg_manager install
-            if [[ $? -eq 0 ]]; then
-                log_success "$pkg_manager install completed"
-                did_something=true
-            else
-                log_error "$pkg_manager install failed"
-                return 1
-            fi
-        fi
-    fi
-
-    if [[ $did_something == false ]]; then
+    if [[ $has_steps == false ]]; then
+        exec 2>&4
         log_warning "No recognized project type in current directory"
         log_info "Supported: Ruby (Gemfile), Node.js (package.json)"
+
+        exec >&3 2>&4
+        wait "$tee_pid" 2>/dev/null || true
+        rm -f "$tee_pipe"
+        exec 3>&- 4>&-
+
+        if [[ -n $opened_tui_fd ]]; then
+            exec {opened_tui_fd}>&-
+        fi
+        TUI_FD=$previous_tui_fd
         return 1
     fi
 
-    log_success "All dependencies up to date!"
+    if (( TUI_FD >= 0 )); then
+        printf '\033[s' >&$TUI_FD
+    fi
+
+    execute_project_steps "$force" "$rails_cmd" "failed_steps" "warning_steps" "warning_messages" "interrupted"
+
+    cleanup_and_summarize "$log_file" "$opened_tui_fd" "$tee_pid" "$tee_pipe" "$previous_tui_fd" \
+        "failed_steps" "warning_steps" "warning_messages" "$interrupted"
 }
 
+# List all available projects and special directories
+# Shows both special dirs (dotfiles, dev, writing) and indexed projects
+# Flags: -d/--dev, -w/--writing (filter by category)
 cmd_list() {
+    check_and_show_help "list" "dv" "$@" && return 0
+
     local filter_dev=false
     local filter_writing=false
 
@@ -466,6 +1329,117 @@ cmd_list() {
     unset -f should_include_path
 }
 
+# View or manage log files from 'dv up' runs
+# Subcommands: view (default), clean
+# Clean flags: -a/--all (all ages), -ap/--all-projects, -A (both)
+cmd_logs() {
+    check_and_show_help "logs" "dv" "$@" && return 0
+
+    local subcommand="${1:-view}"
+    shift $(( $# ? 1 : 0 ))
+
+    case "$subcommand" in
+        clean)
+            local clean_all=false
+            local all_projects=false
+            for arg in "$@"; do
+                case "$arg" in
+                    --all|-a)
+                        clean_all=true
+                        ;;
+                    --all-projects|-ap)
+                        all_projects=true
+                        ;;
+                    -A)
+                        # Shorthand for both flags
+                        clean_all=true
+                        all_projects=true
+                        ;;
+                    *)
+                        log_error "Unknown option: $arg"
+                        log_info "Usage: dv logs clean [-a|--all] [-ap|--all-projects] [-A]"
+                        return 1
+                        ;;
+                esac
+            done
+
+            # Determine scope and action
+            local project_name=""
+            if [[ $all_projects == false ]]; then
+                project_name=$(get_project_name)
+            fi
+
+            # Build warning message based on flags
+            local warning_msg=""
+            if [[ $all_projects == true && $clean_all == true ]]; then
+                warning_msg="This will delete ALL logs for ALL projects (regardless of age)"
+            elif [[ $all_projects == true ]]; then
+                warning_msg="This will delete logs older than $DV_LOG_RETENTION_DAYS days for ALL projects"
+            elif [[ $clean_all == true ]]; then
+                warning_msg="This will delete ALL logs for project: $project_name (regardless of age)"
+            else
+                # No confirmation needed for single project old logs
+                cleanup_old_logs "$project_name"
+                log_success "Old logs cleaned for project: $project_name"
+                return 0
+            fi
+
+            # Prompt for confirmation on destructive operations
+            log_warning "$warning_msg"
+            printf "Continue? (y/N): "
+            read -r response
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                cleanup_old_logs "$project_name" "$clean_all"
+                if [[ $all_projects == true && $clean_all == true ]]; then
+                    log_success "All logs deleted for all projects"
+                elif [[ $all_projects == true ]]; then
+                    log_success "Old logs cleaned for all projects"
+                else
+                    log_success "All logs deleted for project: $project_name"
+                fi
+            else
+                log_info "Cleanup cancelled"
+            fi
+            ;;
+
+        view|"")
+            # View latest log
+            local log_path
+            log_path=$(get_log_path)
+
+            if [[ -z "$log_path" ]]; then
+                log_error "No logs found for current project: $(get_project_name)"
+                log_info "Logs are created when you run 'dv up'"
+                return 1
+            fi
+
+            if [[ ! -f "$log_path" ]]; then
+                log_error "Log file not found: $log_path"
+                return 1
+            fi
+
+            log_info "Viewing latest log: $log_path"
+            echo ""
+
+            # Use less for viewing if available, otherwise cat
+            if command -v less >/dev/null 2>&1; then
+                less "$log_path"
+            else
+                cat "$log_path"
+            fi
+            ;;
+
+        *)
+            log_error "Unknown subcommand: $subcommand"
+            log_info "Usage: dv logs [view|clean] [options]"
+            return 1
+            ;;
+    esac
+}
+
+# Pass-through execution for project bin/ and toys commands
+# Allows 'dv <command>' to run 'bin/<command>' or 'toys <command>'
+# Priority: bin/ > toys
 cmd_passthrough() {
     local command_name="$1"
     shift
@@ -477,13 +1451,28 @@ cmd_passthrough() {
         return 1
     fi
 
-    # Execute the resolved command with all remaining arguments
-    # resolved_command may be "bin/foo" or "toys foo", so we need to split it properly
     log_info "Running: $resolved_command $*"
     eval "$resolved_command \"\$@\""
 }
 
+# Main entry point: parse global flags and dispatch to command functions
 dv_main() {
+    local -a args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --verbose|-v)
+                export VERBOSE=true
+                shift
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    set -- "${args[@]}"
+
     local command="${1:-help}"
     shift $(( $# ? 1 : 0 ))
     case "$command" in
@@ -496,11 +1485,13 @@ dv_main() {
         list|ls)
             cmd_list "$@"
             ;;
+        logs)
+            cmd_logs "$@"
+            ;;
         help|h|--help|-h)
             show_help
             ;;
         *)
-            # Try passthrough to bin/ or toys
             cmd_passthrough "$command" "$@"
             ;;
     esac
