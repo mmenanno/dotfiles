@@ -1,0 +1,2086 @@
+#!/usr/bin/env zsh
+# netfix - Network diagnostics and repair tool for macOS
+# ======================================================
+# Provides comprehensive network diagnostics with timeout protection
+# and progressive repair options for persistent network issues.
+#
+# All network-dependent operations have aggressive timeouts to prevent
+# hanging when the network is completely broken.
+
+emulate -L zsh
+setopt err_exit pipe_fail extended_glob
+
+0=${(%):-%N}
+SCRIPT_DIR=${0:A:h}
+
+source "$SCRIPT_DIR/shared"
+
+export USE_ICON_STYLE=true
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# Timeout values (in seconds) for various operations
+typeset -gr TIMEOUT_DNS=3
+typeset -gr TIMEOUT_PING=5
+typeset -gr TIMEOUT_GENERAL=3
+
+# Network interface to check (Wi-Fi is en0 on most Macs)
+typeset -gr WIFI_INTERFACE="en0"
+typeset -gr WIFI_SERVICE="Wi-Fi"
+
+# Test connectivity endpoints
+typeset -gr TEST_IP="8.8.8.8"          # Google DNS (IP to avoid DNS lookup)
+typeset -gr TEST_HOST="google.com"     # For DNS resolution test
+
+# Sleep durations for various network operations (in seconds)
+typeset -gr SLEEP_DRIVER_RESET=2          # Time for driver to fully reset state
+typeset -gr SLEEP_SERVICE_CYCLE=3         # Time for networksetup to cycle service
+typeset -gr SLEEP_DHCP_HANDSHAKE=2        # Time for DHCP DORA handshake
+typeset -gr SLEEP_DAEMON_RESPAWN=2        # Time for launchd to respawn daemons
+typeset -gr SLEEP_INTERFACE_STABILIZE=2   # Time for interface to stabilize
+typeset -gr SLEEP_CONNECTIVITY_TEST=5     # Time to wait before testing connectivity after fix
+
+# ============================================================================
+# FIX REGISTRY
+# ============================================================================
+# Metadata for named fixes and progressive levels
+
+# Fix names and descriptions
+typeset -gA FIX_NAMES=(
+    [dns]="DNS flush and DHCP renewal"
+    [wifi]="Wi-Fi service restart"
+    [interface]="Interface hard reset + cache clearing"
+    [daemons]="Network daemon restart (mDNS, configd, airportd, etc.)"
+    [config]="Deep configuration reset (WARNING: requires Wi-Fi rejoin)"
+    [tailscale]="Tailscale VPN connection restart"
+    [tailscale-app]="Tailscale macOS app restart (when daemon is hung)"
+)
+
+# Progressive level descriptions
+typeset -gA PROGRESSIVE_NAMES=(
+    [quick]="DNS fix only (safest, fastest)"
+    [moderate]="DNS → Wi-Fi restart (fixes most issues)"
+    [aggressive]="DNS → Wi-Fi → Interface reset (clears caches)"
+    [deep]="DNS → Wi-Fi → Interface → Daemon restart (comprehensive)"
+    [nuclear]="Full reset: Config → Daemons → Interface → Wi-Fi → DNS"
+)
+
+# Fix execution order (for progressive modes)
+typeset -gA FIX_ORDER=(
+    [dns]=1
+    [wifi]=2
+    [interface]=3
+    [daemons]=4
+    [config]=5
+    [tailscale]=6
+)
+
+# Sudo requirements for each fix
+typeset -gA FIX_NEEDS_SUDO=(
+    [dns]=1
+    [wifi]=0
+    [interface]=1
+    [daemons]=1
+    [config]=1
+    [tailscale]=0
+    [tailscale-app]=0
+)
+
+# Progressive level definitions (which fixes to run)
+typeset -gA PROGRESSIVE_FIXES=(
+    [quick]="dns"
+    [moderate]="dns wifi"
+    [aggressive]="dns wifi interface"
+    [deep]="dns wifi interface daemons"
+    [nuclear]="config daemons interface wifi dns"  # Reverse order: clean slate → rebuild
+)
+
+# Smart fix mapping: Maps diagnostic failures to recommended fix sequences
+# Format: "primary,secondary" or "progressive_level"
+typeset -gA SMART_FIX_MAP=(
+    [interface_down]="wifi"
+    [no_ip]="dns"
+    [no_gateway]="dns"
+    [gateway_unreachable]="moderate"
+    [no_internet]="moderate"
+    [dns_failure]="dns"
+    [network_ok]=""
+)
+
+# ============================================================================
+# COMMAND HELP METADATA
+# ============================================================================
+
+typeset -gA CMD_HELP_ARGS=(
+    [diagnose]="[--verbose|-v]"
+    [status]=""
+    [fix]="[NAME|LEVEL] [--dry-run|-d]"
+    [export]="[filename]"
+)
+
+typeset -gA CMD_HELP_DESC=(
+    [diagnose]="Run comprehensive network diagnostics with timeout protection
+• Checks interface status, DNS, routing, and connectivity
+• All operations timeout quickly to prevent hanging
+• Use -v/--verbose for detailed command output
+• Completes in < 15 seconds even with broken network"
+
+    [status]="Quick network health check (< 10 seconds)
+• Shows interface status, connectivity, and DNS
+• Provides actionable recommendations
+• Safe to run repeatedly"
+
+    [fix]="Apply network fixes - interactive, named, or progressive
+
+INTERACTIVE MODE (default when no fix specified):
+  netfix fix   Smart diagnostic-driven workflow with recommendations
+
+INDIVIDUAL NAMED FIXES:
+  dns          DNS flush + DHCP renewal (safest)
+  wifi         Wi-Fi service restart
+  interface    Interface hard reset + cache clearing (ARP/NDP/routing)
+  daemons      Restart network daemons (mDNS, configd, airportd, etc.)
+  config       Deep config reset (WARNING: requires Wi-Fi rejoin)
+
+PROGRESSIVE LEVELS (run multiple fixes with testing):
+  quick        dns
+  moderate     dns → wifi
+  aggressive   dns → wifi → interface
+  deep         dns → wifi → interface → daemons
+  nuclear      config → daemons → interface → wifi → dns
+
+OPTIONS:
+  --dry-run    Preview actions without executing"
+
+    [export]="Save diagnostic output to file
+• Default filename: netfix-diagnostics-YYYYMMDD-HHMMSS.txt
+• Or specify custom filename
+• Useful for troubleshooting and support requests"
+)
+
+typeset -gA CMD_HELP_EXAMPLES=(
+    [diagnose]="netfix diagnose           # Run full diagnostics
+netfix diagnose -v        # Verbose diagnostics"
+
+    [status]="netfix status            # Quick health check"
+
+    [fix]="netfix fix                   # Interactive mode (recommended!)
+netfix fix dns              # Just flush DNS + renew DHCP
+netfix fix moderate         # Try dns then wifi with testing
+netfix fix nuclear          # Nuclear option - all fixes
+netfix fix interface --dry-run  # Preview interface reset"
+
+    [export]="netfix export            # Export with default filename
+netfix export net.txt   # Export with custom filename"
+)
+
+# ============================================================================
+# SYSTEM INTERROGATION UTILITIES
+# ============================================================================
+# Low-level functions to query network interface state
+
+# Execute command with timeout
+# Args: timeout_seconds, command, [args...]
+# Returns: command exit code, or 124 if timeout
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "${timeout_sec}s" "$@" 2>/dev/null
+        return $?
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "${timeout_sec}s" "$@" 2>/dev/null
+        return $?
+    else
+        # Fallback: run without timeout if timeout command not available
+        "$@" 2>/dev/null
+        return $?
+    fi
+}
+
+# Format elapsed time indicator for timed-out operations
+format_timeout() {
+    echo "${DIM}⏱️  Timed out (${1}s)${NC}"
+}
+
+# Format elapsed time for completed operations
+# Args: elapsed_seconds, context (optional: "step" or "total", default "step")
+format_elapsed() {
+    local elapsed="$1"
+    local context="${2:-step}"
+
+    local time_str
+    if (( elapsed < 1 )); then
+        time_str="< 1s"
+    else
+        time_str="${elapsed}s"
+    fi
+
+    if [[ "$context" == "total" ]]; then
+        echo "${DIM}(total time: $time_str)${NC}"
+    else
+        echo "${DIM}(completed in $time_str)${NC}"
+    fi
+}
+
+# Print step timing footer (for diagnostic functions)
+# Args: start_time (from $SECONDS)
+print_step_timing() {
+    local start_time=$1
+    local elapsed=$((SECONDS - start_time))
+    echo "  $(format_elapsed $elapsed)"
+    echo ""
+}
+
+# Print fix success message with surrounding blank lines
+# Args: success_message
+print_fix_success() {
+    local message="$1"
+    echo ""
+    log_success "$message"
+    echo ""
+}
+
+# Check if Tailscale is available, show error and installation instructions if not
+# Returns: 0 if available, 1 if not available
+require_tailscale() {
+    if ! tailscale_is_available; then
+        log_error "Tailscale CLI not found"
+        echo ""
+        log_info "Install Tailscale from: https://tailscale.com/download"
+        echo ""
+        return 1
+    fi
+    return 0
+}
+
+# Get default gateway IP
+get_gateway_ip() {
+    setopt local_options no_err_exit
+    local gw
+    gw=$(/sbin/route -n get default 2>/dev/null | grep 'gateway:' | awk '{print $2}')
+    if [[ -n "$gw" && "$gw" != "link#"* ]]; then
+        echo "$gw"
+    else
+        echo ""
+    fi
+}
+
+# Check if interface is up
+is_interface_up() {
+    setopt local_options no_err_exit
+    /sbin/ifconfig "$WIFI_INTERFACE" 2>/dev/null | /usr/bin/grep -q "status: active"
+    return $?
+}
+
+# Get current IP address
+get_ip_address() {
+    setopt local_options no_err_exit
+    /sbin/ifconfig "$WIFI_INTERFACE" 2>/dev/null | /usr/bin/awk '/inet / {print $2}' || echo ""
+}
+
+# Check if IP is self-assigned (169.254.x.x = DHCP failure)
+is_self_assigned_ip() {
+    local ip="$1"
+    [[ "$ip" =~ ^169\.254\. ]]
+}
+
+# Test internet connectivity with quick ping
+# Returns: 0 if connectivity works, 1 if broken
+test_connectivity() {
+    setopt local_options no_err_exit
+    run_with_timeout 2 /sbin/ping -c 1 -t 2 "$TEST_IP" >/dev/null 2>&1
+    return $?
+}
+
+# Test connectivity and report success with custom message
+# Args: fix_name (for success message)
+# Returns: 0 if connected, 1 if broken
+test_and_report_success() {
+    local fix_name="$1"
+    if test_connectivity; then
+        log_success "Network restored after $fix_name!"
+        return 0
+    fi
+    return 1
+}
+
+# Restart a single network daemon with logging
+# Args: daemon_name, description, requires_sudo (0/1), counter_var_name
+# Returns: 0 if restarted successfully, 1 if not running
+restart_daemon() {
+    local daemon="$1"
+    local description="$2"
+    local requires_sudo="${3:-1}"
+    local counter_var="$4"
+
+    log_info "  Restarting $daemon ($description)..."
+
+    local cmd
+    if [[ $requires_sudo -eq 1 ]]; then
+        cmd=(sudo /usr/bin/killall -HUP)
+    else
+        cmd=(/usr/bin/killall -HUP)
+    fi
+
+    if "${cmd[@]}" "$daemon" 2>/dev/null; then
+        log_success "  $daemon restarted"
+        [[ -n "$counter_var" ]] && eval "((${counter_var}++))"
+        return 0
+    else
+        log_info "  ${DIM}$daemon not running${NC}"
+        return 1
+    fi
+}
+
+# Show guidance when all nuclear fixes fail
+show_nuclear_failure_guidance() {
+    echo ""
+    log_error "Network issues persist after all automated fixes"
+    echo ""
+    echo "  ${BOLD}${YELLOW}Next steps:${NC}"
+    echo "  1. Check if other devices can connect (router issue?)"
+    echo "  2. Try moving closer to router (signal strength)"
+    echo "  3. Restart your router/access point"
+    echo "  4. ${BOLD}Restart your computer${NC} - this often fixes stuck network daemons"
+    echo ""
+    log_info "If issue persists after restart, there may be a hardware problem"
+    echo ""
+}
+
+# ============================================================================
+# NETWORK DIAGNOSTICS
+# ============================================================================
+# Layer-by-layer network health checks (Interface → IP → Gateway → Internet → DNS)
+
+# Detect if Tailscale or other VPN is running
+detect_vpn() {
+    setopt local_options no_err_exit
+
+    # Check for Tailscale (use status command - most reliable)
+    if command -v tailscale >/dev/null 2>&1; then
+        if run_with_timeout $TIMEOUT_GENERAL tailscale status >/dev/null 2>&1; then
+            echo "tailscale"
+            return 0
+        fi
+    fi
+
+    # Check for other VPN interfaces (utun devices)
+    if /sbin/ifconfig | /usr/bin/grep -q "^utun" 2>/dev/null; then
+        echo "vpn"
+        return 0
+    fi
+
+    echo ""
+    return 1
+}
+
+# ============================================================================
+# TAILSCALE MANAGEMENT
+# ============================================================================
+
+# Check if Tailscale CLI is available
+tailscale_is_available() {
+    command -v tailscale >/dev/null 2>&1
+}
+
+# Check if Tailscale is connected
+tailscale_is_connected() {
+    setopt local_options no_err_exit
+    tailscale_is_available && run_with_timeout $TIMEOUT_GENERAL tailscale status >/dev/null 2>&1
+}
+
+# Disconnect from Tailscale
+tailscale_disconnect() {
+    setopt local_options no_err_exit
+
+    if ! tailscale_is_available; then
+        log_error "Tailscale CLI not found"
+        return 1
+    fi
+
+    if ! tailscale_is_connected; then
+        log_info "Tailscale already disconnected"
+        return 0
+    fi
+
+    log_info "Disconnecting from Tailscale..."
+    if run_with_timeout $TIMEOUT_GENERAL tailscale down 2>/dev/null; then
+        log_success "Tailscale disconnected"
+        return 0
+    else
+        log_error "Failed to disconnect Tailscale"
+        return 1
+    fi
+}
+
+# Connect to Tailscale
+tailscale_connect() {
+    setopt local_options no_err_exit
+
+    if ! tailscale_is_available; then
+        log_error "Tailscale CLI not found"
+        return 1
+    fi
+
+    if tailscale_is_connected; then
+        log_info "Tailscale already connected"
+        return 0
+    fi
+
+    log_info "Connecting to Tailscale..."
+    if run_with_timeout $TIMEOUT_GENERAL tailscale up 2>/dev/null; then
+        log_success "Tailscale connected"
+        return 0
+    else
+        log_error "Failed to connect Tailscale"
+        return 1
+    fi
+}
+
+# Restart Tailscale connection
+tailscale_restart() {
+    log_info "Restarting Tailscale..."
+    tailscale_disconnect
+    sleep $SLEEP_SERVICE_CYCLE
+    tailscale_connect
+}
+
+# Restart Tailscale macOS app (useful when daemon is hung)
+# This quits and restarts the actual Tailscale.app, not just the connection
+tailscale_restart_app() {
+    setopt local_options no_err_exit
+
+    log_info "Restarting Tailscale app..."
+
+    # Check if Tailscale app is running
+    local app_running=0
+    if pgrep -x "Tailscale" >/dev/null 2>&1; then
+        app_running=1
+        log_info "  Quitting Tailscale app..."
+
+        # Try graceful quit first using osascript
+        if osascript -e 'quit app "Tailscale"' 2>/dev/null; then
+            log_success "  App quit gracefully"
+        else
+            # Force quit if graceful quit fails
+            log_warning "  Graceful quit failed, force quitting..."
+            if killall -9 "Tailscale" 2>/dev/null; then
+                log_success "  App force quit"
+            else
+                log_error "  Failed to quit Tailscale app"
+                return 1
+            fi
+        fi
+
+        # Wait for app to fully quit
+        sleep 2
+    else
+        log_info "  Tailscale app not currently running"
+    fi
+
+    # Start Tailscale app
+    log_info "  Starting Tailscale app..."
+    if open -a Tailscale 2>/dev/null; then
+        log_success "  Tailscale app started"
+
+        # Wait for app to initialize
+        log_info "  Waiting for app to initialize..."
+        sleep 3
+
+        # Verify app started
+        if pgrep -x "Tailscale" >/dev/null 2>&1; then
+            log_success "  Tailscale app is running"
+            return 0
+        else
+            log_warning "  App may still be starting up"
+            return 0
+        fi
+    else
+        log_error "  Failed to start Tailscale app"
+        log_info "  Is Tailscale installed in /Applications?"
+        return 1
+    fi
+}
+
+# Get hardware port name for interface
+get_hardware_port_name() {
+    local interface="$1"
+    setopt local_options no_err_exit
+    /usr/sbin/networksetup -listallhardwareports 2>/dev/null | \
+        /usr/bin/awk -v iface="$interface" '
+            /^Hardware Port:/ {port=$0; sub(/^Hardware Port: /, "", port)}
+            /^Device:/ && $2 == iface {print port; exit}
+        '
+}
+
+# Check interface hardware and service status
+diagnose_interface() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Interface Status:"
+    echo ""
+
+    # Get hardware port name
+    local hardware_port
+    hardware_port=$(get_hardware_port_name "$WIFI_INTERFACE")
+    local interface_label="${WIFI_INTERFACE}"
+    if [[ -n "$hardware_port" ]]; then
+        interface_label="${hardware_port} (${WIFI_INTERFACE})"
+    fi
+
+    if is_interface_up; then
+        log_success "  Interface $interface_label is active"
+    else
+        log_error "  Interface $interface_label is not active"
+    fi
+
+    local ip
+    ip=$(get_ip_address)
+    if [[ -n "$ip" ]]; then
+        if is_self_assigned_ip "$ip"; then
+            log_warning "  IP Address: $ip ${YELLOW}(self-assigned - DHCP may have failed)${NC}"
+        else
+            log_success "  IP Address: $ip"
+        fi
+    else
+        log_error "  IP Address: Not assigned"
+    fi
+
+    local service_enabled
+    service_enabled=$(/usr/sbin/networksetup -getnetworkserviceenabled "$WIFI_SERVICE" 2>/dev/null || echo "")
+    if [[ "$service_enabled" == "Enabled" ]]; then
+        log_success "  Service '$WIFI_SERVICE' is enabled"
+    else
+        log_warning "  Service '$WIFI_SERVICE' is disabled or not found"
+    fi
+
+    # Current network name (only check if Wi-Fi interface is up)
+    if is_interface_up; then
+        local network_name
+        local rssi
+
+        # Enable verbose mode for ipconfig (persists, so safe to call every time)
+        sudo /usr/sbin/ipconfig setverbose 1 >/dev/null 2>&1
+
+        # Get SSID using ipconfig (requires sudo to get non-redacted version)
+        network_name=$(sudo /usr/sbin/ipconfig getsummary "$WIFI_INTERFACE" 2>/dev/null | /usr/bin/grep ' SSID' | /usr/bin/awk '{print $3}')
+
+        # Get signal strength from wdutil if available
+        if command -v wdutil >/dev/null 2>&1; then
+            rssi=$(sudo wdutil info 2>/dev/null | /usr/bin/awk '/RSSI/{print $3, $4; exit}')
+        fi
+
+        # Check if we got a real network name
+        if [[ -n "$network_name" && "$network_name" != "<redacted>" ]]; then
+            if [[ -n "$rssi" ]]; then
+                log_success "  Connected to: $network_name ${DIM}($rssi)${NC}"
+            else
+                log_success "  Connected to: $network_name"
+            fi
+        else
+            # Interface is up but no network name - could be hotspot, USB tethering, or other
+            local check_ip
+            check_ip=$(get_ip_address)
+            if [[ -n "$check_ip" ]]; then
+                if is_self_assigned_ip "$check_ip"; then
+                    log_info "  Wi-Fi powered on but not connected to network"
+                else
+                    log_success "  Connected (network name unavailable)"
+                    log_info "  ${DIM}Interface active with valid IP - may be hotspot or USB tethering${NC}"
+                fi
+            else
+                log_info "  Wi-Fi powered on but not connected to network"
+            fi
+        fi
+    fi
+
+    # VPN detection
+    local vpn_type
+    vpn_type=$(detect_vpn)
+    if [[ -n "$vpn_type" ]]; then
+        if [[ "$vpn_type" == "tailscale" ]]; then
+            log_info "  ${CYAN}Tailscale VPN detected${NC}"
+        else
+            log_info "  ${CYAN}VPN connection detected${NC}"
+        fi
+    fi
+
+    print_step_timing $start_time
+}
+
+# Check DNS configuration and resolution
+diagnose_dns() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "DNS Status:"
+    echo ""
+
+    local dns_servers
+    dns_servers=$(/usr/sbin/networksetup -getdnsservers "$WIFI_SERVICE" 2>/dev/null || echo "")
+    if [[ -n "$dns_servers" && "$dns_servers" != "There aren't any DNS Servers set"* ]]; then
+        log_success "  DNS Servers configured:"
+        echo "$dns_servers" | while IFS= read -r server; do
+            echo "    - $server"
+        done
+    else
+        log_info "  No explicit DNS servers (using DHCP/system defaults)"
+    fi
+
+    # Test DNS resolution with timeout
+    log_info "  Testing DNS resolution for $TEST_HOST..."
+
+    if run_with_timeout $TIMEOUT_DNS /usr/bin/nslookup "$TEST_HOST" >/dev/null 2>&1; then
+        log_success "  DNS resolution works"
+    else
+        local exit_code=$?
+        if [[ $exit_code -eq 124 ]]; then
+            log_error "  DNS resolution failed $(format_timeout $TIMEOUT_DNS)"
+        else
+            log_error "  DNS resolution failed"
+        fi
+    fi
+
+    print_step_timing $start_time
+}
+
+# Check routing and gateway connectivity
+diagnose_routing() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Routing & Gateway:"
+    echo ""
+
+    local gateway
+    gateway=$(get_gateway_ip)
+
+    if [[ -n "$gateway" ]]; then
+        log_success "  Default gateway: $gateway"
+
+        log_info "  Testing gateway connectivity..."
+        if run_with_timeout $TIMEOUT_PING /sbin/ping -c 2 -t 3 "$gateway" >/dev/null 2>&1; then
+            log_success "  Gateway is reachable"
+        else
+            local exit_code=$?
+            if [[ $exit_code -eq 124 ]]; then
+                log_error "  Gateway unreachable $(format_timeout $TIMEOUT_PING)"
+            else
+                log_error "  Gateway unreachable"
+            fi
+        fi
+    else
+        local vpn_type
+        vpn_type=$(detect_vpn)
+        if [[ -n "$vpn_type" ]]; then
+            if [[ "$vpn_type" == "tailscale" ]]; then
+                log_info "  ${CYAN}No local gateway - Tailscale handles routing${NC}"
+            else
+                log_info "  ${CYAN}No local gateway - VPN may be handling routing${NC}"
+            fi
+        else
+            log_error "  No default gateway configured"
+        fi
+    fi
+
+    print_step_timing $start_time
+}
+
+# Check internet connectivity
+diagnose_connectivity() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Internet Connectivity:"
+    echo ""
+
+    log_info "  Testing connection to $TEST_IP..."
+    if run_with_timeout $TIMEOUT_PING /sbin/ping -c 2 -t 3 "$TEST_IP" >/dev/null 2>&1; then
+        log_success "  Internet connectivity works"
+    else
+        local exit_code=$?
+        if [[ $exit_code -eq 124 ]]; then
+            log_error "  No internet connectivity $(format_timeout $TIMEOUT_PING)"
+        else
+            log_error "  No internet connectivity"
+        fi
+    fi
+
+    print_step_timing $start_time
+}
+
+# Check network statistics for errors
+diagnose_statistics() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Network Statistics ($WIFI_INTERFACE):"
+    echo ""
+
+    # Get interface statistics (with -b for byte counts) - with timeout
+    local stats
+    stats=$(run_with_timeout $TIMEOUT_GENERAL /usr/sbin/netstat -I "$WIFI_INTERFACE" -b 2>/dev/null | /usr/bin/tail -n 1 || echo "")
+
+    if [[ -n "$stats" ]]; then
+        # Parse netstat output fields (space-separated):
+        # Field 5: input packets  | Field 6: input errors
+        # Field 8: output packets | Field 9: output errors
+        # Field 11: collisions
+        # Handle both numeric values and dashes (not available)
+        local ierrs oerrs ipkts opkts
+        ierrs=$(echo "$stats" | /usr/bin/awk '{print $6}')
+        oerrs=$(echo "$stats" | /usr/bin/awk '{print $9}')
+        ipkts=$(echo "$stats" | /usr/bin/awk '{print $5}')
+        opkts=$(echo "$stats" | /usr/bin/awk '{print $8}')
+
+        [[ "$ierrs" == "-" ]] && ierrs="0"
+        [[ "$oerrs" == "-" ]] && oerrs="0"
+
+        if [[ "$ierrs" =~ ^[0-9]+$ ]] && [[ "$oerrs" =~ ^[0-9]+$ ]]; then
+            if [[ $ierrs -eq 0 && $oerrs -eq 0 ]]; then
+                log_success "  No packet errors detected"
+            else
+                log_warning "  Packet errors: ${ierrs} input, ${oerrs} output"
+            fi
+
+            if [[ "$ipkts" =~ ^[0-9]+$ ]] && [[ "$opkts" =~ ^[0-9]+$ ]]; then
+                log_info "  Packets: ${ipkts} received, ${opkts} sent"
+            fi
+        else
+            log_info "  Statistics not available for this interface"
+        fi
+
+        local collisions
+        collisions=$(echo "$stats" | /usr/bin/awk '{print $11}')
+        [[ "$collisions" == "-" ]] && collisions="0"
+
+        if [[ "$collisions" =~ ^[0-9]+$ ]] && [[ $collisions -gt 0 ]]; then
+            log_warning "  Network collisions detected: $collisions"
+        fi
+    else
+        log_info "  No statistics available for $WIFI_INTERFACE"
+    fi
+
+    # Extract Wi-Fi diagnostics from wdutil output using AWK range patterns:
+    # Pattern /HEADER/,/SEPARATOR/ captures all lines between header and separator
+    # Example: "WIFI FAULTS LAST HOUR" section until "————" line
+    if command -v wdutil >/dev/null 2>&1; then
+        local wdutil_output
+        wdutil_output=$(sudo wdutil info 2>/dev/null)
+
+        local faults
+        faults=$(echo "$wdutil_output" | /usr/bin/awk '/WIFI FAULTS LAST HOUR/,/^————/ {if ($0 !~ /WIFI FAULTS|^————/ && NF > 0) print}' | grep -v "None")
+        if [[ -n "$faults" ]]; then
+            log_warning "  Wi-Fi faults detected in last hour:"
+            echo "$faults" | while IFS= read -r line; do
+                log_warning "    $line"
+            done
+        fi
+
+        # Check for Wi-Fi recoveries in the last hour
+        local recoveries
+        recoveries=$(echo "$wdutil_output" | /usr/bin/awk '/WIFI RECOVERIES LAST HOUR/,/^————/ {if ($0 !~ /WIFI RECOVERIES|^————/ && NF > 0) print}' | grep -v "None")
+        if [[ -n "$recoveries" ]]; then
+            log_info "  Wi-Fi recoveries in last hour:"
+            echo "$recoveries" | while IFS= read -r line; do
+                log_info "    $line"
+            done
+        fi
+    fi
+
+    print_step_timing $start_time
+}
+
+# Check Tailscale VPN status and configuration
+diagnose_tailscale() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Tailscale VPN:"
+    echo ""
+
+    if ! tailscale_is_available; then
+        log_info "  Tailscale CLI not installed"
+        print_step_timing $start_time
+        return 0
+    fi
+
+    if ! tailscale_is_connected; then
+        log_info "  Tailscale not connected"
+        print_step_timing $start_time
+        return 0
+    fi
+
+    log_success "  Tailscale connected"
+
+    # Get Tailscale IPs
+    local ts_ips
+    ts_ips=$(run_with_timeout $TIMEOUT_GENERAL tailscale ip 2>/dev/null)
+    if [[ -n "$ts_ips" ]]; then
+        echo "$ts_ips" | while IFS= read -r ip; do
+            log_info "  Tailscale IP: $ip"
+        done
+    fi
+
+    # Get DNS status (brief)
+    if run_with_timeout $TIMEOUT_GENERAL tailscale dns status >/dev/null 2>&1; then
+        local dns_enabled
+        dns_enabled=$(run_with_timeout $TIMEOUT_GENERAL tailscale dns status 2>/dev/null | grep "Tailscale DNS:" | awk '{print $3}')
+        if [[ "$dns_enabled" == "enabled." ]]; then
+            log_success "  MagicDNS enabled"
+        else
+            log_info "  MagicDNS disabled"
+        fi
+    fi
+
+    # Get version
+    local version
+    version=$(run_with_timeout $TIMEOUT_GENERAL tailscale version 2>/dev/null | head -1)
+    if [[ -n "$version" ]]; then
+        log_info "  Version: ${DIM}$version${NC}"
+    fi
+
+    echo "  ${DIM}Run 'netfix ts check' for detailed network analysis${NC}"
+
+    print_step_timing $start_time
+}
+
+# ============================================================================
+# Network Diagnosis & Failure Mode Analysis
+# ============================================================================
+# Performs OSI layer analysis to identify failure point:
+#   Layer 1-2 (Physical/Link): Interface status, IP assignment
+#   Layer 3 (Network):         Gateway configuration and reachability
+#   Layer 4 (Transport):       Internet connectivity (ping test)
+#   Layer 5+ (Application):    DNS resolution
+#
+# Maps failures to recommended fix commands based on diagnostic results.
+
+# Identify network failure mode (returns failure code for smart mapping)
+# Returns: failure_code (interface_down, no_ip, no_gateway, gateway_unreachable, no_internet, dns_failure, network_ok)
+identify_failure_mode() {
+    setopt local_options no_err_exit
+
+    local has_interface has_ip has_gateway has_internet has_dns has_vpn
+    has_interface=false
+    has_ip=false
+    has_gateway=false
+    has_internet=false
+    has_dns=false
+    has_vpn=false
+
+    # Check each layer
+    is_interface_up && has_interface=true
+    [[ -n "$(get_ip_address)" ]] && has_ip=true
+    [[ -n "$(get_gateway_ip)" ]] && has_gateway=true
+    [[ -n "$(detect_vpn)" ]] && has_vpn=true
+    run_with_timeout $TIMEOUT_PING /sbin/ping -c 1 -t 2 "$TEST_IP" >/dev/null 2>&1 && has_internet=true
+    run_with_timeout $TIMEOUT_DNS /usr/bin/nslookup "$TEST_HOST" >/dev/null 2>&1 && has_dns=true
+
+    # Determine failure mode
+    if [[ "$has_interface" == false ]]; then
+        echo "interface_down"
+    elif [[ "$has_ip" == false ]]; then
+        echo "no_ip"
+    elif [[ "$has_gateway" == false ]] && [[ "$has_vpn" == false ]]; then
+        echo "no_gateway"
+    elif [[ "$has_internet" == false ]]; then
+        if [[ "$has_gateway" == true ]]; then
+            echo "gateway_unreachable"
+        else
+            echo "no_internet"
+        fi
+    elif [[ "$has_dns" == false ]]; then
+        echo "dns_failure"
+    else
+        echo "network_ok"
+    fi
+}
+
+# Display failure mode analysis with human-readable output
+diagnose_failure_mode() {
+    setopt local_options no_err_exit
+    local start_time=$SECONDS
+
+    log_info "Network Failure Analysis:"
+    echo ""
+
+    local failure_mode
+    failure_mode=$(identify_failure_mode)
+
+    local suggested_fix="${SMART_FIX_MAP[$failure_mode]}"
+
+    # Display problem and suggestion based on failure mode
+    case "$failure_mode" in
+        interface_down)
+            log_error "  Problem: Interface is down"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix wifi' to restart network service${NC}"
+            ;;
+        no_ip)
+            log_error "  Problem: No IP address assigned"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix dns' to renew DHCP lease${NC}"
+            ;;
+        no_gateway)
+            log_error "  Problem: No default gateway"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix dns' to renew DHCP lease${NC}"
+            ;;
+        gateway_unreachable)
+            log_error "  Problem: Gateway configured but unreachable"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix moderate' (dns → wifi)${NC}"
+            ;;
+        no_internet)
+            log_error "  Problem: No internet connectivity"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix moderate' (dns → wifi)${NC}"
+            ;;
+        dns_failure)
+            log_error "  Problem: Internet works but DNS resolution fails"
+            echo "  ${CYAN}Suggestion: Run 'netfix fix dns' to flush DNS cache${NC}"
+            ;;
+        network_ok)
+            log_success "  Network appears to be functioning normally"
+            local vpn_type
+            vpn_type=$(detect_vpn)
+            if [[ -n "$vpn_type" ]]; then
+                echo "  ${DIM}Note: VPN is handling some routing${NC}"
+            fi
+            ;;
+    esac
+
+    print_step_timing $start_time
+}
+
+# ============================================================================
+# NETWORK REPAIR FUNCTIONS
+# ============================================================================
+# Progressive fix levels from safest (dns) to most aggressive (config reset)
+# Note: macOS daemons require grace periods (sleep) to reload/reinitialize configs
+
+# DNS fix: Flush DNS cache + DHCP renewal (requires sudo)
+fix_dns() {
+    local dry_run="${1:-false}"
+
+    log_info "DNS: Flush cache + DHCP renewal"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would flush DNS cache${NC}"
+        echo "  ${DIM}[DRY RUN] Would renew DHCP lease for $WIFI_INTERFACE${NC}"
+        return 0
+    fi
+
+    # Flush DNS cache
+    log_info "  Flushing DNS cache..."
+    if sudo /usr/bin/dscacheutil -flushcache 2>/dev/null && \
+       sudo /usr/bin/killall -HUP mDNSResponder 2>/dev/null; then
+        log_success "  DNS cache flushed"
+    else
+        log_warning "  Failed to flush DNS cache (may need sudo)"
+    fi
+
+    # Renew DHCP lease
+    log_info "  Renewing DHCP lease..."
+    if sudo /usr/sbin/ipconfig set "$WIFI_INTERFACE" DHCP 2>/dev/null; then
+        log_success "  DHCP lease renewed"
+        sleep $SLEEP_DHCP_HANDSHAKE  # macOS ipconfig daemon needs time to complete DHCP handshake (DORA: Discover, Offer, Request, Ack)
+    else
+        log_error "  Failed to renew DHCP lease"
+        return 1
+    fi
+
+    print_fix_success "DNS fix applied"
+}
+
+# Wi-Fi service restart
+fix_wifi() {
+    local dry_run="${1:-false}"
+
+    log_info "Wi-Fi: Service restart"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would disable $WIFI_SERVICE${NC}"
+        echo "  ${DIM}[DRY RUN] Would wait 3 seconds${NC}"
+        echo "  ${DIM}[DRY RUN] Would enable $WIFI_SERVICE${NC}"
+        return 0
+    fi
+
+    log_info "  Disabling $WIFI_SERVICE..."
+    if /usr/sbin/networksetup -setnetworkserviceenabled "$WIFI_SERVICE" off 2>/dev/null; then
+        log_success "  Service disabled"
+    else
+        log_error "  Failed to disable service"
+        return 1
+    fi
+
+    log_info "  Waiting $SLEEP_SERVICE_CYCLE seconds..."
+    sleep $SLEEP_SERVICE_CYCLE
+
+    log_info "  Enabling $WIFI_SERVICE..."
+    if /usr/sbin/networksetup -setnetworkserviceenabled "$WIFI_SERVICE" on 2>/dev/null; then
+        log_success "  Service enabled"
+        sleep $SLEEP_INTERFACE_STABILIZE  # Allow networksetup to fully cycle service state before testing
+    else
+        log_error "  Failed to enable service"
+        return 1
+    fi
+
+    print_fix_success "Wi-Fi service restarted"
+}
+
+# Interface hard reset: Hardware-level interface reset + cache clearing (requires sudo)
+# More aggressive than service restart - resets at driver level and clears all cached mappings
+fix_interface() {
+    local dry_run="${1:-false}"
+
+    log_info "Interface: Hard reset + cache clearing"
+    echo ""
+    log_warning "  This requires sudo privileges"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would bring interface $WIFI_INTERFACE down${NC}"
+        echo "  ${DIM}[DRY RUN] Would clear ARP cache (IPv4 MAC mappings)${NC}"
+        echo "  ${DIM}[DRY RUN] Would clear NDP cache (IPv6 neighbor discovery)${NC}"
+        echo "  ${DIM}[DRY RUN] Would flush routing cache${NC}"
+        echo "  ${DIM}[DRY RUN] Would bring interface $WIFI_INTERFACE up${NC}"
+        echo "  ${DIM}[DRY RUN] Would renew DHCP lease${NC}"
+        return 0
+    fi
+
+    # Bring interface down at driver level
+    log_info "  Bringing interface $WIFI_INTERFACE down..."
+    if sudo /sbin/ifconfig "$WIFI_INTERFACE" down 2>/dev/null; then
+        log_success "  Interface brought down"
+    else
+        log_error "  Failed to bring interface down"
+        return 1
+    fi
+
+    sleep $SLEEP_DRIVER_RESET  # Allow driver to fully reset state
+
+    # Clear all network caches while interface is down
+    log_info "  Clearing ARP cache (IPv4 MAC address mappings)..."
+    if sudo /usr/sbin/arp -d -a 2>/dev/null; then
+        log_success "  ARP cache cleared"
+    else
+        log_warning "  Failed to clear ARP cache"
+    fi
+
+    log_info "  Clearing NDP cache (IPv6 neighbor discovery)..."
+    if sudo /usr/sbin/ndp -c 2>/dev/null; then
+        log_success "  NDP cache cleared"
+    else
+        log_warning "  Failed to clear NDP cache"
+    fi
+
+    log_info "  Flushing routing cache..."
+    if sudo /sbin/route -n flush 2>/dev/null; then
+        log_success "  Routing cache flushed"
+    else
+        log_warning "  Failed to flush routing cache"
+    fi
+
+    # Bring interface back up
+    log_info "  Bringing interface $WIFI_INTERFACE up..."
+    if sudo /sbin/ifconfig "$WIFI_INTERFACE" up 2>/dev/null; then
+        log_success "  Interface brought up"
+    else
+        log_error "  Failed to bring interface up"
+        return 1
+    fi
+
+    sleep $SLEEP_INTERFACE_STABILIZE  # Allow interface to stabilize
+
+    # Renew DHCP lease
+    log_info "  Renewing DHCP lease..."
+    if sudo /usr/sbin/ipconfig set "$WIFI_INTERFACE" DHCP 2>/dev/null; then
+        log_success "  DHCP lease renewed"
+        sleep $SLEEP_DHCP_HANDSHAKE  # macOS ipconfig daemon needs time to complete DHCP handshake (DORA: Discover, Offer, Request, Ack)
+    else
+        log_error "  Failed to renew DHCP lease"
+        return 1
+    fi
+
+    print_fix_success "Interface hard reset complete"
+}
+
+# Network daemons restart (requires sudo)
+# Restarts all critical network-related system daemons including DNS, configuration,
+# Wi-Fi management, and diagnostic services
+fix_daemons() {
+    local dry_run="${1:-false}"
+    setopt local_options no_err_exit
+
+    log_info "Daemons: Restart network services"
+    echo ""
+    log_warning "  This requires sudo privileges"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would restart mDNSResponder (DNS)${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart mDNSResponderHelper${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart configd (network config)${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart airportd (Wi-Fi management)${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart symptomsd (network health)${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart symptomsd-diag${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart wifianalyticsd${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart networkserviceproxy${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart optional daemons if running${NC}"
+        return 0
+    fi
+
+    local restarted=0
+
+    # Core DNS daemons (critical - track failures)
+    if ! restart_daemon "mDNSResponder" "DNS resolution" 1 "restarted"; then
+        log_warning "  Failed to restart mDNSResponder (critical)"
+    fi
+    restart_daemon "mDNSResponderHelper" "DNS helper" 1 "restarted"
+
+    # Core network configuration daemon (critical - track failures)
+    if ! restart_daemon "configd" "network configuration" 1 "restarted"; then
+        log_warning "  Failed to restart configd (critical)"
+    fi
+
+    # Critical Wi-Fi daemons
+    restart_daemon "airportd" "Wi-Fi management" 1 "restarted"
+    restart_daemon "symptomsd" "network health monitoring" 1 "restarted"
+    restart_daemon "symptomsd-diag" "diagnostic monitoring" 1 "restarted"
+    restart_daemon "wifianalyticsd" "Wi-Fi analytics" 1 "restarted"
+
+    # Network service proxy (runs as user, no sudo)
+    restart_daemon "networkserviceproxy" "network service proxy" 0 "restarted"
+
+    # Optional daemons (only restart if already running)
+    pgrep -q netbiosd 2>/dev/null && restart_daemon "netbiosd" "SMB/Windows networking" 1 "restarted"
+    pgrep -q wifip2pd 2>/dev/null && restart_daemon "wifip2pd" "Wi-Fi peer-to-peer" 1 "restarted"
+    pgrep -q wifivelocityd 2>/dev/null && restart_daemon "wifivelocityd" "Wi-Fi velocity" 1 "restarted"
+
+    sleep $SLEEP_DAEMON_RESPAWN  # Give launchd time to respawn daemons with fresh configuration
+
+    print_fix_success "Network daemons restarted ($restarted restarted)"
+}
+
+# Deep config reset: Delete network preference files (requires sudo + confirmation)
+fix_config() {
+    local dry_run="${1:-false}"
+
+    log_info "Config: Deep configuration reset"
+    echo ""
+    log_warning "  This will remove network preference files"
+    log_warning "  You may need to rejoin Wi-Fi networks"
+    log_warning "  Requires sudo privileges"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would remove network preference files${NC}"
+        echo "  ${DIM}[DRY RUN] Would restart configd${NC}"
+        return 0
+    fi
+
+    # Confirm with user
+    printf "  Continue with deep reset? (y/N): "
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        log_info "  Level 4 cancelled"
+        return 0
+    fi
+
+    log_info "  Removing network preference files..."
+    local removed=0
+
+    if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/com.apple.airport.preferences.plist 2>/dev/null; then
+        ((removed++))
+    fi
+
+    if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/NetworkInterfaces.plist 2>/dev/null; then
+        ((removed++))
+    fi
+
+    if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/preferences.plist 2>/dev/null; then
+        ((removed++))
+    fi
+
+    if [[ $removed -gt 0 ]]; then
+        log_success "  Removed $removed preference file(s)"
+    else
+        log_warning "  No preference files removed"
+    fi
+
+    # Restart configd to reload configs
+    log_info "  Restarting network configuration daemon..."
+    if sudo /usr/bin/killall -HUP configd 2>/dev/null; then
+        log_success "  Configuration daemon restarted"
+        sleep $SLEEP_SERVICE_CYCLE
+    else
+        log_error "  Failed to restart configuration daemon"
+        return 1
+    fi
+
+    echo ""
+    log_success "Configuration reset complete"
+    log_warning "  You may need to rejoin your Wi-Fi network"
+    echo ""
+}
+
+# Tailscale VPN restart
+fix_tailscale() {
+    local dry_run="${1:-false}"
+
+    log_info "Tailscale: Restart VPN connection"
+    echo ""
+
+    require_tailscale || return 1
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would disconnect from Tailscale${NC}"
+        echo "  ${DIM}[DRY RUN] Would wait 3 seconds${NC}"
+        echo "  ${DIM}[DRY RUN] Would reconnect to Tailscale${NC}"
+        return 0
+    fi
+
+    tailscale_restart
+
+    print_fix_success "Tailscale restarted"
+}
+
+# Tailscale app restart (when daemon is hung)
+fix_tailscale_app() {
+    local dry_run="${1:-false}"
+
+    log_info "Tailscale: Restart macOS app"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        echo "  ${DIM}[DRY RUN] Would quit Tailscale app${NC}"
+        echo "  ${DIM}[DRY RUN] Would wait for app to fully quit${NC}"
+        echo "  ${DIM}[DRY RUN] Would start Tailscale app${NC}"
+        return 0
+    fi
+
+    tailscale_restart_app
+
+    print_fix_success "Tailscale app restarted"
+}
+
+# ============================================================================
+# PROGRESSIVE FIX LEVELS
+# ============================================================================
+# Progressive levels run multiple fixes with intermediate testing
+# Early exit on success to avoid unnecessary operations
+
+# Generic progressive fix runner - executes fixes from PROGRESSIVE_FIXES array
+# Args: level_name, dry_run
+# Returns: 0 if network restored, 1 if still broken
+run_progressive_fixes() {
+    local level="$1"
+    local dry_run="${2:-false}"
+
+    local fixes="${PROGRESSIVE_FIXES[$level]}"
+
+    log_info "Progressive: ${level} (${fixes// / → })"
+    echo ""
+
+    if [[ "$dry_run" == "true" ]]; then
+        for fix in ${(z)fixes}; do
+            "fix_${fix}" "$dry_run"
+        done
+        return 0
+    fi
+
+    # Run each fix with intermediate testing
+    for fix in ${(z)fixes}; do
+        if ! "fix_${fix}" "$dry_run"; then
+            log_warning "${fix} fix had issues"
+        fi
+
+        test_and_report_success "${fix}" && return 0
+    done
+
+    # All fixes completed but network still broken
+    log_warning "Network still broken after ${level} fixes"
+
+    # Show nuclear option guidance if we just ran nuclear
+    if [[ "$level" == "nuclear" ]]; then
+        show_nuclear_failure_guidance
+    fi
+
+    return 1
+}
+
+# ============================================================================
+# INTERACTIVE MODE
+# ============================================================================
+# Smart diagnostic-driven fix workflow with user interaction
+
+# Show interactive fix menu
+show_interactive_menu() {
+    local suggested_fix="$1"
+    local fix_desc="${FIX_NAMES[$suggested_fix]}"
+
+    # If not in FIX_NAMES, try PROGRESSIVE_NAMES
+    if [[ -z "$fix_desc" ]]; then
+        fix_desc="${PROGRESSIVE_NAMES[$suggested_fix]}"
+    fi
+
+    echo ""
+    log_info "Recommended fix: ${BOLD}$suggested_fix${NC}"
+    echo "  $fix_desc"
+    echo ""
+    echo "What would you like to do?"
+    echo "  ${BOLD}1)${NC} Try recommended fix (${CYAN}$suggested_fix${NC})"
+    echo "  ${BOLD}2)${NC} Choose a different individual fix"
+    echo "  ${BOLD}3)${NC} Run a progressive level"
+
+    # Add VPN test option if Tailscale is connected
+    if tailscale_is_connected; then
+        echo "  ${BOLD}4)${NC} Test connectivity with VPN temporarily disabled"
+        echo "  ${BOLD}5)${NC} Run full diagnostics again"
+        echo "  ${BOLD}6)${NC} Exit"
+    else
+        echo "  ${BOLD}4)${NC} Run full diagnostics again"
+        echo "  ${BOLD}5)${NC} Exit"
+    fi
+    echo ""
+}
+
+# Show individual fixes menu
+show_individual_fixes_menu() {
+    echo ""
+    echo "Available individual fixes:"
+    echo "  ${BOLD}1)${NC} dns        - ${FIX_NAMES[dns]}"
+    echo "  ${BOLD}2)${NC} wifi       - ${FIX_NAMES[wifi]}"
+    echo "  ${BOLD}3)${NC} interface  - ${FIX_NAMES[interface]}"
+    echo "  ${BOLD}4)${NC} daemons    - ${FIX_NAMES[daemons]}"
+    echo "  ${BOLD}5)${NC} config     - ${FIX_NAMES[config]}"
+
+    # Only show Tailscale option if it's available
+    if tailscale_is_available; then
+        echo "  ${BOLD}6)${NC} tailscale  - ${FIX_NAMES[tailscale]}"
+        echo "  ${BOLD}7)${NC} Back to main menu"
+        echo ""
+        read -r "choice?Choose fix [1-7]: "
+
+        case "$choice" in
+            1) echo "dns" ;;
+            2) echo "wifi" ;;
+            3) echo "interface" ;;
+            4) echo "daemons" ;;
+            5) echo "config" ;;
+            6) echo "tailscale" ;;
+            7) echo "back" ;;
+            *) echo "" ;;
+        esac
+    else
+        echo "  ${BOLD}6)${NC} Back to main menu"
+        echo ""
+        read -r "choice?Choose fix [1-6]: "
+
+        case "$choice" in
+            1) echo "dns" ;;
+            2) echo "wifi" ;;
+            3) echo "interface" ;;
+            4) echo "daemons" ;;
+            5) echo "config" ;;
+            6) echo "back" ;;
+            *) echo "" ;;
+        esac
+    fi
+}
+
+# Show progressive levels menu
+show_progressive_menu() {
+    echo ""
+    echo "Available progressive levels:"
+    echo "  ${BOLD}1)${NC} quick      - dns"
+    echo "  ${BOLD}2)${NC} moderate   - dns → wifi"
+    echo "  ${BOLD}3)${NC} aggressive - dns → wifi → interface"
+    echo "  ${BOLD}4)${NC} deep       - dns → wifi → interface → daemons"
+    echo "  ${BOLD}5)${NC} nuclear    - config → daemons → interface → wifi → dns"
+    echo "  ${BOLD}6)${NC} Back to main menu"
+    echo ""
+    read -r "choice?Choose level [1-6]: "
+
+    case "$choice" in
+        1) echo "quick" ;;
+        2) echo "moderate" ;;
+        3) echo "aggressive" ;;
+        4) echo "deep" ;;
+        5) echo "nuclear" ;;
+        6) echo "back" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Interactive fix mode - guides user through diagnosis and repair
+cmd_fix_interactive() {
+    setopt local_options no_err_exit
+
+    log_info "Interactive network repair mode"
+    echo ""
+    log_info "Running network diagnostics..."
+    echo ""
+
+    # Run diagnostics quietly (just collect data)
+    local failure_mode
+    failure_mode=$(identify_failure_mode)
+
+    # Check if network is already working
+    if [[ "$failure_mode" == "network_ok" ]]; then
+        log_success "Network is functioning normally!"
+        echo ""
+        log_info "No repairs needed. Run 'netfix diagnose' for detailed status."
+        return 0
+    fi
+
+    # Get suggested fix
+    local suggested_fix="${SMART_FIX_MAP[$failure_mode]}"
+
+    # If no smart suggestion, default to moderate
+    if [[ -z "$suggested_fix" ]]; then
+        suggested_fix="moderate"
+    fi
+
+    # Show problem description
+    echo "═══════════════════════════════════════════════════════════════════════════"
+    case "$failure_mode" in
+        interface_down)
+            log_error "Problem detected: Interface is down"
+            ;;
+        no_ip)
+            log_error "Problem detected: No IP address assigned"
+            ;;
+        no_gateway)
+            log_error "Problem detected: No default gateway configured"
+            ;;
+        gateway_unreachable)
+            log_error "Problem detected: Gateway configured but unreachable"
+            ;;
+        no_internet)
+            log_error "Problem detected: No internet connectivity"
+            ;;
+        dns_failure)
+            log_error "Problem detected: Internet works but DNS resolution fails"
+            ;;
+    esac
+    echo "═══════════════════════════════════════════════════════════════════════════"
+
+    # Interactive loop
+    while true; do
+        show_interactive_menu "$suggested_fix"
+
+        # Adjust prompt based on whether Tailscale is connected
+        if tailscale_is_connected; then
+            read -r "choice?Enter choice [1-6]: "
+        else
+            read -r "choice?Enter choice [1-5]: "
+        fi
+
+        case "$choice" in
+            1)
+                # Try suggested fix
+                echo ""
+                log_info "Applying fix: $suggested_fix"
+                echo ""
+
+                # Determine if it's a progressive level or individual fix
+                if [[ -n "${PROGRESSIVE_FIXES[$suggested_fix]}" ]]; then
+                    # It's a progressive level
+                    run_progressive_fixes "$suggested_fix" false
+                else
+                    # It's an individual fix
+                    "fix_${suggested_fix}" false
+                fi
+
+                # Re-test (wait for network to stabilize first)
+                echo ""
+                log_info "Waiting $SLEEP_CONNECTIVITY_TEST seconds for network to stabilize..."
+                sleep $SLEEP_CONNECTIVITY_TEST
+                log_info "Testing network connectivity..."
+                if test_connectivity; then
+                    log_success "Network restored! Problem resolved."
+                    return 0
+                else
+                    log_warning "Network still broken. Try a stronger fix?"
+
+                    # Suggest next level up
+                    local previous_fix="$suggested_fix"
+                    case "$suggested_fix" in
+                        dns) suggested_fix="moderate" ;;
+                        wifi) suggested_fix="moderate" ;;
+                        moderate) suggested_fix="aggressive" ;;
+                        aggressive) suggested_fix="deep" ;;
+                        deep) suggested_fix="nuclear" ;;
+                        nuclear)
+                            # Already tried nuclear - show guidance
+                            show_nuclear_failure_guidance
+                            suggested_fix="nuclear"
+                            ;;
+                        *) suggested_fix="nuclear" ;;
+                    esac
+                fi
+                ;;
+            2)
+                # Choose individual fix
+                local selected_fix
+                selected_fix=$(show_individual_fixes_menu)
+
+                if [[ "$selected_fix" == "back" ]]; then
+                    continue
+                elif [[ -n "$selected_fix" ]]; then
+                    echo ""
+                    log_info "Applying fix: $selected_fix"
+                    echo ""
+                    "fix_${selected_fix}" false
+
+                    echo ""
+                    log_info "Waiting $SLEEP_CONNECTIVITY_TEST seconds for network to stabilize..."
+                    sleep $SLEEP_CONNECTIVITY_TEST
+                    log_info "Testing network connectivity..."
+                    if test_connectivity; then
+                        log_success "Network restored! Problem resolved."
+                        return 0
+                    else
+                        log_warning "Network still broken."
+                    fi
+                fi
+                ;;
+            3)
+                # Choose progressive level
+                local selected_level
+                selected_level=$(show_progressive_menu)
+
+                if [[ "$selected_level" == "back" ]]; then
+                    continue
+                elif [[ -n "$selected_level" ]]; then
+                    echo ""
+                    log_info "Applying progressive level: $selected_level"
+                    echo ""
+                    run_progressive_fixes "$selected_level" false
+
+                    echo ""
+                    log_info "Waiting $SLEEP_CONNECTIVITY_TEST seconds for network to stabilize..."
+                    sleep $SLEEP_CONNECTIVITY_TEST
+                    log_info "Testing network connectivity..."
+                    if test_connectivity; then
+                        log_success "Network restored! Problem resolved."
+                        return 0
+                    else
+                        log_warning "Network still broken."
+                        echo ""
+                        log_error "All automated fixes failed"
+                        echo ""
+                        echo "  ${BOLD}${YELLOW}Next steps:${NC}"
+                        echo "  1. Check if other devices can connect (router issue?)"
+                        echo "  2. Try moving closer to router (signal strength)"
+                        echo "  3. Restart your router/access point"
+                        echo "  4. ${BOLD}Restart your computer${NC} - this often fixes stuck network daemons"
+                        echo ""
+                        return 1
+                    fi
+                fi
+                ;;
+            4)
+                # Test without VPN (if Tailscale connected) OR run diagnostics (if not)
+                if tailscale_is_connected; then
+                    # Test without VPN
+                    echo ""
+                    log_info "Testing connectivity with VPN temporarily disabled..."
+                    echo ""
+
+                    tailscale_disconnect
+                    sleep $SLEEP_CONNECTIVITY_TEST
+
+                    echo ""
+                    log_info "Testing network connectivity..."
+                    if test_connectivity; then
+                        log_success "Network works without VPN!"
+                        echo ""
+                        log_warning "This suggests the VPN may be causing network issues"
+                        echo ""
+                        log_info "Reconnecting to VPN..."
+                        tailscale_connect
+                        echo ""
+                        log_info "Consider restarting Tailscale with 'netfix fix tailscale'"
+                    else
+                        log_warning "Network still broken without VPN"
+                        echo ""
+                        log_info "Reconnecting to VPN..."
+                        tailscale_connect
+                    fi
+                else
+                    # Run full diagnostics
+                    echo ""
+                    cmd_diagnose
+                    failure_mode=$(identify_failure_mode)
+                    suggested_fix="${SMART_FIX_MAP[$failure_mode]}"
+                    if [[ -z "$suggested_fix" ]]; then
+                        suggested_fix="moderate"
+                    fi
+                fi
+                ;;
+            5)
+                if tailscale_is_connected; then
+                    # Run full diagnostics (when VPN is connected, this is option 5)
+                    echo ""
+                    cmd_diagnose
+                    failure_mode=$(identify_failure_mode)
+                    suggested_fix="${SMART_FIX_MAP[$failure_mode]}"
+                    if [[ -z "$suggested_fix" ]]; then
+                        suggested_fix="moderate"
+                    fi
+                else
+                    # Exit (when VPN is not connected, this is option 5)
+                    log_info "Exiting interactive mode"
+                    return 0
+                fi
+                ;;
+            6)
+                # Exit (only when Tailscale connected, this is option 6)
+                log_info "Exiting interactive mode"
+                return 0
+                ;;
+            *)
+                if tailscale_is_connected; then
+                    log_error "Invalid choice. Please enter 1-6."
+                else
+                    log_error "Invalid choice. Please enter 1-5."
+                fi
+                ;;
+        esac
+    done
+}
+
+# ============================================================================
+# COMMAND IMPLEMENTATIONS
+# ============================================================================
+# User-facing command handlers
+
+cmd_diagnose() {
+    check_and_show_help "diagnose" "netfix" "$@" && return 0
+    local start_time=$SECONDS
+
+    # Validate sudo credentials once at the start (extends timeout for ~5 minutes)
+    # This prevents multiple password prompts during diagnostics
+    sudo -v
+
+    log_info "Running comprehensive network diagnostics..."
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════════"
+    echo ""
+
+    diagnose_interface
+    diagnose_dns
+    diagnose_routing
+    diagnose_connectivity
+    diagnose_statistics
+
+    # Only show Tailscale diagnostics if it's available
+    if tailscale_is_available; then
+        diagnose_tailscale
+    fi
+
+    diagnose_failure_mode
+
+    echo "═══════════════════════════════════════════════════════════════════════════"
+    echo ""
+    local elapsed=$((SECONDS - start_time))
+    log_success "Diagnostics complete $(format_elapsed $elapsed total)"
+    echo ""
+}
+
+cmd_status() {
+    check_and_show_help "status" "netfix" "$@" && return 0
+    local start_time=$SECONDS
+
+    log_info "Quick network status check..."
+    echo ""
+
+    if is_interface_up; then
+        log_success "Interface: Active"
+    else
+        log_error "Interface: Inactive"
+    fi
+
+    local ip
+    ip=$(get_ip_address)
+    if [[ -n "$ip" ]]; then
+        if is_self_assigned_ip "$ip"; then
+            log_warning "IP: $ip (self-assigned)"
+        else
+            log_success "IP: $ip"
+        fi
+    else
+        log_error "IP: Not assigned"
+    fi
+
+    local gateway
+    gateway=$(get_gateway_ip)
+    if [[ -n "$gateway" ]]; then
+        if run_with_timeout 2 /sbin/ping -c 1 -t 2 "$gateway" >/dev/null 2>&1; then
+            log_success "Gateway: $gateway (reachable)"
+        else
+            log_error "Gateway: $gateway (unreachable)"
+        fi
+    else
+        log_error "Gateway: Not configured"
+    fi
+
+    if run_with_timeout 3 /sbin/ping -c 1 -t 2 "$TEST_IP" >/dev/null 2>&1; then
+        log_success "Internet: Connected"
+    else
+        log_error "Internet: No connectivity"
+    fi
+
+    if run_with_timeout 3 /usr/bin/nslookup "$TEST_HOST" >/dev/null 2>&1; then
+        log_success "DNS: Working"
+    else
+        log_error "DNS: Resolution failed"
+    fi
+
+    echo ""
+    local elapsed=$((SECONDS - start_time))
+    log_info "Run 'netfix diagnose' for detailed analysis $(format_elapsed $elapsed total)"
+    echo ""
+}
+
+cmd_fix() {
+    check_and_show_help "fix" "netfix" "$@" && return 0
+
+    local fix_name="${1:-}"
+    local dry_run=false
+    local auto_mode=false
+
+    # Parse flags
+    shift $(( $# > 0 ? 1 : 0 ))
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run|-d)
+                dry_run=true
+                shift
+                ;;
+            --auto|-a)
+                auto_mode=true
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # If no fix specified, launch interactive mode
+    if [[ -z "$fix_name" ]]; then
+        cmd_fix_interactive
+        return $?
+    fi
+
+    # Determine which fix to run
+    local fix_function=""
+    local fix_args=""
+    local needs_sudo=1
+
+    case "$fix_name" in
+        # Named individual fixes
+        dns)
+            fix_function="fix_dns"
+            needs_sudo=1
+            ;;
+        wifi)
+            fix_function="fix_wifi"
+            needs_sudo=0
+            ;;
+        interface)
+            fix_function="fix_interface"
+            needs_sudo=1
+            ;;
+        daemons)
+            fix_function="fix_daemons"
+            needs_sudo=1
+            ;;
+        config)
+            fix_function="fix_config"
+            needs_sudo=1
+            ;;
+        tailscale|ts)
+            fix_function="fix_tailscale"
+            needs_sudo=0
+            ;;
+        tailscale-app|ts-app)
+            fix_function="fix_tailscale_app"
+            needs_sudo=0
+            ;;
+
+        # Progressive levels (call run_progressive_fixes directly)
+        quick|moderate|aggressive|deep|nuclear)
+            fix_function="run_progressive_fixes"
+            fix_args="$fix_name"  # Pass level name as argument
+            needs_sudo=1
+            ;;
+
+        *)
+            log_error "Unknown fix: $fix_name"
+            echo ""
+            log_info "Valid fixes: dns, wifi, interface, daemons, config, tailscale, tailscale-app"
+            log_info "Valid progressive levels: quick, moderate, aggressive, deep, nuclear"
+            return 1
+            ;;
+    esac
+
+    # Validate sudo credentials once if needed
+    if [[ $needs_sudo -eq 1 ]] && [[ "$dry_run" == "false" ]]; then
+        sudo -v
+    fi
+
+    # Show dry-run banner
+    if [[ "$dry_run" == "true" ]]; then
+        log_info "DRY RUN MODE - No changes will be made"
+        echo ""
+    fi
+
+    # Execute the fix (with optional fix_args for progressive levels)
+    if [[ -n "$fix_args" ]]; then
+        $fix_function "$fix_args" "$dry_run"
+    else
+        $fix_function "$dry_run"
+    fi
+}
+
+cmd_ts() {
+    local subcommand="${1:-status}"
+
+    require_tailscale || return 1
+
+    case "$subcommand" in
+        status|st)
+            log_info "Tailscale Status:"
+            echo ""
+            tailscale status
+            ;;
+
+        up|connect)
+            tailscale_connect
+            ;;
+
+        down|disconnect)
+            tailscale_disconnect
+            ;;
+
+        restart)
+            tailscale_restart
+            ;;
+
+        restart-app|app-restart)
+            tailscale_restart_app
+            ;;
+
+        check|netcheck)
+            log_info "Running Tailscale network check..."
+            echo ""
+            tailscale netcheck
+            ;;
+
+        dns)
+            log_info "Tailscale DNS Status:"
+            echo ""
+            tailscale dns status
+            ;;
+
+        ip|ips)
+            log_info "Tailscale IP Addresses:"
+            echo ""
+            tailscale ip
+            ;;
+
+        version|ver)
+            tailscale version
+            ;;
+
+        help|--help|-h)
+            echo ""
+            echo "${BOLD}Tailscale VPN Management${NC}"
+            echo ""
+            echo "USAGE:"
+            echo "  ${CYAN}netfix ts${NC} ${YELLOW}<subcommand>${NC}"
+            echo ""
+            echo "SUBCOMMANDS:"
+            echo "  ${CYAN}status${NC}       Show Tailscale connection status and peers"
+            echo "  ${CYAN}up${NC}           Connect to Tailscale"
+            echo "  ${CYAN}down${NC}         Disconnect from Tailscale"
+            echo "  ${CYAN}restart${NC}      Restart Tailscale connection (disconnect → connect)"
+            echo "  ${CYAN}restart-app${NC}  Restart Tailscale macOS app (when daemon is hung)"
+            echo "  ${CYAN}check${NC}        Run network diagnostics (DERP latency, etc.)"
+            echo "  ${CYAN}dns${NC}          Show DNS configuration (MagicDNS, resolvers)"
+            echo "  ${CYAN}ip${NC}           Show Tailscale IP addresses"
+            echo "  ${CYAN}version${NC}      Show Tailscale version"
+            echo ""
+            echo "EXAMPLES:"
+            echo "  ${GREEN}netfix ts status${NC}        # Show connection status"
+            echo "  ${GREEN}netfix ts check${NC}         # Run network diagnostics"
+            echo "  ${GREEN}netfix ts restart${NC}       # Restart VPN connection"
+            echo "  ${GREEN}netfix ts restart-app${NC}   # Restart app when CLI hangs"
+            echo ""
+            ;;
+
+        *)
+            log_error "Unknown subcommand: $subcommand"
+            echo ""
+            log_info "Run 'netfix ts help' for usage"
+            return 1
+            ;;
+    esac
+}
+
+cmd_export() {
+    check_and_show_help "export" "netfix" "$@" && return 0
+
+    local filename="${1:-}"
+
+    if [[ -z "$filename" ]]; then
+        filename="netfix-diagnostics-$(date +%Y%m%d-%H%M%S).txt"
+    fi
+
+    log_info "Exporting diagnostics to: $filename"
+    echo ""
+
+    {
+        echo "netfix Network Diagnostics"
+        echo "Generated: $(date)"
+        echo "=========================================="
+        echo ""
+
+        # Run diagnostics and capture output
+        cmd_diagnose 2>&1
+
+    } > "$filename"
+
+    log_success "Diagnostics exported to: $filename"
+    echo ""
+}
+
+show_help() {
+    local script_name="netfix"
+
+    echo ""
+    print_help_header "NETFIX - Network Diagnostics & Repair Tool"
+    echo ""
+    print_help_note "  Comprehensive network diagnostics with timeout protection"
+    print_help_note "  Progressive repair options for persistent network issues"
+    echo ""
+
+    print_help_header "USAGE:"
+    echo -e "    ${CYAN}$script_name${NC} ${YELLOW}<command>${NC} ${YELLOW}[options]${NC}"
+    echo ""
+
+    print_help_header "COMMANDS:"
+
+    local cmd desc_first_line
+
+    # diagnose
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[diagnose]}" | head -1)
+    print_help_command "diagnose" "${CMD_HELP_ARGS[diagnose]}" "$desc_first_line" \
+        "Use 'netfix diagnose --help' for details"
+
+    # status
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[status]}" | head -1)
+    print_help_command "status" "${CMD_HELP_ARGS[status]}" "$desc_first_line" \
+        "Use 'netfix status --help' for details"
+
+    # fix
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[fix]}" | head -1)
+    print_help_command "fix" "${CMD_HELP_ARGS[fix]}" "$desc_first_line" \
+        "Use 'netfix fix --help' for details"
+
+    # export
+    desc_first_line=$(printf '%s\n' "${CMD_HELP_DESC[export]}" | head -1)
+    print_help_command "export" "${CMD_HELP_ARGS[export]}" "$desc_first_line" \
+        "Use 'netfix export --help' for details"
+
+    # ts
+    print_help_command "ts" "[subcommand]" "Tailscale VPN management and diagnostics" \
+        "Use 'netfix ts help' for details"
+
+    print_help_command "help, h" "" \
+        "Show this help message"
+
+    print_help_header "EXAMPLES:"
+
+    printf '%s\n' "${CMD_HELP_EXAMPLES[status]}" | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+
+    printf '%s\n' "${CMD_HELP_EXAMPLES[diagnose]}" | head -1 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+
+    printf '%s\n' "${CMD_HELP_EXAMPLES[fix]}" | head -3 | while IFS= read -r example; do
+        [[ -n "$example" ]] && print_help_example "$example"
+    done
+
+    echo ""
+
+    print_help_header "QUICK REFERENCE:"
+    echo "  ${BOLD}Individual fixes:${NC} dns, wifi, interface, daemons, config, tailscale"
+    echo "  ${BOLD}Progressive:${NC} quick, moderate, aggressive, deep, nuclear"
+    echo "  ${BOLD}Tailscale:${NC} ts status|up|down|restart|check|dns"
+    echo ""
+    echo "  Use ${CYAN}netfix fix --help${NC} or ${CYAN}netfix ts help${NC} for details"
+    echo ""
+
+    print_help_header "NOTES:"
+    print_help_note "  • All network operations have timeouts to prevent hanging"
+    print_help_note "  • Diagnostics complete in < 15 seconds even with broken network"
+    print_help_note "  • Start with individual fixes (dns, wifi) and escalate as needed"
+    print_help_note "  • Progressive levels test connectivity between fixes (early exit on success)"
+    print_help_note "  • Use --dry-run to preview fix actions before applying"
+    print_help_note "  • If all fixes fail, restart your computer (fixes stuck daemons)"
+    echo ""
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+main() {
+    local command="${1:-help}"
+
+    case "$command" in
+        diagnose|diag)
+            shift
+            cmd_diagnose "$@"
+            ;;
+        status|st)
+            shift
+            cmd_status "$@"
+            ;;
+        fix)
+            shift
+            cmd_fix "$@"
+            ;;
+        export|save)
+            shift
+            cmd_export "$@"
+            ;;
+        ts|tailscale)
+            shift
+            cmd_ts "$@"
+            ;;
+        help|h|--help|-h)
+            show_help
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            echo ""
+            show_help
+            return 1
+            ;;
+    esac
+}
+
+main "$@"
