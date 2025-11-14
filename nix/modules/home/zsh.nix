@@ -98,7 +98,6 @@ in
 
     shellAliases = {
       # Modern CLI tool replacements
-      cat = "bat";
       grep = "rg";
       find = "fd";
 

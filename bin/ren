@@ -1,0 +1,1407 @@
+#!/usr/bin/env zsh
+# ren - Ren'Py Game Manager
+# ====================================
+# Multi-command CLI for managing Ren'Py games on macOS
+#
+# Commands: install, launch, list, cleanup, mod, help
+# Games location: ~/renpy-games/
+
+emulate -L zsh
+setopt err_exit pipe_fail extended_glob
+
+0=${(%):-%N}
+SCRIPT_DIR=${0:A:h}
+
+source "$SCRIPT_DIR/shared"
+
+export USE_ICON_STYLE=true
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+typeset -gr GAMES_DIR="$HOME/renpy-games"
+
+typeset -gr TEMP_BASE="${TMPDIR:-/tmp}"
+typeset -g WORK_DIR=""
+
+typeset -gr TEMP_CLEANUP_DAYS=7
+
+# Version and platform regex patterns
+typeset -gr VERSION_PATTERN='v?[0-9]+\.[0-9]+(\.[0-9]+)?'
+typeset -gr PLATFORM_SUFFIX_PATTERN='(\.(dv-mac|dv-win|dv-pc)|(-pc|-mac|-win|-linux))?'
+typeset -gr VERSION_FULL_PATTERN="${VERSION_PATTERN}[a-z]?${PLATFORM_SUFFIX_PATTERN}"
+
+# Supported archive extensions for mod installation
+typeset -gr ARCHIVE_EXTENSIONS_PATTERN='^(zip|tar|gz|tgz|bz2|tbz|tbz2|xz|txz|7z|rar|ace|arj|cab|lha|lzh)$'
+
+# Ren'Py SDK auto-detection
+if [[ -z "${RENPY_SDK:-}" ]]; then
+    HOMEBREW_SDK=(/Applications/renpy-*-sdk(N[1]))
+    if [[ -n "${HOMEBREW_SDK[1]:-}" ]]; then
+        RENPY_SDK="${HOMEBREW_SDK[1]}"
+    else
+        RENPY_SDK="$HOME/Applications/renpy-sdk"
+    fi
+fi
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Pluralize a word based on count
+# Usage: pluralize <count> <singular> [plural]
+# Examples: pluralize 1 "file" => "1 file"
+#           pluralize 5 "file" => "5 files"
+#           pluralize 2 "directory" "directories" => "2 directories"
+pluralize() {
+    local count="$1"
+    local singular="$2"
+    local plural="${3:-${singular}s}"  # Default: add 's'
+
+    if (( count == 1 )); then
+        echo "$count $singular"
+    else
+        echo "$count $plural"
+    fi
+}
+
+# Wrapper for gum that clears color environment variables
+# This prevents conflicts with gum's own color handling
+gum_clean() {
+    env -u BOLD -u DIM gum "$@"
+}
+
+# Normalize basename: remove path/extension and convert underscores to dashes
+# This provides consistent naming for version/name extraction
+# Usage: normalize_basename <filename>
+normalize_basename() {
+    local filename="$1"
+    local basename="${filename:t:r}"  # Remove path and extension
+    basename="${basename//_/-}"        # Replace underscores with dashes for consistent matching
+    echo "$basename"
+}
+
+# Resolve symlink or return path as-is
+# Provides consistent symlink handling throughout the script
+# Usage: resolve_symlink_or_echo <path>
+resolve_symlink_or_echo() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        readlink -f "$path"
+    else
+        echo "$path"
+    fi
+}
+
+# Determine game type based on directory structure
+# Returns: "mac" for .app bundles, "windows" for standard directories
+# Usage: get_game_type <game_dir>
+get_game_type() {
+    local game_dir="$1"
+    if [[ "$game_dir" == *.app ]]; then
+        echo "mac"
+    else
+        echo "windows"
+    fi
+}
+
+# Check if games directory exists and contains games
+# Returns: 0 if empty/nonexistent, 1 if has content
+# Usage: if is_games_dir_empty; then ...
+is_games_dir_empty() {
+    [[ ! -d "$GAMES_DIR" || -z "$(ls -A "$GAMES_DIR" 2>/dev/null)" ]]
+}
+
+# Interactive game selection with customizable options
+# Returns selected game's directory name via stdout
+# Usage: selected=$(interactive_game_selection <sort_by_time> <header_text> <include_size>)
+# Parameters:
+#   sort_by_time: "true" to sort by modification time, "false" for grouped by name
+#   header_text:  Header text for the selection menu
+#   include_size: "true" to show file sizes, "false" to hide
+interactive_game_selection() {
+    local sort_by_time="${1:-false}"
+    local header_text="${2:-Select a game:}"
+    local include_size="${3:-false}"
+
+    if ! command -v gum &>/dev/null; then
+        log_error "gum is required for interactive selection"
+        return 1
+    fi
+
+    local -a games=()
+    local -A game_map
+    build_game_selection_list games game_map "$include_size" "$sort_by_time"
+
+    if [[ ${#games[@]} -eq 0 ]]; then
+        log_error "No games installed"
+        return 1
+    fi
+
+    local selection=$(gum_clean choose "${games[@]}" --header="$header_text")
+
+    if [[ -z "$selection" ]]; then
+        return 1
+    fi
+
+    echo "${game_map[$selection]}"
+}
+
+# Trim whitespace and expand tilde in path
+# Handles user input from prompts that may have leading/trailing whitespace
+# Usage: clean_path=$(trim_and_expand_path "$user_input")
+trim_and_expand_path() {
+    local path="$1"
+    # Trim leading whitespace
+    path="${path#"${path%%[![:space:]]*}"}"
+    # Trim trailing whitespace
+    path="${path%"${path##*[![:space:]]}"}"
+    # Expand tilde to $HOME
+    path="${path/#\~/$HOME}"
+    echo "$path"
+}
+
+# Validate Ren'Py SDK installation
+# Checks if SDK exists and removes quarantine if needed
+# Returns: 0 if valid, 1 if missing
+validate_renpy_sdk() {
+    if [[ ! -d "$RENPY_SDK" ]]; then
+        log_error "Ren'Py SDK not found"
+        log_error "Expected location: $RENPY_SDK"
+        log_error "Install via Homebrew: brew install --cask renpy"
+        return 1
+    fi
+
+    # Remove quarantine flag if present (macOS Gatekeeper)
+    if xattr -p com.apple.quarantine "$RENPY_SDK" &>/dev/null; then
+        log_warning "Removing Gatekeeper quarantine from Ren'Py SDK..."
+        xattr -rd com.apple.quarantine "$RENPY_SDK" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+# Universal archive extraction
+# Extracts various archive formats to a target directory using unar
+# Returns: 0 on success, 1 on failure
+# Usage: extract_archive <archive_file> <target_dir>
+extract_archive() {
+    local archive="$1"
+    local target="$2"
+
+    # Check if unar is available
+    if ! command -v unar &>/dev/null; then
+        log_error "unar is required for archive extraction"
+        log_error "Install with: brew install unar"
+        log_error "Or add to your Nix configuration"
+        return 1
+    fi
+
+    # Create target directory
+    mkdir -p "$target"
+
+    log_verbose "Extracting archive with unar..."
+    # -f  = force overwrite existing files
+    # -D  = never create containing directory (we manage structure ourselves)
+    # -q  = quiet mode
+    # -nq = don't copy quarantine metadata
+    # -o  = output directory
+    if ! unar -f -D -q -nq -o "$target" "$archive" 2>/dev/null; then
+        log_error "Failed to extract archive"
+        return 1
+    fi
+
+    log_verbose "Archive extracted successfully"
+    return 0
+}
+
+# Extract version from filename
+# Game developers use various versioning schemes in filenames (v1.0, 1.0.1a, 0.36.dv-mac, etc.)
+# This function normalizes all common patterns to extract the core version number
+# Supports: GameName-1.0-pc.zip, GameName-v2.0.1-pc.zip, GameName_v0.6.6.a-steam-market.zip, etc.
+extract_version() {
+    local filename="$1"
+    local basename=$(normalize_basename "$filename")
+
+    # Try multiple patterns including letter suffixes and platform codes
+    # The regex matches version numbers with optional 'v' prefix, patch versions, letter suffixes,
+    # and platform-specific extensions (common in adult game distribution)
+    # We wrap the version pattern in a capture group to extract just the numeric version
+    if [[ "$basename" =~ -v?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN} ]]; then
+        echo "${match[1]}"
+    else
+        echo "unknown"
+    fi
+}
+
+# Extract game name from filename (before version)
+# Removes version, letter suffix, platform suffix, and any additional text after version
+# Handles: GameName-v1.0-pc, GameName-v0.6.6.a-steam-market, GameName-1.0-FULL, etc.
+extract_game_name() {
+    local filename="$1"
+    local basename=$(normalize_basename "$filename")
+
+    # Remove version and everything after it (including platform suffixes and extra text)
+    # Uses VERSION_PATTERN to match the version component
+    local name=$(echo "$basename" | sed -E "s/-${VERSION_PATTERN}[a-z]?.*\$//")
+
+    echo "$name"
+}
+
+# Normalize game name for display
+# Removes versions, platform suffixes, and optionally adds spaces to camelCase
+# Returns a human-readable game name from a directory or file name
+normalize_game_name() {
+    local name="$1"
+
+    # Remove .app extension if present
+    name="${name%.app}"
+
+    # Remove common game release suffixes (FULL, FINAL, COMPLETE, etc.)
+    # These can appear in the middle (e.g., "Game-0.38-FULL-mac") or at end
+    name=$(echo "$name" | sed -E 's/-(FULL|FINAL|COMPLETE|FIXED|UNCENSORED|DEFINITIVE|ULTIMATE)//gi')
+
+    # Remove version + platform suffix combinations repeatedly
+    # Some game releases have redundant version tags in the filename (e.g., "GameName-0.36.dv-mac-0.36")
+    # This can happen when repackers append version info or when developers duplicate metadata
+    # Loop until no more matches to handle all duplicates
+    while [[ "$name" =~ -${VERSION_FULL_PATTERN}$ ]]; do
+        name=$(echo "$name" | sed -E "s/-${VERSION_FULL_PATTERN}\$//")
+    done
+
+    # Clean up any remaining standalone platform suffixes (in case they weren't part of version pattern)
+    name=$(echo "$name" | sed -E "s/${PLATFORM_SUFFIX_PATTERN}\$//")
+
+    # Clean up any trailing dots or dashes
+    name=$(echo "$name" | sed -E 's/[\.\-]+$//')
+
+    # Convert dashes/underscores to spaces
+    name="${name//-/ }"
+    name="${name//_/ }"
+
+    # Convert camelCase to spaces (e.g., "30YearOldVirgin" -> "30 Year Old Virgin")
+    # Insert space before capital letters that follow lowercase or numbers
+    name=$(echo "$name" | sed -E 's/([a-z0-9])([A-Z])/\1 \2/g')
+
+    echo "$name"
+}
+
+# Compare two version strings using version-aware sorting
+# Uses sort -V which understands version number semantics (e.g., 1.9 < 1.10)
+# Returns: "older" if ver1 < ver2, "equal" if ver1 == ver2, "newer" if ver1 > ver2
+version_compare() {
+    local ver1="$1"
+    local ver2="$2"
+
+    if [[ "$ver1" == "$ver2" ]]; then
+        echo "equal"
+        return
+    fi
+
+    # sort -V performs version-aware sorting (understands multi-part version numbers)
+    local sorted_first=$(printf '%s\n' "$ver1" "$ver2" | sort -V | head -n1)
+
+    if [[ "$sorted_first" == "$ver1" ]]; then
+        echo "older"
+    else
+        echo "newer"
+    fi
+}
+
+# Find installed game directory by name
+# Handles both exact matches and prefix matches (for versioned directories)
+# Symlinks are resolved to their actual target directories (Windows builds use symlinks to track "latest" version)
+# Returns: path to game directory or empty if not found
+find_game_dir() {
+    local game_name="$1"
+
+    # First try exact match (could be a symlink or directory)
+    if [[ -e "$GAMES_DIR/$game_name" ]]; then
+        resolve_symlink_or_echo "$GAMES_DIR/$game_name"
+        return 0
+    fi
+
+    # Try finding any directory starting with game name (handles versioned directories)
+    local matches=("$GAMES_DIR"/$game_name*(N))
+
+    if [[ ${#matches[@]} -gt 0 ]]; then
+        resolve_symlink_or_echo "${matches[1]}"
+        return 0
+    fi
+
+    return 1
+}
+
+# Find all versions of a game
+# Symlinks are excluded because they're just pointers to versioned directories (used for "latest" tracking)
+# Returns: array of "version:path" entries sorted by version number
+find_game_versions() {
+    local game_name="$1"
+    local -a versions=()
+
+    # Find all real directories matching game name pattern (skip symlinks to avoid duplicates)
+    for dir in "$GAMES_DIR"/$game_name-*(N); do
+        if [[ -d "$dir" && ! -L "$dir" ]]; then
+            local version=$(extract_version "$(basename "$dir")")
+            versions+=("$version:$dir")
+        fi
+    done
+
+    # Sort by version using version-aware sort
+    printf '%s\n' "${versions[@]}" | sort -t: -k1,1V
+}
+
+# Clean up old temporary directories (7+ days)
+startup_cleanup() {
+    log_verbose "Checking for old temporary files..."
+
+    local cleaned=0
+    local now=$(date +%s)
+    local cutoff=$((now - (TEMP_CLEANUP_DAYS * 86400)))
+
+    for dir in "$TEMP_BASE"/renpy-*(N); do
+        if [[ -d "$dir" ]]; then
+            local mtime=$(stat -f %m "$dir" 2>/dev/null || echo 0)
+            if (( mtime < cutoff )); then
+                log_verbose "Removing old temp: $(basename "$dir")"
+                rm -rf "$dir"
+                ((cleaned++))
+            fi
+        fi
+    done
+
+    if (( cleaned > 0 )); then
+        log_verbose "Cleaned up $(pluralize $cleaned "old temporary directory" "old temporary directories")"
+    fi
+}
+
+# Get human-readable size
+get_size_human() {
+    local path="$1"
+    local size_output=$(/usr/bin/du -sh "$path" 2>/dev/null)
+    echo "${size_output%%[[:space:]]*}"
+}
+
+# Get relative time (e.g., "2 days ago")
+get_relative_time() {
+    local timestamp="$1"
+    local now=$(date +%s)
+    local diff=$((now - timestamp))
+
+    if (( diff < 60 )); then
+        echo "just now"
+    elif (( diff < 3600 )); then
+        echo "$(pluralize $((diff / 60)) minute) ago"
+    elif (( diff < 86400 )); then
+        echo "$(pluralize $((diff / 3600)) hour) ago"
+    elif (( diff < 604800 )); then
+        echo "$(pluralize $((diff / 86400)) day) ago"
+    elif (( diff < 2592000 )); then
+        echo "$(pluralize $((diff / 604800)) week) ago"
+    else
+        echo "$(pluralize $((diff / 2592000)) month) ago"
+    fi
+}
+
+# Format a game directory name for display
+# Returns: "Normalized Name (vX.X.X)" or "Normalized Name (vX.X.X) (latest)"
+# Usage: format_game_display_name <dir_name> [is_latest]
+format_game_display_name() {
+    local dir_name="$1"
+    local is_latest="${2:-false}"
+    local normalized=$(normalize_game_name "$dir_name")
+    local version=$(extract_version "$dir_name")
+    local display_name="$normalized (v$version)"
+
+    if [[ "$is_latest" == "true" ]]; then
+        display_name="$display_name (latest)"
+    fi
+
+    echo "$display_name"
+}
+
+# Build a game selection list for interactive menus
+# This function processes installed games and creates human-readable display names
+# Returns two arrays to the caller using eval (zsh doesn't support returning arrays normally):
+#   - games_array: formatted display names (e.g., "Game Name (v1.0) (latest)")
+#   - game_map_assoc: associative array mapping display names to actual directory names
+# Usage: build_game_selection_list games_array game_map_assoc [include_size] [sort_by_time]
+# Parameters:
+#   games_var: name of the array variable to populate with display names
+#   map_var: name of the associative array variable for display->directory mapping
+#   include_size: "true" to append file sizes to display names
+#   sort_by_time: "true" to sort by modification time, "false" to group by base name
+build_game_selection_list() {
+    local games_var="$1"
+    local map_var="$2"
+    local include_size="${3:-false}"
+    local sort_by_time="${4:-false}"
+
+    local -A game_versions  # base_name -> space-separated list of version directories
+    local -A symlink_targets  # symlink name -> target directory basename
+    local -a processing_order=()  # For time-based sorting: "mtime:dirname" entries
+    local -a local_games=()
+    local -A local_map=()
+
+    # First pass: scan all items in games directory
+    # Identify symlinks (point to "latest" version) and real directories (actual game installations)
+    for item in "$GAMES_DIR"/*(N); do
+        if [[ ! -d "$item" ]]; then
+            continue
+        fi
+
+        local name=$(basename "$item")
+
+        # Track symlinks and their targets (used to mark "latest" versions)
+        if [[ -L "$item" ]]; then
+            local target=$(readlink "$item")
+            symlink_targets[$name]=$(basename "$target")
+        else
+            # Real directory - extract base name for grouping
+            # Uses pattern like "GameName-1.0" -> "GameName"
+            local base_name="${name%-[0-9]*}"
+            if [[ -z "${game_versions[$base_name]:-}" ]]; then
+                game_versions[$base_name]="$name"
+            else
+                game_versions[$base_name]="${game_versions[$base_name]} $name"
+            fi
+
+            # For time-based sorting, track modification time
+            if [[ "$sort_by_time" == "true" ]]; then
+                local mtime=$(stat -f %m "$item" 2>/dev/null || echo 0)
+                processing_order+=("$mtime:$name")
+            fi
+        fi
+    done
+
+    # Second pass: build display list with normalized names
+    if [[ "$sort_by_time" == "true" ]]; then
+        # Sort by time (newest first) and create display names
+        for entry in ${(On)processing_order}; do
+            local dir_name="${entry#*:}"
+            local display_name=$(format_game_display_name "$dir_name")
+
+            if [[ "$include_size" == "true" ]]; then
+                local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                display_name="$display_name ($size)"
+            fi
+
+            local_games+=("$display_name")
+            local_map[$display_name]="$dir_name"
+        done
+    else
+        # Group by base name
+        for base_name in "${(@k)game_versions}"; do
+            local versions=(${=game_versions[$base_name]})
+
+            if (( ${#versions[@]} == 1 )); then
+                # Single version
+                local dir_name="${versions[1]}"
+                local display_name=$(format_game_display_name "$dir_name")
+
+                if [[ "$include_size" == "true" ]]; then
+                    local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                    display_name="$display_name ($size)"
+                fi
+
+                local_games+=("$display_name")
+                local_map[$display_name]="$dir_name"
+            else
+                # Multiple versions - show all with (latest) marker
+                local latest="${symlink_targets[$base_name]:-}"
+                for dir_name in ${versions[@]}; do
+                    local is_latest="false"
+                    [[ "$dir_name" == "$latest" ]] && is_latest="true"
+
+                    local display_name=$(format_game_display_name "$dir_name" "$is_latest")
+
+                    if [[ "$include_size" == "true" ]]; then
+                        local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                        display_name="$display_name ($size)"
+                    fi
+
+                    local_games+=("$display_name")
+                    local_map[$display_name]="$dir_name"
+                done
+            fi
+        done
+    fi
+
+    # Assign to caller's variables using eval
+    eval "$games_var=(\"\${local_games[@]}\")"
+    eval "$map_var=(\"\${(kv)local_map[@]}\")"
+}
+
+# Cleanup handler
+cleanup() {
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+        log_verbose "Cleaning up temporary directory: $WORK_DIR"
+        rm -rf "$WORK_DIR"
+    fi
+}
+trap cleanup EXIT INT TERM
+
+# ============================================================================
+# Command: Install
+# ============================================================================
+
+# Install a Ren'Py game from an archive file
+# Supports both Mac (.app bundles) and Windows (directory) builds
+# Windows builds create a symlink named after the game pointing to the versioned directory
+# (e.g., "GameName" -> "GameName-1.0") to track the "latest" installed version
+# Mac .app bundles don't use symlinks since they're already self-contained
+cmd_install() {
+    local platform=""
+    local zip_file=""
+    local force=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -w|--windows)
+                platform="windows"
+                shift
+                ;;
+            -m|--mac)
+                platform="mac"
+                shift
+                ;;
+            -f|--force)
+                force=true
+                shift
+                ;;
+            -h|--help)
+                show_command_help "install"
+                return 0
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                return 1
+                ;;
+            *)
+                zip_file="$1"
+                shift
+                ;;
+        esac
+    done
+
+    # Validate arguments
+    if [[ -z "$zip_file" ]]; then
+        log_error "No archive file specified"
+        echo "Usage: ren install [-w|-m] <game-archive>"
+        return 1
+    fi
+
+    # Default to Mac if no platform specified
+    if [[ -z "$platform" ]]; then
+        platform="mac"
+        log_verbose "No platform specified, defaulting to Mac build"
+    fi
+
+    if [[ ! -f "$zip_file" ]]; then
+        log_error "Zip file not found: $zip_file"
+        return 1
+    fi
+
+    # Create games directory if it doesn't exist
+    mkdir -p "$GAMES_DIR"
+
+    # Extract game info from filename
+    local game_name=$(extract_game_name "$zip_file")
+    local version=$(extract_version "$zip_file")
+    local display_name=$(normalize_game_name "$game_name")
+
+    log_info "Installing: $display_name (version: $version)"
+    log_verbose "Platform: $platform"
+
+    # Create temporary extraction directory
+    WORK_DIR="$TEMP_BASE/renpy-$$"
+
+    # Extract archive
+    log_info "Extracting game..."
+    if ! extract_archive "$zip_file" "$WORK_DIR"; then
+        return 1
+    fi
+
+    # Find the game directory (should contain 'game' subdirectory for Windows builds)
+    local extracted_dir=""
+
+    if [[ "$platform" == "windows" ]]; then
+        # Look for directory containing 'game' subdirectory
+        for dir in "$WORK_DIR"/*(N); do
+            if [[ -d "$dir/game" ]]; then
+                extracted_dir="$dir"
+                break
+            fi
+        done
+
+        if [[ -z "$extracted_dir" ]]; then
+            log_error "No valid Ren'Py project found (missing 'game' directory)"
+            return 1
+        fi
+    else
+        # Mac build - look for .app bundle (search up to 2 levels deep)
+        local app_bundle=("$WORK_DIR"/**/*.app(N[1]))
+        if [[ -z "${app_bundle[1]:-}" ]]; then
+            # Try top level if not found in subdirectories
+            app_bundle=("$WORK_DIR"/*.app(N[1]))
+        fi
+
+        if [[ -n "${app_bundle[1]:-}" ]]; then
+            extracted_dir="${app_bundle[1]}"
+        else
+            log_error "No .app bundle found in archive"
+            return 1
+        fi
+    fi
+
+    log_verbose "Found game at: ${extracted_dir/$WORK_DIR\//}"
+
+    # Check for existing installations
+    local existing_versions=($(find_game_versions "$game_name"))
+
+    if [[ ${#existing_versions[@]} -gt 0 && "$force" == "false" ]]; then
+        log_info "Found existing installation(s):"
+        for ver_path in "${existing_versions[@]}"; do
+            local ver="${ver_path%%:*}"
+            local path="${ver_path#*:}"
+            echo "  - Version $ver: $(basename "$path")"
+        done
+
+        if gum_clean confirm "Remove old version(s) before installing?"; then
+            for ver_path in "${existing_versions[@]}"; do
+                local path="${ver_path#*:}"
+                log_info "Removing: $(basename "$path")"
+                rm -rf "$path"
+            done
+
+            # Remove symlink if it exists
+            if [[ -L "$GAMES_DIR/$game_name" ]]; then
+                rm "$GAMES_DIR/$game_name"
+            fi
+        fi
+    fi
+
+    # Determine installation path
+    # Use normalized game name to avoid duplicates and messy names
+    local base_name=$(normalize_game_name "$game_name")
+    # Remove spaces for filesystem compatibility (spaces can cause issues with shell scripts and tools)
+    # The normalized name already has proper capitalization, so removing spaces creates clean CamelCase names
+    base_name=$(echo "$base_name" | sed -E 's/ //g')
+
+    local install_name="$base_name"
+    if [[ "$version" != "unknown" ]]; then
+        install_name="$base_name-$version"
+    fi
+
+    if [[ "$platform" == "mac" ]]; then
+        install_name="$install_name.app"
+    fi
+
+    local install_path="$GAMES_DIR/$install_name"
+
+    # Move to installation directory
+    log_info "Installing to: $install_name"
+
+    if [[ -e "$install_path" ]]; then
+        if [[ "$force" == "true" ]]; then
+            rm -rf "$install_path"
+        else
+            log_error "Installation path already exists: $install_path"
+            log_error "Use --force to overwrite"
+            return 1
+        fi
+    fi
+
+    mv "$extracted_dir" "$install_path"
+
+    # Remove quarantine flag from Mac apps (macOS Gatekeeper security feature)
+    if [[ "$platform" == "mac" ]]; then
+        if xattr -p com.apple.quarantine "$install_path" &>/dev/null; then
+            log_verbose "Removing Gatekeeper quarantine from app..."
+            xattr -rd com.apple.quarantine "$install_path" 2>/dev/null || true
+        fi
+    fi
+
+    # Create/update symlink to track "latest" version (Windows builds only)
+    # Symlink structure: "GameName" -> "GameName-1.0"
+    # This allows launching games by base name without knowing the version number
+    # Mac .app bundles don't need this since they're version-agnostic single files
+    if [[ "$platform" == "windows" ]]; then
+        local symlink_path="$GAMES_DIR/$game_name"
+        if [[ -L "$symlink_path" || -e "$symlink_path" ]]; then
+            rm -rf "$symlink_path"
+        fi
+        ln -s "$install_path" "$symlink_path"
+        log_verbose "Created symlink: $game_name → $install_name"
+    fi
+
+    log_success "Game installed successfully!"
+    echo ""
+    echo "  ${GREEN}$display_name${NC}"
+    if [[ "$version" != "unknown" ]]; then
+        echo "  Version: ${CYAN}$version${NC}"
+    fi
+    echo ""
+    echo "To play: ${CYAN}ren launch $game_name${NC}"
+}
+
+# ============================================================================
+# Command: Launch
+# ============================================================================
+
+# Launch an installed game (Mac .app or Windows build via Ren'Py SDK)
+# If no game name is provided, shows an interactive selection menu
+cmd_launch() {
+    local game_name="$1"
+
+    # Handle help
+    if [[ "$game_name" == "--help" || "$game_name" == "-h" ]]; then
+        show_command_help "launch"
+        return 0
+    fi
+
+    # Validate Ren'Py SDK (required for Windows builds)
+    if ! validate_renpy_sdk; then
+        return 1
+    fi
+
+    # If no game specified, show interactive selection
+    if [[ -z "$game_name" ]]; then
+        game_name=$(interactive_game_selection false "Select a game to launch:" false)
+
+        if [[ -z "$game_name" ]]; then
+            log_info "Cancelled"
+            return 0
+        fi
+    fi
+
+    # Find game directory
+    local game_dir=$(find_game_dir "$game_name")
+
+    if [[ -z "$game_dir" ]]; then
+        log_error "Game not found: $game_name"
+        return 1
+    fi
+
+    # Get normalized display name for user-facing messages
+    local display_name=$(normalize_game_name "$game_name")
+    local version=$(extract_version "$game_name")
+
+    log_info "Launching: $display_name"
+    log_verbose "Game directory: $game_dir"
+
+    # Launch based on game type
+    local game_type=$(get_game_type "$game_dir")
+
+    if [[ "$game_type" == "mac" ]]; then
+        open "$game_dir"
+    else
+        # Windows build via Ren'Py SDK
+        open -a "$RENPY_SDK/renpy.app" --args "$game_dir" &
+    fi
+
+    log_success "$display_name launched successfully!"
+}
+
+# ============================================================================
+# Command: List
+# ============================================================================
+
+# List all installed games with details
+# Displays: name, version, type (Mac/Windows), size, and installation time
+cmd_list() {
+    if is_games_dir_empty; then
+        log_info "No games installed"
+        return 0
+    fi
+
+    echo ""
+    printf "${BOLD}%-30s %-10s %-6s %-10s %-15s${NC}\n" "GAME NAME" "VERSION" "TYPE" "SIZE" "INSTALLED"
+    printf "${DIM}%s${NC}\n" "$(printf '%.0s─' {1..75})"
+
+    for item in "$GAMES_DIR"/*(N); do
+        # Skip symlinks - they point to real directories which are already listed
+        # Symlinks are used to track "latest" version for Windows builds
+        if [[ -L "$item" ]]; then
+            continue
+        fi
+
+        if [[ ! -d "$item" ]]; then
+            continue
+        fi
+
+        local name=$(basename "$item")
+        local version="unknown"
+        local type="Win"
+        local size=$(get_size_human "$item")
+        local mtime=$(stat -f %m "$item" 2>/dev/null || echo 0)
+        local installed=$(get_relative_time "$mtime")
+
+        # Extract version
+        version=$(extract_version "$name")
+
+        # Determine type (plain text, no colors yet)
+        if [[ "$name" == *.app ]]; then
+            type="Mac"
+            type_color="$GREEN"
+        else
+            type="Win"
+            type_color="$BLUE"
+        fi
+
+        # Normalize the display name
+        name=$(normalize_game_name "$name")
+
+        printf "%-30s ${CYAN}%-10s${NC} ${type_color}%-6s${NC} %-10s ${DIM}%-15s${NC}\n" \
+            "$name" "$version" "$type" "$size" "$installed"
+    done
+
+    echo ""
+}
+
+# ============================================================================
+# Command: Cleanup Temp
+# ============================================================================
+
+# Remove temporary extraction directories from /tmp
+# Prompts for confirmation before deleting
+cmd_cleanup_tmp() {
+    log_info "Scanning temporary directories..."
+
+    local -a temp_dirs=()
+    for dir in "$TEMP_BASE"/renpy-*(N); do
+        if [[ -d "$dir" ]]; then
+            temp_dirs+=("$dir")
+        fi
+    done
+
+    if [[ ${#temp_dirs[@]} -eq 0 ]]; then
+        log_info "No temporary directories found"
+        return 0
+    fi
+
+    # Calculate total size
+    local total_size=$(du -sh "$TEMP_BASE"/renpy-* 2>/dev/null | awk '{sum+=$1} END {print sum"M"}' || echo "unknown")
+
+    if (( ${#temp_dirs[@]} == 1 )); then
+        log_info "Found 1 temporary directory ($total_size)"
+    else
+        log_info "Found ${#temp_dirs[@]} temporary directories ($total_size)"
+    fi
+
+    if ! gum_clean confirm "Remove all temporary directories?"; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    local removed=0
+    for dir in "${temp_dirs[@]}"; do
+        log_verbose "Removing: $(basename "$dir")"
+        rm -rf "$dir"
+        ((removed++))
+    done
+
+    log_success "Removed $(pluralize $removed "temporary directory" "temporary directories")"
+}
+
+# ============================================================================
+# Command: Cleanup Games
+# ============================================================================
+
+# Interactively remove installed games (all or selected)
+cmd_cleanup_games() {
+    if is_games_dir_empty; then
+        log_info "No games installed"
+        return 0
+    fi
+
+    # Ask cleanup mode (remove all or select specific games)
+    local mode=$(gum_clean choose \
+        "Clean up all games" \
+        "Select specific games to remove" \
+        --header="Choose cleanup mode:")
+
+    if [[ -z "$mode" ]]; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    if [[ "$mode" == "Clean up all games" ]]; then
+        # Show all games
+        echo ""
+        log_warning "This will remove ALL installed games:"
+        echo ""
+        cmd_list
+
+        if ! gum_clean confirm "Are you SURE you want to delete everything?" --affirmative="Yes, delete all" --negative="Cancel"; then
+            log_info "Cancelled"
+            return 0
+        fi
+
+        log_info "Removing all games..."
+        rm -rf "$GAMES_DIR"/*
+        log_success "All games removed"
+    else
+        # Build list of games for selection with normalized names
+        local -a games=()
+        local -A game_map
+        build_game_selection_list games game_map true false
+
+        if [[ ${#games[@]} -eq 0 ]]; then
+            log_info "No games found"
+            return 0
+        fi
+
+        # Multi-select games
+        local selected=$(gum_clean choose "${games[@]}" \
+            --no-limit \
+            --header="Select games to remove (Space to select, Enter to confirm):")
+
+        if [[ -z "$selected" ]]; then
+            log_info "No games selected"
+            return 0
+        fi
+
+        # Parse selected games and map back to actual directory names
+        local -a to_remove=()
+        while IFS= read -r line; do
+            to_remove+=("${game_map[$line]}")
+        done <<< "$selected"
+
+        # Show confirmation
+        echo ""
+        log_warning "Games to be removed:"
+        for game in "${to_remove[@]}"; do
+            echo "  - $game"
+        done
+        echo ""
+
+        if ! gum_clean confirm "Remove these games?"; then
+            log_info "Cancelled"
+            return 0
+        fi
+
+        # Remove selected games
+        for game in "${to_remove[@]}"; do
+            log_verbose "Removing: $game"
+            rm -rf "$GAMES_DIR/$game"
+
+            # Remove symlink if it exists
+            local symlink="$GAMES_DIR/${game%-*}"
+            if [[ -L "$symlink" ]]; then
+                rm "$symlink"
+            fi
+        done
+
+        log_success "Removed $(pluralize ${#to_remove[@]} game)"
+    fi
+}
+
+# ============================================================================
+# Command: Mod
+# ============================================================================
+
+# Install a mod into an existing game
+# Mods can be archives or directories; they're copied into the game's 'game' folder
+# Expected mod structure: either loose files or a 'game' folder containing the mod files
+cmd_mod() {
+    local game_name="$1"
+    local mod_path="$2"
+
+    # Handle help
+    if [[ "$game_name" == "--help" || "$game_name" == "-h" ]]; then
+        show_command_help "mod"
+        return 0
+    fi
+
+    # Interactive mode if no arguments provided
+    if [[ -z "$game_name" ]]; then
+        game_name=$(interactive_game_selection true "Select game to mod:" false)
+
+        if [[ -z "$game_name" ]]; then
+            log_info "Cancelled"
+            return 0
+        fi
+    fi
+
+    # Prompt for mod path if not provided
+    if [[ -z "$mod_path" ]]; then
+        mod_path=$(gum_clean input \
+            --prompt="Path to mod (zip/folder): " \
+            --placeholder="~/Downloads/mod.zip")
+
+        if [[ -z "$mod_path" ]]; then
+            log_info "Cancelled"
+            return 0
+        fi
+
+        # Clean up user input
+        mod_path=$(trim_and_expand_path "$mod_path")
+    fi
+
+    # Find game directory
+    local game_dir=$(find_game_dir "$game_name")
+
+    if [[ -z "$game_dir" ]]; then
+        log_error "Game not found: $game_name"
+        return 1
+    fi
+
+    # Verify mod path exists
+    if [[ ! -e "$mod_path" ]]; then
+        log_error "Mod not found: $mod_path"
+        log_verbose "Path length: ${#mod_path} characters"
+        log_verbose "Checking if file exists: $(ls -la "$mod_path" 2>&1 || echo 'Not found')"
+        return 1
+    fi
+
+    log_verbose "Mod path validated: $mod_path"
+
+    # Get normalized display name for user-facing messages
+    local display_name=$(normalize_game_name "$game_name")
+
+    log_info "Installing mod for: $display_name"
+    log_verbose "Game directory: $game_dir"
+    log_verbose "Mod source: $mod_path"
+
+    # Determine target directory based on game type
+    # Mac .app bundles have a nested structure, Windows builds are straightforward
+    local target_dir=""
+    local game_type=$(get_game_type "$game_dir")
+
+    if [[ "$game_type" == "mac" ]]; then
+        # Mac app bundle - mods go into Contents/Resources/autorun/game
+        target_dir="$game_dir/Contents/Resources/autorun/game"
+        if [[ ! -d "$target_dir" ]]; then
+            log_error "Cannot find game directory in .app bundle"
+            return 1
+        fi
+    else
+        # Windows build - mods go into the 'game' subdirectory
+        target_dir="$game_dir/game"
+    fi
+
+    log_verbose "Target directory: $target_dir"
+
+    # Handle mod source (archive or directory)
+    local mod_source="$mod_path"
+
+    # Check if mod is an archive file (not a directory)
+    if [[ -f "$mod_path" ]]; then
+        local extension="${mod_path:e:l}"
+
+        # Check against supported archive extensions
+        if [[ "$extension" =~ $ARCHIVE_EXTENSIONS_PATTERN ]]; then
+            # Extract archive to temp
+            WORK_DIR="$TEMP_BASE/renpy-mod-$$"
+
+            log_info "Extracting mod..."
+            if ! extract_archive "$mod_path" "$WORK_DIR"; then
+                return 1
+            fi
+
+            mod_source="$WORK_DIR"
+
+            # Check if extraction resulted in a single directory
+            # Some mod authors package their mods inside a 'game' folder structure
+            # to match the target game's directory layout. We detect this and unwrap it.
+            local -a extracted_items=("$WORK_DIR"/*(N))
+            if [[ ${#extracted_items[@]} -eq 1 && -d "${extracted_items[1]}" ]]; then
+                local dir_name=$(basename "${extracted_items[1]}")
+                # If the single directory is named "game", use its contents directly
+                # This avoids creating a nested game/game/ structure
+                if [[ "$dir_name" == "game" ]]; then
+                    log_verbose "Detected mod with 'game' folder, using its contents directly"
+                    mod_source="${extracted_items[1]}"
+                fi
+            fi
+        fi
+    fi
+
+    # Install mod files (overwrites any conflicts - no backup created)
+    log_info "Installing mod files (will overwrite existing files)..."
+
+    if [[ -d "$mod_source" ]]; then
+        # Copy directory contents
+        rsync -av "$mod_source/" "$target_dir/" 2>&1 | while read -r line; do
+            log_verbose "$line"
+        done
+    else
+        # Single file
+        cp -f "$mod_source" "$target_dir/"
+        log_verbose "Copied: $(basename "$mod_source")"
+    fi
+
+    log_success "Mod installed successfully!"
+    echo ""
+    echo "  Game: ${GREEN}$display_name${NC}"
+    echo "  Note: Mod files overwrote any conflicts"
+}
+
+# ============================================================================
+# Help System
+# ============================================================================
+
+show_help() {
+    cat <<EOF
+
+$(print_help_header "USAGE:")
+    ren <command> [options]
+
+$(print_help_header "DESCRIPTION:")
+    Ren'Py Game Manager - Install, launch, and manage Ren'Py games on macOS
+
+$(print_help_header "COMMANDS:")
+
+$(print_help_command "install" "[-w|-m] <archive>" \
+    "Install a game from archive (.zip, .7z, etc.)" \
+    "  -w, --windows    Windows build (runs via Ren'Py SDK)" \
+    "  -m, --mac        Mac build (.app bundle)" \
+    "  -f, --force      Overwrite existing installation")
+
+$(print_help_command "launch" "[game-name]" \
+    "Launch an installed game" \
+    "If game-name is not provided, shows interactive selection")
+
+$(print_help_command "list" "" \
+    "List all installed games with versions and details")
+
+$(print_help_command "cleanup" "tmp | games" \
+    "Clean up temporary files or installed games" \
+    "  tmp      Remove temporary extraction directories" \
+    "  games    Interactive removal of installed games")
+
+$(print_help_command "mod" "[game-name] [mod-path]" \
+    "Install mod into game (overwrites conflicts)" \
+    "Interactive if no args provided (newest games first)" \
+    "mod-path can be an archive (.zip, .7z, .rar, etc.) or directory")
+
+$(print_help_command "help" "[command]" \
+    "Show help for a specific command")
+
+$(print_help_header "EXAMPLES:")
+    $(print_help_example "# Install a Windows game")
+    $(print_help_example "ren install -w MyGame-1.0-pc.zip")
+
+    $(print_help_example "# Launch a game interactively")
+    $(print_help_example "ren launch")
+
+    $(print_help_example "# Launch specific game")
+    $(print_help_example "ren launch MyGame")
+
+    $(print_help_example "# Install a mod")
+    $(print_help_example "ren mod MyGame patch-fix.zip")
+
+    $(print_help_example "# Clean up old temp files")
+    $(print_help_example "ren cleanup tmp")
+
+$(print_help_header "NOTES:")
+    - Games are installed to: ${CYAN}~/renpy-games/${NC}
+    - Requires 'unar' for archive extraction: ${CYAN}brew install unar${NC}
+    - Temp files older than 7 days are auto-cleaned on startup
+    - Windows builds require Ren'Py SDK (auto-detected from Homebrew)
+    - Mod installation overwrites conflicting files automatically
+
+EOF
+}
+
+show_command_help() {
+    local cmd="$1"
+
+    case "$cmd" in
+        install)
+            cat <<EOF
+
+${BOLD}COMMAND: ren install${NC}
+
+Install a Ren'Py game from an archive file.
+
+${BOLD}USAGE:${NC}
+    ren install [-w|-m] [-f] <game-archive>
+
+${BOLD}OPTIONS:${NC}
+    -w, --windows     Windows build (requires Ren'Py SDK)
+    -m, --mac         Mac build (.app bundle)
+    -f, --force       Overwrite existing installation without prompting
+
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}ren install -w GameName-1.0-pc.zip${NC}
+    ${GREEN}ren install -m GameName-2.0-mac.zip --force${NC}
+
+${BOLD}NOTES:${NC}
+    - Supports .zip, .tar, .tar.gz, .tar.bz2, .tar.xz, .7z, .rar, and more
+    - Requires 'unar' for archive extraction: brew install unar
+    - If a previous version exists, you'll be prompted to remove it
+    - Games are versioned automatically from the filename
+    - Use --force to skip all prompts
+    - Mac apps automatically have Gatekeeper quarantine removed
+
+EOF
+            ;;
+        launch)
+            cat <<EOF
+
+${BOLD}COMMAND: ren launch${NC}
+
+Launch an installed Ren'Py game.
+
+${BOLD}USAGE:${NC}
+    ren launch [game-name]
+
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}ren launch${NC}              # Interactive selection
+    ${GREEN}ren launch GameName${NC}     # Launch specific game
+
+${BOLD}NOTES:${NC}
+    - If no game name is provided, shows interactive menu
+    - Windows builds launch via Ren'Py SDK
+    - Mac builds launch as native .app bundles
+
+EOF
+            ;;
+        list)
+            cat <<EOF
+
+${BOLD}COMMAND: ren list${NC}
+
+List all installed Ren'Py games.
+
+${BOLD}USAGE:${NC}
+    ren list
+
+${BOLD}OUTPUT INCLUDES:${NC}
+    - Game name and version
+    - Platform (Windows/Mac)
+    - Installation size
+    - Time since installation
+
+EOF
+            ;;
+        cleanup)
+            cat <<EOF
+
+${BOLD}COMMAND: ren cleanup${NC}
+
+Clean up temporary files or installed games.
+
+${BOLD}USAGE:${NC}
+    ren cleanup tmp          # Remove temp directories
+    ren cleanup games        # Remove installed games (interactive)
+
+${BOLD}CLEANUP MODES:${NC}
+
+    ${CYAN}tmp${NC} - Removes all temporary extraction directories
+          Located in: \$TMPDIR/renpy-*
+
+    ${CYAN}games${NC} - Interactive game removal with two options:
+          1. Remove all games (with confirmation)
+          2. Select specific games to remove (multi-select)
+
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}ren cleanup tmp${NC}
+    ${GREEN}ren cleanup games${NC}
+
+EOF
+            ;;
+        mod)
+            cat <<EOF
+
+${BOLD}COMMAND: ren mod${NC}
+
+Install a mod into an existing game.
+
+${BOLD}USAGE:${NC}
+    ren mod                       # Interactive mode
+    ren mod <game-name> <mod-path>
+
+${BOLD}ARGUMENTS:${NC}
+    game-name     Name of installed game (optional, will prompt if not provided)
+    mod-path      Path to mod archive (.zip, .7z, .rar, etc.) or directory (optional, will prompt if not provided)
+
+${BOLD}INTERACTIVE MODE:${NC}
+    - If no arguments provided, shows list of games (newest first)
+    - After selecting game, prompts for mod path
+    - Supports tab completion and path expansion (~/Downloads)
+
+${BOLD}BEHAVIOR:${NC}
+    - Automatically extracts archives (.zip, .7z, .rar, etc.)
+    - Copies all files to game/game/ directory
+    - ${YELLOW}Overwrites any conflicting files${NC} (no prompts)
+    - No backups are created (be careful!)
+
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}ren mod${NC}                         # Interactive selection
+    ${GREEN}ren mod GameName patch.zip${NC}       # Direct mod installation
+    ${GREEN}ren mod GameName ./mod-files/${NC}    # Install from directory
+
+EOF
+            ;;
+        *)
+            show_help
+            ;;
+    esac
+}
+
+# ============================================================================
+# Main Command Dispatcher
+# ============================================================================
+
+main() {
+    # Run startup cleanup
+    startup_cleanup
+
+    # Parse command
+    local command="${1:-help}"
+    (( $# > 0 )) && shift
+
+    case "$command" in
+        install|i)
+            cmd_install "$@"
+            ;;
+        launch|l|play|p)
+            cmd_launch "$@"
+            ;;
+        list|ls)
+            cmd_list "$@"
+            ;;
+        cleanup|clean)
+            local subcommand="${1:-}"
+            (( $# > 0 )) && shift
+
+            case "$subcommand" in
+                tmp|temp)
+                    cmd_cleanup_tmp "$@"
+                    ;;
+                games|g)
+                    cmd_cleanup_games "$@"
+                    ;;
+                *)
+                    log_error "Unknown cleanup target: $subcommand"
+                    echo "Usage: ren cleanup [tmp|games]"
+                    return 1
+                    ;;
+            esac
+            ;;
+        mod|m)
+            cmd_mod "$@"
+            ;;
+        help|h|--help|-h)
+            if [[ -n "${1:-}" ]]; then
+                show_command_help "$1"
+            else
+                show_help
+            fi
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            echo ""
+            show_help
+            return 1
+            ;;
+    esac
+}
+
+# Run main
+main "$@"
