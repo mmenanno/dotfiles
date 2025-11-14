@@ -53,6 +53,7 @@
     x264
     x265
     texliveFull
+    unar
     yarn
     yq
     yt-dlp
