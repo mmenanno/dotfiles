@@ -19,6 +19,7 @@ let
 
   # Git services
   forgejoDomain = getEnvOrFallback "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
+  levForgejoDomain = getEnvOrFallback "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
 in
 {
   programs.git = {
@@ -80,12 +81,18 @@ in
       push.autoSetupRemote = true;
       gpg = {
         format = "ssh";
-        ssh.program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
+        ssh = {
+          program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
+          allowedSignersFile = "~/.ssh/allowed_signers";
+        };
       };
       credential = {
         "${forgejoDomain}" = {
           provider = "generic";
         } // (if isBootstrap then {} else {});  # Conditional personal forge config
+        "${levForgejoDomain}" = {
+          provider = "generic";
+        } // (if isBootstrap then {} else {});  # Conditional Lev forge config
         helper = "/usr/local/share/gcm-core/git-credential-manager";
         "https://dev.azure.com" = {
           useHttpPath = true;
@@ -133,4 +140,10 @@ in
       };
     };
   };
+
+  # SSH allowed signers file for commit signature verification
+  home.file.".ssh/allowed_signers".text = ''
+    ${personalEmail} ${signingKey}
+    ${privateEmail} ${privateSigningKey}
+  '';
 }
