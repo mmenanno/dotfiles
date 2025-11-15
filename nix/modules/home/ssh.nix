@@ -37,6 +37,14 @@ let
   mainGithubKey = getEnvOrFallback "NIX_SSH_MAIN_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_MAIN_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_MAIN_GITHUB_KEY_CHANGE_ME";
   privateGithubKey = getEnvOrFallback "NIX_SSH_PRIVATE_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_PRIVATE_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_PRIVATE_GITHUB_KEY_CHANGE_ME";
 
+  # Forgejo domains from environment
+  forgejoDomainFull = getEnvOrFallback "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
+  levForgejoDomainFull = getEnvOrFallback "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
+
+  # Extract hostname from full URL (remove https://)
+  forgejoDomain = builtins.replaceStrings ["https://" "http://"] ["" ""] forgejoDomainFull;
+  levForgejoDomain = builtins.replaceStrings ["https://" "http://"] ["" ""] levForgejoDomainFull;
+
   # Common configurations
   common = {
     private = {
@@ -107,6 +115,14 @@ in
         "github.${privateUserShort}" = {
           hostname = "github.com";
           identityFile = "~/.ssh/${privateGithubKeyFile}";
+        };
+        "${forgejoDomain}" = {
+          hostname = forgejoDomain;
+          identityFile = "~/.ssh/${mainGithubKeyFile}";
+        };
+        "${levForgejoDomain}" = {
+          hostname = levForgejoDomain;
+          identityFile = "~/.ssh/${mainGithubKeyFile}";
         };
       };
     };
