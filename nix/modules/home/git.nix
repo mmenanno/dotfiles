@@ -102,6 +102,9 @@ in
       tag.gpgsign = true;
       core.editor = "cursor --wait";
 
+      # Git LFS locking support
+      lfs.locksverify = true;
+
       # URL rewrites for faster cloning (use SSH instead of HTTPS)
       url = {
         "git@github.com:" = {
