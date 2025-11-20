@@ -225,6 +225,6 @@ in
       };
     };
 
-    mcpServers = mcpServers;
+    inherit mcpServers;
   };
 }

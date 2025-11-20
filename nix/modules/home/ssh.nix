@@ -3,9 +3,9 @@
 
 let
   inherit (dotlib) getEnvOrFallback;
+  inherit (config.home) username;
 
   sshDir = "${config.home.homeDirectory}/.ssh";
-  username = config.home.username;
   laptopName = getEnvOrFallback "NIX_LAPTOP_NAME" "bootstrap-laptop" "placeholder-laptop";
   macbook_hostname = "${username}@${laptopName}";
 
