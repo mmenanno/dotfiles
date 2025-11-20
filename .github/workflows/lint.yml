@@ -90,4 +90,4 @@ jobs:
         run: nix run nixpkgs#statix -- check ./nix
 
       - name: Find dead code with deadnix
-        run: nix run nixpkgs#deadnix -- ./nix
+        run: nix run nixpkgs#deadnix -- --fail ./nix

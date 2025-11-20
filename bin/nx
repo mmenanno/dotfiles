@@ -85,7 +85,7 @@ lint_nix() {
 
     # Run deadnix to find dead code
     log_info "3/3 Running deadnix (dead code detection)..."
-    if nix run nixpkgs#deadnix -- "$NIX_DIR"; then
+    if nix run nixpkgs#deadnix -- --fail "$NIX_DIR"; then
         log_success "Deadnix check passed"
     else
         log_error "Deadnix found unused code"
