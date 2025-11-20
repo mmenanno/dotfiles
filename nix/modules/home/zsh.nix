@@ -85,6 +85,9 @@ in
       zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
       zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
+      # Disable fzf-tab for dv command to avoid visual glitches - use standard completion
+      zstyle ':fzf-tab:complete:dv:*' disabled-on 1
+
       eval "$(pay-respects zsh --alias)"
 
       # Initialize mise with lazy loading via shims for faster startup
