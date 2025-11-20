@@ -54,6 +54,7 @@
     x265
     texliveFull
     unar
+    wrangler
     yarn
     yq
     yt-dlp

@@ -7,3 +7,6 @@
 # Nix build artifacts
 result
 result-*
+
+# Gemini
+.gemini-clipboard
