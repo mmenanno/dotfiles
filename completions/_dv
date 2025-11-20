@@ -44,7 +44,7 @@ _dv() {
 
         # Remove duplicates and sort
         projects=(${(u)${(o)projects}})
-        _describe 'project' projects
+        compadd -a projects
     }
 
     # Main completion logic
