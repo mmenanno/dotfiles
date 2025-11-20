@@ -80,8 +80,6 @@
         ];
       };
 
-    # Expose module sets for reuse
     darwinModules.default = moduleIndex.systemModules;
-    homeManagerModules.default = moduleIndex.homeModules;
   };
 }
