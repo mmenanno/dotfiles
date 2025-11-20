@@ -1,13 +1,10 @@
-{ config, lib, pkgs, dotlib, cursorMcpServers, ... }:
+{ lib, pkgs, dotlib, cursorMcpServers, ... }:
 
 let
   inherit (dotlib) getEnvOrFallback;
 
   # Environment-based full name
   fullName = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
-
-  # GitHub MCP token with fallback pattern
-  githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
 
   # Pretty-printed Cursor MCP JSON generated at build time
   cursorMcpJson = pkgs.runCommand "cursor-mcp.json" { nativeBuildInputs = [ pkgs.jq ]; } ''

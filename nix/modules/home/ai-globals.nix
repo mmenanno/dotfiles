@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+_:
 
 # Global AI agent configuration files for all AI coding assistants
 # This module manages vendor-neutral global defaults that apply across all projects

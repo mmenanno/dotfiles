@@ -1,4 +1,4 @@
-{ config, pkgs, homeDirectory, ... }:
+{ homeDirectory, ... }:
 # Scope: Home (Home Manager). Configures VS Code user settings and keybindings.
 {
   home.file = {

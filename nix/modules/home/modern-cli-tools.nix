@@ -12,7 +12,7 @@
         theme = "TwoDark";
         style = "numbers,changes,header";
       };
-      extraPackages = builtins.map (pkg: pkg.overrideAttrs (old: { doCheck = false; })) [
+      extraPackages = builtins.map (pkg: pkg.overrideAttrs (_: { doCheck = false; })) [
         pkgs.bat-extras.batdiff  # Diff with syntax highlighting
         pkgs.bat-extras.batman   # Man pages with syntax highlighting
         pkgs.bat-extras.batgrep  # Grep with syntax highlighting

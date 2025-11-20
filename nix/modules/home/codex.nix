@@ -1,4 +1,4 @@
-{ config, pkgs, dotlib, mcpServers, mkHomebrewWrapper, ... }:
+{ mcpServers, mkHomebrewWrapper, ... }:
 {
   programs.codex = {
     enable = true;

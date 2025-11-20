@@ -1,4 +1,4 @@
-{ config, pkgs, dotlib, ... }:
+{ pkgs, dotlib, ... }:
 
 # Shared MCP (Model Context Protocol) server configurations and helpers
 # This module provides common MCP server definitions and utility functions

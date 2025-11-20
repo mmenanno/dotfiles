@@ -1,10 +1,4 @@
-{ config, ... }:
-let
-  appsDir = "/Applications";
-  localAppsDir = "${config.home.homeDirectory}${appsDir}";
-  systemAppsDir = "/System${appsDir}";
-  systemUtilitiesDir = "${systemAppsDir}/Utilities";
-in
+_:
 {
   targets.darwin.defaults = {
     NSGlobalDomain = {

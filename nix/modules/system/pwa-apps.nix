@@ -1,4 +1,4 @@
-{ homeDirectory, lib, pkgs, ... }:
+{ homeDirectory, pkgs, ... }:
 
 let
   appsDir = "${homeDirectory}/Applications/";
