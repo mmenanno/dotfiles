@@ -1,4 +1,4 @@
-{ config, mcpServers, mkHomebrewWrapper, ... }:
+{ mcpServers, mkHomebrewWrapper, ... }:
 
 {
   programs.gemini-cli = {
