@@ -56,8 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-nix-darwin:
-    runs-on: macos-latest
+  nix-verification:
+    runs-on: ubuntu-latest
     env:
       NIX_CONFIG: |
         experimental-features = nix-command flakes
@@ -71,17 +71,17 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v16
-        with:
-          name: mmenanno-dotfiles
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
       - name: Flake checker
         uses: DeterminateSystems/flake-checker-action@v12
         with:
           flake-lock-path: ./nix/flake.lock
           ignore-missing-flake-lock: false
 
-      - name: Build nix-darwin system
-        run: nix build ./nix#darwinConfigurations.macbook_setup.system
+      - name: Check nix flake evaluation
+        run: nix flake check ./nix --no-build
+
+      - name: Static analysis with statix
+        run: nix run nixpkgs#statix -- check ./nix
+
+      - name: Find dead code with deadnix
+        run: nix run nixpkgs#deadnix -- --fail ./nix

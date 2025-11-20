@@ -1,4 +1,4 @@
-{ config, pkgs, self, inputs, ... }:
+{ inputs, ... }:
 
 let
   moduleIndex = import ./modules/default.nix;

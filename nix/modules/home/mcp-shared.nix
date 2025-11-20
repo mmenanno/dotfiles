@@ -1,4 +1,4 @@
-{ config, pkgs, dotlib, ... }:
+{ pkgs, dotlib, ... }:
 
 # Shared MCP (Model Context Protocol) server configurations and helpers
 # This module provides common MCP server definitions and utility functions
@@ -58,9 +58,6 @@ in
   # Export the shared configurations and helpers for use by other modules
   # This allows other modules to import and use these standardized configs
   _module.args = {
-    mcpServers = mcpServers;
-    cursorMcpServers = cursorMcpServers;
-    githubMcpToken = githubMcpToken;
-    mkHomebrewWrapper = mkHomebrewWrapper;
+    inherit mcpServers cursorMcpServers githubMcpToken mkHomebrewWrapper;
   };
 }

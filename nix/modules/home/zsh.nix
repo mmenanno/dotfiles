@@ -8,7 +8,9 @@ in
 
 {
   home.packages = zshPackages;
-  programs.zsh = {
+
+  programs = {
+    zsh = {
     enable = true;
 
     initContent = ''
@@ -127,20 +129,20 @@ in
       # Zoxide configuration
       _ZO_DOCTOR = "0";  # Disable zoxide doctor warnings
     };
-  };
+    };
 
-  programs.fzf = {
-    enable = true;
-    enableZshIntegration = true;
-  };
+    fzf = {
+      enable = true;
+      enableZshIntegration = true;
+    };
 
-  programs.zoxide = {
-    enable = true;
-    # Disable automatic integration to prevent errors in non-interactive shells
-    enableZshIntegration = false;
-    options = [
-      "--cmd cd"
-    ];
+    zoxide = {
+      enable = true;
+      # Disable automatic integration to prevent errors in non-interactive shells
+      enableZshIntegration = false;
+      options = [
+        "--cmd cd"
+      ];
+    };
   };
-
 }

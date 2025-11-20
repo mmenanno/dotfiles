@@ -22,7 +22,7 @@
     };
   };
 
-  outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, nix-index-database }:
+  outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, ... }:
     let
       # Import shared utilities
       lib = import ./modules/lib.nix;
@@ -80,8 +80,6 @@
         ];
       };
 
-    # Expose module sets for reuse
     darwinModules.default = moduleIndex.systemModules;
-    homeManagerModules.default = moduleIndex.homeModules;
   };
 }

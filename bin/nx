@@ -23,6 +23,7 @@ USAGE:
 COMMANDS:
     up, apply, a       Apply configuration (darwin-rebuild switch)
     check, c          Check flake for errors
+    lint, l           Run code quality checks (statix, deadnix)
     update, u         Update flake dependencies
     edit, e           Open dotfiles in Cursor editor
     status, s         Show git status of dotfiles
@@ -35,6 +36,7 @@ COMMANDS:
 EXAMPLES:
     nix up            # Apply configuration
     nix c             # Check flake
+    nix l             # Run linting checks
     nix u             # Update dependencies
     nix e             # Edit in Cursor
     nix s             # Git status
@@ -55,6 +57,51 @@ check_flake() {
         return 0
     else
         log_error "Flake check failed"
+        return 1
+    fi
+}
+
+lint_nix() {
+    log_info "Running Nix code quality checks..."
+    local failed=0
+
+    # Run flake check without building
+    log_info "1/3 Checking flake evaluation..."
+    if nix flake check "$NIX_DIR" --no-build; then
+        log_success "Flake evaluation passed"
+    else
+        log_error "Flake evaluation failed"
+        failed=1
+    fi
+
+    # Run statix for static analysis
+    log_info "2/3 Running statix (static analysis)..."
+    if nix run nixpkgs#statix -- check "$NIX_DIR"; then
+        log_success "Statix check passed"
+    else
+        log_error "Statix found issues"
+        failed=1
+    fi
+
+    # Run deadnix to find dead code
+    log_info "3/3 Running deadnix (dead code detection)..."
+    if nix run nixpkgs#deadnix -- --fail "$NIX_DIR"; then
+        log_success "Deadnix check passed"
+    else
+        log_error "Deadnix found unused code"
+        failed=1
+    fi
+
+    # Clean up any result symlinks
+    if [[ -L "$NIX_DIR/result" ]]; then
+        rm -f "$NIX_DIR/result"
+    fi
+
+    if [[ $failed -eq 0 ]]; then
+        log_success "All linting checks passed!"
+        return 0
+    else
+        log_error "Some linting checks failed"
         return 1
     fi
 }
@@ -319,6 +366,9 @@ case "${1:-help}" in
         ;;
     check|c)
         check_flake
+        ;;
+    lint|l)
+        lint_nix
         ;;
     update|u)
         update_flake

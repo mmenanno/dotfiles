@@ -1,4 +1,4 @@
-{ config, pkgs, dotlib, mcpServers, mkHomebrewWrapper, ... }:
+{ config, mcpServers, mkHomebrewWrapper, ... }:
 
 let
   # Define permission groups and helpers reused in settings
@@ -225,6 +225,6 @@ in
       };
     };
 
-    mcpServers = mcpServers;
+    inherit mcpServers;
   };
 }

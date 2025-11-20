@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ lib, ... }:
 
 let
   commonExtensions = [
@@ -103,7 +103,7 @@ in
       to_uninstall="$(comm -23 "$tmp_installed" "$tmp_desired" || true)"
       if [ -n "$to_uninstall" ]; then
         while IFS= read -r ext; do
-          [ -z "${ext:-}" ] && continue
+          [ -z "''${ext:-}" ] && continue
           "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
         done <<<"$to_uninstall"
       fi
@@ -113,7 +113,7 @@ in
       to_install="$(comm -13 "$tmp_installed" "$tmp_desired" || true)"
       if [ -n "$to_install" ]; then
         while IFS= read -r ext; do
-          [ -z "${ext:-}" ] && continue
+          [ -z "''${ext:-}" ] && continue
           "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
         done <<<"$to_install"
       fi
