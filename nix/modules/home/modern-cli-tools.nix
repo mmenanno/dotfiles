@@ -18,6 +18,10 @@
     ];
   };
 
+  # Create empty directories to suppress bat cache warnings
+  home.file.".config/bat/themes/.keep".text = "";
+  home.file.".config/bat/syntaxes/.keep".text = "";
+
   # eza - modern ls replacement with better defaults
   programs.eza = {
     enable = true;
