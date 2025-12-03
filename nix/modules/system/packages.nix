@@ -1,7 +1,18 @@
-{ pkgs, ... }: {
+{ pkgs, lib, ... }: {
   nixpkgs.config.allowUnfree = true;
 
+  # Create symlinks for Audacity to find FFmpeg libraries
+  system.activationScripts.postActivation.text = lib.mkAfter ''
+    echo "Setting up Audacity FFmpeg symlinks..."
+    mkdir -p /usr/local/lib/audacity
+    for f in ${pkgs.ffmpeg_7.lib}/lib/*.dylib; do
+      ln -sf "$f" /usr/local/lib/audacity/
+    done
+    echo "Audacity FFmpeg symlinks created in /usr/local/lib/audacity/"
+  '';
+
   environment.systemPackages = with pkgs; [
+    audacity
     automake
     autoconf
     cargo
