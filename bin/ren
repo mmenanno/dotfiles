@@ -28,9 +28,13 @@ typeset -g WORK_DIR=""
 typeset -gr TEMP_CLEANUP_DAYS=7
 
 # Version and platform regex patterns
+# Numeric versions: v1.0, 0.36.dv-mac, 1.2.3a-pc
 typeset -gr VERSION_PATTERN='v?[0-9]+\.[0-9]+(\.[0-9]+)?'
+# Episodic versions: S1-C1-E01-A (Season-Chapter-Episode-Version)
+typeset -gr EPISODIC_PATTERN='S[0-9]+-C[0-9]+-E[0-9]+-[A-Z]+'
 typeset -gr PLATFORM_SUFFIX_PATTERN='(\.(dv-mac|dv-win|dv-pc)|(-pc|-mac|-win|-linux))?'
 typeset -gr VERSION_FULL_PATTERN="${VERSION_PATTERN}[a-z]?${PLATFORM_SUFFIX_PATTERN}"
+typeset -gr EPISODIC_FULL_PATTERN="${EPISODIC_PATTERN}${PLATFORM_SUFFIX_PATTERN}"
 
 # Supported archive extensions for mod installation
 typeset -gr ARCHIVE_EXTENSIONS_PATTERN='^(zip|tar|gz|tgz|bz2|tbz|tbz2|xz|txz|7z|rar|ace|arj|cab|lha|lzh)$'
@@ -217,34 +221,52 @@ extract_archive() {
 }
 
 # Extract version from filename
-# Game developers use various versioning schemes in filenames (v1.0, 1.0.1a, 0.36.dv-mac, etc.)
+# Game developers use various versioning schemes in filenames:
+# - Numeric: v1.0, 1.0.1a, 0.36.dv-mac, etc.
+# - Episodic: S1-C1-E01-A (Season-Chapter-Episode-Version)
 # This function normalizes all common patterns to extract the core version number
-# Supports: GameName-1.0-pc.zip, GameName-v2.0.1-pc.zip, GameName_v0.6.6.a-steam-market.zip, etc.
+# Supports: GameName-1.0-pc.zip, GameName-v2.0.1-pc.zip, GameName-S1-C1-E01-A-mac.zip, etc.
 extract_version() {
     local filename="$1"
     local basename=$(normalize_basename "$filename")
 
-    # Try multiple patterns including letter suffixes and platform codes
+    # Try episodic pattern first (S1-C1-E01-A)
+    if [[ "$basename" =~ -(S[0-9]+-C[0-9]+-E[0-9]+-[A-Z]+)${PLATFORM_SUFFIX_PATTERN} ]]; then
+        echo "${match[1]}"
+        return 0
+    fi
+
+    # Try numeric version pattern (v1.0, 1.0.1a, etc.)
     # The regex matches version numbers with optional 'v' prefix, patch versions, letter suffixes,
     # and platform-specific extensions (common in adult game distribution)
     # We wrap the version pattern in a capture group to extract just the numeric version
     if [[ "$basename" =~ -v?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN} ]]; then
         echo "${match[1]}"
-    else
-        echo "unknown"
+        return 0
     fi
+
+    echo "unknown"
 }
 
 # Extract game name from filename (before version)
 # Removes version, letter suffix, platform suffix, and any additional text after version
-# Handles: GameName-v1.0-pc, GameName-v0.6.6.a-steam-market, GameName-1.0-FULL, etc.
+# Handles: GameName-v1.0-pc, GameName-v0.6.6.a-steam-market, GameName-S1-C1-E01-A-mac, etc.
 extract_game_name() {
     local filename="$1"
     local basename=$(normalize_basename "$filename")
 
-    # Remove version and everything after it (including platform suffixes and extra text)
+    # Try removing episodic pattern first
+    local name=$(echo "$basename" | sed -E "s/-${EPISODIC_PATTERN}.*\$//")
+
+    # If episodic pattern was found and removed, we're done
+    if [[ "$name" != "$basename" ]]; then
+        echo "$name"
+        return 0
+    fi
+
+    # Otherwise, remove numeric version and everything after it
     # Uses VERSION_PATTERN to match the version component
-    local name=$(echo "$basename" | sed -E "s/-${VERSION_PATTERN}[a-z]?.*\$//")
+    name=$(echo "$basename" | sed -E "s/-${VERSION_PATTERN}[a-z]?.*\$//")
 
     echo "$name"
 }
@@ -262,7 +284,13 @@ normalize_game_name() {
     # These can appear in the middle (e.g., "Game-0.38-FULL-mac") or at end
     name=$(echo "$name" | sed -E 's/-(FULL|FINAL|COMPLETE|FIXED|UNCENSORED|DEFINITIVE|ULTIMATE)//gi')
 
-    # Remove version + platform suffix combinations repeatedly
+    # Remove episodic version + platform suffix combinations
+    # Handle patterns like: S1-C1-E01-A, S1-C1-E01-A-mac, etc.
+    while [[ "$name" =~ -${EPISODIC_FULL_PATTERN}$ ]]; do
+        name=$(echo "$name" | sed -E "s/-${EPISODIC_FULL_PATTERN}\$//")
+    done
+
+    # Remove numeric version + platform suffix combinations repeatedly
     # Some game releases have redundant version tags in the filename (e.g., "GameName-0.36.dv-mac-0.36")
     # This can happen when repackers append version info or when developers duplicate metadata
     # Loop until no more matches to handle all duplicates
@@ -818,8 +846,8 @@ cmd_list() {
     fi
 
     echo ""
-    printf "${BOLD}%-30s %-10s %-6s %-10s %-15s${NC}\n" "GAME NAME" "VERSION" "TYPE" "SIZE" "INSTALLED"
-    printf "${DIM}%s${NC}\n" "$(printf '%.0s─' {1..75})"
+    printf "${BOLD}%-30s %-13s %-6s %-10s %-15s${NC}\n" "GAME NAME" "VERSION" "TYPE" "SIZE" "INSTALLED"
+    printf "${DIM}%s${NC}\n" "$(printf '%.0s─' {1..78})"
 
     for item in "$GAMES_DIR"/*(N); do
         # Skip symlinks - they point to real directories which are already listed
@@ -854,7 +882,7 @@ cmd_list() {
         # Normalize the display name
         name=$(normalize_game_name "$name")
 
-        printf "%-30s ${CYAN}%-10s${NC} ${type_color}%-6s${NC} %-10s ${DIM}%-15s${NC}\n" \
+        printf "%-30s ${CYAN}%-13s${NC} ${type_color}%-6s${NC} %-10s ${DIM}%-15s${NC}\n" \
             "$name" "$version" "$type" "$size" "$installed"
     done
 
