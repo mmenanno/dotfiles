@@ -66,6 +66,7 @@ declare -ga STEP_ORDER=()           # Ordered list of step IDs for display
 declare -g CURRENT_STEP=""          # Currently executing step ID
 declare -ga CURRENT_STEP_OUTPUT=()  # Buffered output lines from current step
 declare -g TUI_LINE_COUNT=0         # Lines rendered (for clearing previous draw)
+declare -g TUI_PREV_LINE_COUNT=0    # Previous render's line count (for cursor movement)
 typeset -g TUI_FD=-1                # File descriptor for /dev/tty (-1=disabled)
 declare -g TUI_OUTPUT_BUFFER=""     # Pre-rendered TUI content
 
@@ -270,12 +271,12 @@ display_steps() {
 
                     local box_output
                     box_output=$(draw_box "${spinner} ${name}" "" "${output_lines[@]}")
-                    output_buffer+="$box_output"$'\n'
-                    local -a box_lines
-                    box_lines=("${(@f)box_output}")
-                    local box_line_count=${#box_lines[@]}
-                    ((box_line_count == 0)) && box_line_count=1
-                    line_count=$((line_count + box_line_count + 1))  # +1 for the newline after box
+                    # draw_box output already ends with newline, just append it
+                    output_buffer+="$box_output"
+                    # Count actual newlines in box output
+                    local box_newlines="${box_output//[!$'\n']/}"
+                    local box_line_count=${#box_newlines}
+                    line_count=$((line_count + box_line_count))
                 else
                     icon="${ICON_PENDING}"
                     output_buffer+="  ${icon} ${name}"$'\n'
@@ -318,19 +319,30 @@ display_steps() {
 }
 
 # Update TUI display atomically to prevent flicker
-# Restores cursor to saved position, clears below, and redraws current state
+# Uses line-based cursor movement instead of save/restore for better terminal compatibility
 # Must be called instead of display_steps directly to maintain cursor positioning
 update_tui() {
     (( TUI_FD >= 0 )) || return
 
+    # Move cursor up by previous line count, clear from there, then redraw
+    # After printing N lines with trailing newlines, cursor is on line N+1 (empty)
+    # To get back to line 1, we move up N lines
+    local tui_buffer=""
+    if (( TUI_PREV_LINE_COUNT > 0 )); then
+        # Move cursor up N lines and to column 1
+        tui_buffer+=$'\033['"${TUI_PREV_LINE_COUNT}"$'A\033[1G'
+    fi
+    # Clear from cursor to end of screen
+    tui_buffer+=$'\033[J'
+
     display_steps
 
-    # Single atomic write prevents flicker (restore cursor, clear below, redraw)
-    local tui_buffer=""
-    tui_buffer+=$'\033[u\033[J'
     tui_buffer+="$TUI_OUTPUT_BUFFER"
 
     printf '%s' "$tui_buffer" >&$TUI_FD
+
+    # Save current line count for next update
+    TUI_PREV_LINE_COUNT=$TUI_LINE_COUNT
 }
 
 # Execute a command with live TUI progress or verbose logging
@@ -439,8 +451,14 @@ run_step() {
 
     rm -f "$temp_output" "$temp_errors" "${temp_output}.exit"
 
+    # Clear and prepare for final status update (uses line-based movement in update_tui)
     if (( TUI_FD >= 0 )); then
-        printf '\033[u\033[J' >&$TUI_FD
+        # Move up and clear for final render after step completion
+        if (( TUI_PREV_LINE_COUNT > 0 )); then
+            printf '\033[%dA\033[1G\033[J' "$TUI_PREV_LINE_COUNT" >&$TUI_FD
+        fi
+        # Reset so next display starts fresh from current position
+        TUI_PREV_LINE_COUNT=0
     fi
 
     # Success with stderr warnings vs clean success vs failure
@@ -1167,6 +1185,8 @@ cmd_up() {
     set -A STEP_ORDER
     CURRENT_STEP=""
     set -A CURRENT_STEP_OUTPUT
+    TUI_LINE_COUNT=0
+    TUI_PREV_LINE_COUNT=0
 
     local -a failed_steps=()
     local -a warning_steps=()
@@ -1195,8 +1215,12 @@ cmd_up() {
         return 1
     fi
 
+    # Initial TUI render (no cursor save needed - we use line-based movement)
     if (( TUI_FD >= 0 )); then
-        printf '\033[s' >&$TUI_FD
+        display_steps
+        printf '%s' "$TUI_OUTPUT_BUFFER" >&$TUI_FD
+        # Set previous line count so first update_tui knows how far to move up
+        TUI_PREV_LINE_COUNT=$TUI_LINE_COUNT
     fi
 
     execute_project_steps "$force" "$rails_cmd" "failed_steps" "warning_steps" "warning_messages" "interrupted"
