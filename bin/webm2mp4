@@ -52,6 +52,7 @@ EOF
 # Check if required tools are available
 check_dependencies() {
     check_command "ffmpeg" "Please install ffmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)"
+    check_command "ffprobe" "Please install ffmpeg (includes ffprobe): brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)"
 
     log_verbose "ffmpeg found: $(command -v ffmpeg)"
     log_verbose "ffmpeg version: $(ffmpeg -version 2>/dev/null | head -n1)"
@@ -98,15 +99,22 @@ convert_file() {
     log_verbose "CRF: $CRF, Audio bitrate: $AUDIO_BITRATE"
 
     # Build ffmpeg command
+    # Use scale filter to ensure even dimensions (libx264 requirement)
     local ffmpeg_cmd=(
         ffmpeg
         -i "$input_file"
+        -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"
         -c:v libx264
         -crf "$CRF"
-        -c:a aac
-        -b:a "$AUDIO_BITRATE"
         -threads "$DEFAULT_THREADS"
     )
+
+    # Only add audio encoding options if the input has audio
+    if has_audio_stream "$input_file"; then
+        ffmpeg_cmd+=(-c:a aac -b:a "$AUDIO_BITRATE")
+    else
+        log_verbose "No audio stream detected, skipping audio encoding"
+    fi
 
     if [[ "$OVERWRITE" == true ]]; then
         ffmpeg_cmd+=(-y)
@@ -138,12 +146,17 @@ convert_file() {
     fi
 }
 
+# Check if input file has an audio stream
+has_audio_stream() {
+    local input_file="$1"
+    ffprobe -v error -select_streams a -show_entries stream=codec_type -of csv=p=0 "$input_file" 2>/dev/null | grep -q audio
+}
+
 # Process files in parallel
 process_files() {
     local -a files=("$@")
     local total_files=${#files[@]}
     local -a pids=()
-    local -a results=()
     local success_count=0
     local failed_count=0
 
@@ -193,16 +206,18 @@ process_files() {
         fi
     done
 
-    # Wait for remaining background jobs
-    for pid in "${pids[@]}"; do
-        wait "$pid"
-        local exit_code=$?
-        if (( exit_code == 0 )); then
-            ((success_count++))
-        else
-            ((failed_count++))
-        fi
-    done
+    # Wait for remaining background jobs (only if there are any)
+    if (( ${#pids[@]} > 0 )); then
+        for pid in "${pids[@]}"; do
+            wait "$pid"
+            local exit_code=$?
+            if (( exit_code == 0 )); then
+                ((success_count++))
+            else
+                ((failed_count++))
+            fi
+        done
+    fi
 
     # Print summary
     log_info "Conversion complete: $success_count successful, $failed_count failed"
@@ -244,8 +259,11 @@ find_webm_files() {
     fi
 
     # Sort files for consistent processing order
-    IFS=$'\n' files=($(sort <<<"${files[*]}"))
-    unset IFS
+    local -a sorted_files=()
+    while IFS= read -r file; do
+        sorted_files+=("$file")
+    done < <(printf '%s\n' "${files[@]}" | sort)
+    files=("${sorted_files[@]}")
 
     process_files "${files[@]}"
 }
