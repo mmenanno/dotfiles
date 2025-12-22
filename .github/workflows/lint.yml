@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Super Linter
-        uses: super-linter/super-linter@v8.3.0
+        uses: super-linter/super-linter@v8.3.1
         env:
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
@@ -31,7 +31,7 @@ jobs:
           VALIDATE_GITHUB_ACTIONS: true
 
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@v3.92.3
+        uses: trufflesecurity/trufflehog@v3.92.4
         with:
           extra_args: --results=verified,unknown
 
