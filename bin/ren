@@ -1,4 +1,6 @@
 #!/usr/bin/env zsh
+# shellcheck disable=SC1071
+
 # ren - Ren'Py Game Manager
 # ====================================
 # Multi-command CLI for managing Ren'Py games on macOS
@@ -714,9 +716,9 @@ cmd_install() {
     # Determine installation path
     # Use normalized game name to avoid duplicates and messy names
     local base_name=$(normalize_game_name "$game_name")
-    # Remove spaces for filesystem compatibility (spaces can cause issues with shell scripts and tools)
-    # The normalized name already has proper capitalization, so removing spaces creates clean CamelCase names
-    base_name=$(echo "$base_name" | sed -E 's/ //g')
+    # Convert spaces to dashes for filesystem compatibility
+    # Dashes preserve word boundaries so display can perfectly restore the original name
+    base_name="${base_name// /-}"
 
     local install_name="$base_name"
     if [[ "$version" != "unknown" ]]; then
