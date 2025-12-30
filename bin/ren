@@ -1,4 +1,6 @@
 #!/usr/bin/env zsh
+# shellcheck disable=SC1071
+
 # ren - Ren'Py Game Manager
 # ====================================
 # Multi-command CLI for managing Ren'Py games on macOS
