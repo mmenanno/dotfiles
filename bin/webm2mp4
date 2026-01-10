@@ -15,7 +15,9 @@ DEFAULT_THREADS=4
 VERBOSE=false
 QUIET=false
 OVERWRITE=false
+DELETE_ORIGINALS=false
 OUTPUT_DIR=""
+PARSED_TARGET=""
 CRF=$DEFAULT_CRF
 AUDIO_BITRATE=$DEFAULT_AUDIO_BITRATE
 PARALLEL_JOBS=1
@@ -33,6 +35,7 @@ OPTIONS:
     -v, --verbose           Enable verbose output
     -q, --quiet             Suppress all output except errors
     -f, --force             Overwrite existing output files
+    -d, --delete            Delete original files after successful conversion
     -o, --output DIR        Output directory (default: same as input)
     -c, --crf VALUE         Video quality (0-51, lower=better, default: $DEFAULT_CRF)
     -a, --audio-bitrate BR  Audio bitrate (default: $DEFAULT_AUDIO_BITRATE)
@@ -99,10 +102,18 @@ convert_file() {
     log_verbose "CRF: $CRF, Audio bitrate: $AUDIO_BITRATE"
 
     # Build ffmpeg command
-    # Use scale filter to ensure even dimensions (libx264 requirement)
+    # Input options to handle timestamp issues in source files:
+    #   -fflags +genpts: Generate missing presentation timestamps
+    #   -err_detect ignore_err: Tolerate minor decoding errors (e.g., opus header issues)
+    # Output options:
+    #   -avoid_negative_ts make_zero: Shift timestamps to avoid negative values
+    #   scale filter: Ensure even dimensions (libx264 requirement)
     local ffmpeg_cmd=(
         ffmpeg
+        -fflags +genpts
+        -err_detect ignore_err
         -i "$input_file"
+        -avoid_negative_ts make_zero
         -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"
         -c:v libx264
         -crf "$CRF"
@@ -110,11 +121,15 @@ convert_file() {
     )
 
     # Only add audio encoding options if the input has audio
+    # aresample filter with async fixes timestamp sync issues (replaces deprecated -async)
+    # max_muxing_queue_size prevents "Queue input is backward in time" warnings
     if has_audio_stream "$input_file"; then
-        ffmpeg_cmd+=(-c:a aac -b:a "$AUDIO_BITRATE")
+        ffmpeg_cmd+=(-af "aresample=async=1:first_pts=0" -c:a aac -b:a "$AUDIO_BITRATE")
     else
         log_verbose "No audio stream detected, skipping audio encoding"
     fi
+
+    ffmpeg_cmd+=(-max_muxing_queue_size 1024)
 
     if [[ "$OVERWRITE" == true ]]; then
         ffmpeg_cmd+=(-y)
@@ -130,15 +145,47 @@ convert_file() {
 
     log_verbose "Running: ${ffmpeg_cmd[*]}"
 
-    # Execute conversion
-    local start_time
+    # Execute conversion, capturing stderr to detect warnings/errors
+    # Use tee to both display stderr and capture it for analysis
+    # AV_LOG_FORCE_COLOR preserves ffmpeg's colored output through tee
+    local start_time stderr_file exit_code
     start_time=$(date +%s)
+    stderr_file=$(mktemp)
 
-    if "${ffmpeg_cmd[@]}"; then
-        local end_time duration
-        end_time=$(date +%s)
-        duration=$((end_time - start_time))
+    AV_LOG_FORCE_COLOR=1 "${ffmpeg_cmd[@]}" 2> >(tee "$stderr_file" >&2) && exit_code=0 || exit_code=$?
+
+    # Small delay to ensure tee process completes writing
+    sleep 0.1
+
+    local end_time duration stderr_output stderr_errors
+    end_time=$(date +%s)
+    duration=$((end_time - start_time))
+    stderr_output=$(cat "$stderr_file" 2>/dev/null || true)
+    rm -f "$stderr_file"
+
+    # Filter for actual warnings/errors (not info messages in verbose mode)
+    # Strip ANSI color codes and look for Error/Warning as standalone words
+    # Use command grep to bypass any aliases (e.g., ripgrep)
+    # Match patterns like "[component @ address] Error message" or standalone Error/Warning
+    stderr_errors=$(echo "$stderr_output" | sed 's/\x1b\[[0-9;]*m//g' | command grep -iwE '\bError\b|\bWarning\b|\bFailed\b' || true)
+
+    if (( exit_code == 0 )); then
         log_success "Converted $(basename "$input_file") in ${duration}s"
+
+        # Delete original file only if requested AND no warnings/errors occurred
+        if [[ "$DELETE_ORIGINALS" == true ]]; then
+            if [[ -z "$stderr_errors" ]]; then
+                if rm "$input_file"; then
+                    log_verbose "Deleted original: $input_file"
+                else
+                    log_warning "Failed to delete original: $input_file"
+                fi
+            else
+                log_warning "Skipping deletion of $(basename "$input_file") due to ffmpeg warnings/errors"
+                log_verbose "Detected issues: $stderr_errors"
+            fi
+        fi
+
         return 0
     else
         log_error "Failed to convert: $input_file"
@@ -167,6 +214,9 @@ process_files() {
 
     log_info "Found $total_files WebM file(s) to convert"
     log_info "Using $PARALLEL_JOBS parallel job(s)"
+    if [[ "$DELETE_ORIGINALS" == true ]]; then
+        log_warning "Delete mode enabled: originals will be removed after successful conversion"
+    fi
 
     # Process files
     for i in "${!files[@]}"; do
@@ -236,18 +286,24 @@ find_webm_files() {
 
     if [[ -f "$target" ]]; then
         # Single file
-        if [[ "$target" == *.webm ]]; then
-            files=("$target")
-        else
+        if [[ "$target" != *.webm ]]; then
             log_error "File is not a WebM file: $target"
             return 1
         fi
+        # Skip macOS resource fork files (._* files)
+        local basename
+        basename="$(basename "$target")"
+        if [[ "$basename" == ._* ]]; then
+            log_error "File is a macOS resource fork, not a valid video: $target"
+            return 1
+        fi
+        files=("$target")
     elif [[ -d "$target" ]]; then
         # Directory - find all WebM files
         log_verbose "Searching for WebM files in: $target"
         while IFS= read -r -d '' file; do
             files+=("$file")
-        done < <(find "$target" -maxdepth 1 -name "*.webm" -type f -print0 2>/dev/null)
+        done < <(find "$target" -maxdepth 1 -name "*.webm" -not -name "._*" -type f -print0 2>/dev/null)
     else
         log_error "Path does not exist: $target"
         return 1
@@ -282,6 +338,10 @@ parse_args() {
                 ;;
             -f|--force)
                 OVERWRITE=true
+                shift
+                ;;
+            -d|--delete)
+                DELETE_ORIGINALS=true
                 shift
                 ;;
             -o|--output)
@@ -344,14 +404,13 @@ parse_args() {
     fi
 
     # Determine target (file or directory)
-    local target="${1:-.}"  # Default to current directory
+    # Set global variable instead of echoing (to avoid subshell variable loss)
+    PARSED_TARGET="${1:-.}"  # Default to current directory
 
-    if [[ ! -e "$target" ]]; then
-        log_error "Target does not exist: $target"
+    if [[ ! -e "$PARSED_TARGET" ]]; then
+        log_error "Target does not exist: $PARSED_TARGET"
         return 1
     fi
-
-    echo "$target"
 }
 
 # Main function
@@ -368,10 +427,9 @@ main() {
     # Check dependencies first
     check_dependencies
 
-    # Parse arguments
-    local target
+    # Parse arguments (called directly, not in subshell, to preserve variable changes)
     set +e  # Temporarily disable exit on error
-    target="$(parse_args "$@")"
+    parse_args "$@"
     local parse_exit_code=$?
     set -e  # Re-enable exit on error
 
@@ -379,11 +437,11 @@ main() {
         exit 1
     fi
 
-    log_verbose "Target: $target"
-    log_verbose "Configuration: CRF=$CRF, Audio=$AUDIO_BITRATE, Jobs=$PARALLEL_JOBS"
+    log_verbose "Target: $PARSED_TARGET"
+    log_verbose "Configuration: CRF=$CRF, Audio=$AUDIO_BITRATE, Jobs=$PARALLEL_JOBS, Delete=$DELETE_ORIGINALS"
 
     # Find and process files
-    if find_webm_files "$target"; then
+    if find_webm_files "$PARSED_TARGET"; then
         log_success "All conversions completed successfully"
         exit 0
     else
