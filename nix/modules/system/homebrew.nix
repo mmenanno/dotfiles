@@ -2,6 +2,7 @@
   homebrew = {
     enable = true;
     brews = [
+      "dotenvx/brew/dotenvx"
       "gemini-cli"
       "libyaml"
       "mas"
@@ -69,7 +70,6 @@
       "steam"
       "syncthing-app"
       "tailscale-app"
-      "teamviewer"
       "telegram"
       "textual"
       "the-unarchiver"
