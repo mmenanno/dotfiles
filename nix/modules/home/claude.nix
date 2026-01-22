@@ -141,13 +141,18 @@ in
     settings = {
       statusLine = {
         type = "command";
-        command = "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir'); cd \"$cwd\" 2>/dev/null || true; STARSHIP_CONFIG=$HOME/.config/starship.toml starship prompt | sed 's/%{\\([^}]*\\)%}/\\x1b[\\1/g'";
+        # Use fish shell for status line to escape wrappers showing in the prompt
+        command = "STARSHIP_SHELL=fish STARSHIP_CONFIG=$HOME/.config/starship.toml starship prompt | head -1";
+
       };
       includeCoAuthoredBy = false;
       theme = "dark";
       autoUpdates = true;
       verbose = false;
       cleanupPeriodDays = 20;
+      enabledPlugins = {
+        "ralph-loop@claude-plugins-official" = true;
+      };
       permissions = {
         allow =
           (toBashPermissions devTools)
