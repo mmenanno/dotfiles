@@ -2,6 +2,7 @@
   homebrew = {
     enable = true;
     brews = [
+      "coreutils"
       "dotenvx/brew/dotenvx"
       "gemini-cli"
       "libyaml"
@@ -93,7 +94,6 @@
         "Numbers" = 409203825;
         "Pages" = 409201541;
         "Proton Pass for Safari" = 6502835663;
-        "Sink It for Reddit" = 6449873635;
         "Tampermonkey" = 6738342400;
         "Tampermonkey Classic" = 1482490089;
         "The Camelizer" = 1532579087;
