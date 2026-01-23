@@ -48,7 +48,7 @@ in
 
 
       # Add custom shell scripts to path
-      export PATH=${config.home.homeDirectory}/dotfiles/bin:$PATH
+      export PATH=${config.home.homeDirectory}/.local/bin:${config.home.homeDirectory}/dotfiles/bin:$PATH
 
       # Add custom completions to fpath
       fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
