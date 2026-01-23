@@ -1,4 +1,4 @@
-{ config, inputs, ... }:
+{ inputs, ... }:
 
 let
   ralphClaudeCode = inputs.ralph-claude-code;
