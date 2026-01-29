@@ -1,46 +1,63 @@
-# Dotfiles Repository - Claude Code Configuration
+# Dotfiles Repository
 
-This file defines repository-specific Claude behavioral preferences for working on this Nix dotfiles configuration. It extends the global `~/.claude/CLAUDE.md` with dotfiles-specific requirements and overrides.
+Nix-darwin + Home Manager configuration for macOS.
 
-## Dotfiles-Specific Behavioral Overrides
+## Commands
 
-### Nix Configuration Focus
+```bash
+nx check    # Validate flake (ALWAYS run before nx up)
+nx diff     # Preview changes before applying
+nx up       # Apply configuration (darwin-rebuild switch)
+nx lint     # Run statix + deadnix code quality checks
+nx build    # Build without applying
+nx clean    # Clean old generations
+```
 
-- Prioritize declarative configuration over imperative changes
-- Understand the modular architecture in `nix/modules/`
-- Use `dotlib` helper functions for environment variables
-- Reference existing patterns when creating new modules
+## Repository Structure
 
-### Development Workflow for Dotfiles
+```text
+dotfiles/
+├── nix/
+│   ├── flake.nix              # Entry point - defines darwinConfigurations
+│   ├── home.nix               # Home Manager entry point
+│   └── modules/
+│       ├── default.nix        # Module index (systemModules + homeModules lists)
+│       ├── lib.nix            # dotlib: getEnvOrFallback helper
+│       ├── system/            # nix-darwin modules (OS, apps, services)
+│       └── home/              # Home Manager modules (user programs, dotfiles)
+└── bin/                       # Shell scripts (nx, gbclean, etc.)
+```
 
-- Always test with `nx check` before applying changes
-- Use `nx diff` to preview changes before `nx up`
-- Maintain separation between system and home modules
-- Keep secrets in 1Password, never in configuration files
+## Key Modules
 
-## Dotfiles-Specific Tool Integration
+- `ai-globals.nix` - Generates global CLAUDE.md, AGENTS.md, GEMINI.md
+- `claude.nix` - Claude Code settings and MCP servers
+- `claude-skills.nix` - Skill imports from repos (ralph-claude-code)
+- `zsh.nix` - Shell config with zinit plugin management
+- `modern-cli-tools.nix` - bat, eza, ripgrep, fd, atuin, etc.
 
-### Nix Ecosystem Deep Integration
+## Adding a New Module
 
-- Understand nix-darwin and Home Manager relationship
-- Navigate the flake.nix structure and module system
-- Use appropriate Nix functions and patterns
-- Leverage the custom `dotlib` utility functions
+1. Create file in `nix/modules/home/` (user) or `nix/modules/system/` (OS)
+2. Use signature: `{ config, pkgs, lib, ... }:`
+3. Add to list in `nix/modules/default.nix` (`homeModules` or `systemModules`)
+4. Run `nx check` then `nx diff` then `nx up`
 
-### Development Environment Context
+## Troubleshooting
 
-- Understand the multi-tool setup (Cursor, VS Code, terminal tools)
-- Work with the custom `nx` wrapper script and its commands
-- Integrate with the 1Password CLI workflow for secrets
-- Respect the declarative nature of the entire system
+```bash
+nx check                    # Validate before anything else
+nix log .#darwinConfigurations.mm.system  # View build logs
+nix repl --file nix/flake.nix            # Debug expressions
+darwin-rebuild --list-generations         # See history
+darwin-rebuild --rollback                 # Undo last change
+```
 
-## Repository Context Integration
+## Gotchas
 
-This repository-specific configuration works with the global Claude configuration:
-
-- **Global config** (`~/.claude/CLAUDE.md`) provides universal behavioral preferences
-- **This file** adds dotfiles-specific context and requirements
-- **AGENTS.md** (both global and local) defines execution constraints
-- **Nix modules** handle the actual system configuration management
-
-Focus on this repository's unique aspects: Nix ecosystem, modular architecture, and declarative system management.
+- **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`
+- **System vs Home**: System = nix-darwin (OS-level), Home = Home Manager (user-level)
+- **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`
+- **Module pattern**: Import in `modules/default.nix`, use `{ config, pkgs, ... }:` signature
+- **1Password in scripts**: Use `op plugin run -- <cmd>` in subshells (aliases don't inherit)
+- **deadnix warnings**: Remove unused `let` bindings - deadnix (part of `nx lint`) fails on dead code
