@@ -209,52 +209,44 @@ in
     # Global Claude configuration in ~/.claude/CLAUDE.md
     # Supported by: Claude Code
     ".claude/CLAUDE.md".text = ''
-      # Global Claude Code Configuration
+      # Global Claude Code Defaults
 
-      This file defines global default behavioral preferences for Claude Code. Project-specific CLAUDE.md files will override these settings.
+      Project-specific CLAUDE.md files override these settings.
 
-      ## Global Behavioral Preferences
+      ## Editor
 
-      ### Code Generation Style
+      - Primary: ${commonToolPreferences.editor}
+      - Git editor: `${commonToolPreferences.gitCommand}`
 
-      - Prefer object-oriented programming patterns where applicable
-      - Use descriptive variable names and clear code structure
-      - Minimize external dependencies when possible
-      - Always include comprehensive error handling
+      ## CLI Tool Preferences
 
-      ### Development Workflow
+      Use these instead of traditional commands:
 
-      - Test-driven development when appropriate
-      - Small, focused commits with clear messages
-      - Documentation for complex logic and architectural decisions
-      - Performance considerations for production code
+      | Instead of | Use | Why |
+      |------------|-----|-----|
+      | `cat` | `bat` | Syntax highlighting, line numbers |
+      | `ls` | `eza` | Git integration, better formatting |
+      | `grep` | `rg` | Faster, respects .gitignore |
+      | `find` | `fd` | Simpler syntax, faster |
 
-      ## Universal Tool Configurations
+      Other available tools:
+      - `atuin` - Shell history search (Ctrl+R)
+      - `direnv` - Auto-loads `.envrc` files
 
-      ### Editor Integration
+      ## 1Password CLI
 
-      - Primary editor: ${commonToolPreferences.editor}
-      - Use `${commonToolPreferences.gitCommand}` for git operations
-      - Leverage editor AI features appropriately
+      In scripts/subshells, aliases don't work. Use:
+      ```bash
+      op plugin run -- gh repo view  # Not just 'gh repo view'
+      ```
 
-      ### Terminal Preferences
+      ## Shell Scripts
 
-      - Shell: ${commonToolPreferences.shell}
-      - Use descriptive command aliases
-      - Prefer structured output for complex commands
-
-      ### Available Modern CLI Tools
-      ${formatBulletList commonToolPreferences.modernCliTools}
-
-      ### Permission Preferences
-
-      - Always validate operations against AGENTS.md constraints
-      - Request confirmation for potentially destructive operations
-      - Enable batch operations only in safe environments
-
-      ${generateConfigSection { title = "Global Security Guidelines"; items = []; useSubheadings = true; }}
-
-      ${integrationTemplate "CLAUDE.md"}
+      Always include:
+      ```bash
+      #!/bin/bash
+      set -euo pipefail
+      ```
     '';
 
     # Global Gemini configuration in ~/GEMINI.md
