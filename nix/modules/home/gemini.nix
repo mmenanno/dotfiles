@@ -11,6 +11,15 @@
     };
 
     settings = {
+      general = {
+        previewFeatures = true;
+      };
+
+      experimental = {
+        skills = true;
+        plan = true;
+      };
+
       ui = {
         theme = "GitHub";
       };
@@ -19,6 +28,7 @@
       max_tokens = 8192;
 
       security = {
+        enablePermanentToolApproval = true;
         auth = {
           selectedType = "oauth-personal";
         };
