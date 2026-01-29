@@ -1,4 +1,4 @@
-{ config, mcpServers, mkHomebrewWrapper, ... }:
+{ config, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
 
 let
   # Define permission groups and helpers reused in settings
@@ -42,11 +42,19 @@ let
     "git add:*"
     "git commit:*"
     "git config:*"
+    "git branch:*"
+    "git stash:*"
+    "git fetch:*"
+    "git remote:*"
+    "git ls-tree:*"
+    "git rev-parse:*"
+    "git merge-base:*"
   ];
   safeShellCommands = [
     "ls:*"
     "ll:*"
     "la:*"
+    "eza:*"
     "pwd"
     "whoami"
     "date"
@@ -94,6 +102,29 @@ let
     "alias"
     "type:*"
     "command:*"
+    "mv:*"
+    "zip:*"
+    "unzip:*"
+    # Modern CLI tools
+    "bat:*"
+    "rg:*"
+    "fd:*"
+    "fzf:*"
+    "jq:*"
+    "yq:*"
+    "delta:*"
+    # Additional safe utilities
+    "touch:*"
+    "ln:*"
+    "hostname"
+    "id"
+    "groups"
+    "xargs:*"
+    "tee:*"
+    "less:*"
+    "more:*"
+    "tr:*"
+    "column:*"
   ];
   safeReads = [
     "package.json"
@@ -119,12 +150,32 @@ let
     "docs.anthropic.com"
     "support.anthropic.com"
     "github.blog"
+    "modelcontextprotocol.io"
+    "claude.ai"
+    "www.anthropic.com"
+    "tailscale.com"
+    # Ruby/Rails ecosystem
+    "rubygems.org"
+    "ruby-lang.org"
+    "rubyonrails.org"
+    "bundler.io"
+    "guides.rubyonrails.org"
+    "api.rubyonrails.org"
+    # Nix ecosystem
+    "nixos.org"
+    "nixos.wiki"
+    "home-manager-options.extranix.com"
   ];
   toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
   toReadPermissions = files: map (file: "Read(${file})") files;
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
 in
 {
+  # Set GITHUB_PERSONAL_ACCESS_TOKEN for the official Claude Code GitHub plugin
+  home.sessionVariables = {
+    GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken;
+  };
+
   # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
   # This is needed because the TUI checks for the binary at this location when install method is "native"
   home.file.".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
@@ -151,7 +202,17 @@ in
       verbose = false;
       cleanupPeriodDays = 20;
       enabledPlugins = {
+        "claude-code-setup@claude-plugins-official" = true;
+        "claude-md-management@claude-plugins-official" = true;
+        "code-review@claude-plugins-official" = true;
+        "code-simplifier@claude-plugins-official" = true;
+        "commit-commands@claude-plugins-official" = true;
+        "frontend-design@claude-plugins-official" = true;
+        "github@claude-plugins-official" = true;
+        "playwright@claude-plugins-official" = true;
+        "pr-review-toolkit@claude-plugins-official" = true;
         "ralph-loop@claude-plugins-official" = true;
+        "superpowers@claude-plugins-official" = true;
       };
       permissions = {
         allow =
@@ -166,6 +227,11 @@ in
             "nixup:*"
             "nix flake metadata:*"
             "nix flake check:*"
+            "nix-shell:*"
+            "nix eval:*"
+            "nix build:*"
+            "nix develop:*"
+            "nix search:*"
             # Starship helpers for status line debugging
             "starship config get:*"
             "starship print-config:*"
@@ -181,13 +247,30 @@ in
           ])
           ++ [ "WebSearch" ]
           ++ (toWebFetchPermissions webDomains)
-          ++ [ "Bash(gh repo view:*)" ]
+          ++ [ "Bash(gh repo view:*)" "Bash(gh release:*)" ]
           ++ (toBashPermissions [
             "brew search:*"
+            "brew list:*"
+            "brew info:*"
             "defaults read:*"
             "grep:*"
             "mkdir:*"
             "mise:*"
+            # Python tools
+            "python3:*"
+            "pip3:*"
+            # Node/npm tools
+            "node:*"
+            "npm install:*"
+            "npm run:*"
+            "npm uninstall:*"
+            "npm search:*"
+            "npx:*"
+            # Document and linting tools
+            "pandoc:*"
+            "markdownlint:*"
+            # 1Password CLI
+            "op:*"
           ])
           # GitHub MCP actions used by workflows/debugging
           ++ [
@@ -220,9 +303,13 @@ in
           ];
         ask = toBashPermissions [
           "git push:*"
+          "git rebase:*"
+          "git merge:*"
           "rm:*"
           "sudo:*"
           "chmod:*"
+          "brew install:*"
+          "brew upgrade:*"
         ];
         deny = [];
         additionalDirectories = [];
@@ -230,6 +317,7 @@ in
       };
     };
 
-    inherit mcpServers;
+    # Use shared MCP servers but exclude GitHub (Claude Code has official GitHub plugin)
+    mcpServers = builtins.removeAttrs mcpServers [ "github" ];
   };
 }

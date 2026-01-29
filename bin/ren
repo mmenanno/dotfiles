@@ -360,6 +360,19 @@ find_game_dir() {
         return 0
     fi
 
+    # Try normalized name (converts camelCase to dashes, e.g., "GameName" -> "Game-Name")
+    # This handles the case where user types the original archive name but game was installed with normalized name
+    local normalized=$(normalize_game_name "$game_name")
+    normalized="${normalized// /-}"
+
+    if [[ "$normalized" != "$game_name" ]]; then
+        matches=("$GAMES_DIR"/$normalized*(N))
+        if [[ ${#matches[@]} -gt 0 ]]; then
+            resolve_symlink_or_echo "${matches[1]}"
+            return 0
+        fi
+    fi
+
     return 1
 }
 
