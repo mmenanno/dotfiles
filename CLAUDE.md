@@ -60,3 +60,4 @@ darwin-rebuild --rollback                 # Undo last change
 - **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`
 - **Module pattern**: Import in `modules/default.nix`, use `{ config, pkgs, ... }:` signature
 - **1Password in scripts**: Use `op plugin run -- <cmd>` in subshells (aliases don't inherit)
+- **deadnix warnings**: Remove unused `let` bindings - deadnix (part of `nx lint`) fails on dead code

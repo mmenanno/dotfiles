@@ -106,23 +106,6 @@ let
     ];
   };
 
-  # Template for generating configuration sections
-  generateConfigSection = { title, items, useSubheadings ? false }:
-    if useSubheadings
-    then ''
-      ## ${title}
-
-      ### Permission Boundaries
-      ${formatBulletList securityGuidelines.permissionBoundaries}
-
-      ### Data Protection
-      ${formatBulletList securityGuidelines.dataProtection}
-    ''
-    else ''
-      ## ${title}
-      ${formatBulletList items}
-    '';
-
   # Common integration notes template
   integrationTemplate = toolName: ''
     ## Integration with Project-Specific Configuration
