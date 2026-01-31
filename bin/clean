@@ -1,0 +1,368 @@
+#!/usr/bin/env bash
+
+# System Cleanup Script
+# Runs various cleanup tasks and reports space freed
+
+set -euo pipefail
+
+# Get script directory and source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./shared
+source "$SCRIPT_DIR/shared"
+
+# Configuration
+DOCKER_TIMEOUT=60  # seconds to wait for Docker to start
+FORCE=false
+DOCKER_STARTED_BY_US=false
+SUDO_KEEPALIVE_PID=""
+CLEANUP_STARTED=false
+
+# Cleanup handler for interrupts and exit
+cleanup_on_exit() {
+    local exit_code=$?
+
+    # Kill sudo keepalive process if running
+    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    fi
+
+    # Stop Docker if we started it
+    if [[ "$DOCKER_STARTED_BY_US" == true ]]; then
+        if command -v docker &>/dev/null && docker info &>/dev/null; then
+            echo ""
+            log_info "Stopping Docker (was not running before cleanup)..."
+            osascript -e 'quit app "Docker"' 2>/dev/null || true
+        fi
+    fi
+
+    # Show interrupted message if killed by signal during cleanup
+    if [[ $exit_code -ne 0 ]] && [[ "$CLEANUP_STARTED" == true ]]; then
+        echo ""
+        log_warning "Cleanup interrupted"
+    fi
+}
+
+# Set up trap for signals
+trap cleanup_on_exit EXIT INT TERM
+
+show_help() {
+    cat << EOF
+System Cleanup Script
+
+Runs various cleanup tasks and reports total space freed.
+
+USAGE:
+    clean [options]
+
+OPTIONS:
+    -f, --force    Skip confirmation prompt
+    -h, --help     Show this help message
+
+CLEANUP TASKS:
+    - Nix garbage collection and store optimization
+    - Homebrew cleanup
+    - Docker system prune (starts Docker if needed)
+    - npm/pnpm/yarn cache cleanup
+    - Ruby gem cleanup
+    - Go module cache cleanup
+    - macOS cache and log cleanup
+    - Xcode derived data and archives
+
+EXAMPLES:
+    clean          # Run with confirmation prompt
+    clean --force  # Run without confirmation
+
+EOF
+}
+
+# Get disk usage in bytes for the root volume
+get_disk_usage() {
+    df -k / | tail -1 | awk '{print $3 * 1024}'
+}
+
+# Convert bytes to human-readable format
+bytes_to_human() {
+    local bytes=$1
+    if (( bytes >= 1073741824 )); then
+        printf "%.2f GB" "$(echo "scale=2; $bytes / 1073741824" | bc)"
+    elif (( bytes >= 1048576 )); then
+        printf "%.2f MB" "$(echo "scale=2; $bytes / 1048576" | bc)"
+    elif (( bytes >= 1024 )); then
+        printf "%.2f KB" "$(echo "scale=2; $bytes / 1024" | bc)"
+    else
+        printf "%d bytes" "$bytes"
+    fi
+}
+
+# Wait for Docker to be ready
+wait_for_docker() {
+    local elapsed=0
+    log_info "Waiting for Docker to start..."
+    while ! docker info &>/dev/null; do
+        if (( elapsed >= DOCKER_TIMEOUT )); then
+            log_error "Docker failed to start within ${DOCKER_TIMEOUT} seconds"
+            return 1
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    log_success "Docker is ready"
+}
+
+# Cleanup functions for each section
+cleanup_nix() {
+    log_info "Cleaning Nix store..."
+
+    if ! command -v nix-collect-garbage &>/dev/null; then
+        log_warning "Nix not installed, skipping"
+        return 0
+    fi
+
+    log_info "Running garbage collection..."
+    sudo nix-collect-garbage -d 2>&1 | tail -5
+
+    log_info "Optimizing Nix store..."
+    nix store optimise 2>&1 | tail -3 || true
+
+    log_success "Nix cleanup complete"
+}
+
+cleanup_homebrew() {
+    log_info "Cleaning Homebrew..."
+
+    if ! command -v brew &>/dev/null; then
+        log_warning "Homebrew not installed, skipping"
+        return 0
+    fi
+
+    brew cleanup --prune=all 2>&1 | tail -5
+    log_success "Homebrew cleanup complete"
+}
+
+cleanup_docker() {
+    log_info "Cleaning Docker..."
+
+    if ! command -v docker &>/dev/null; then
+        log_warning "Docker not installed, skipping"
+        return 0
+    fi
+
+    # Check if Docker is running
+    if docker info &>/dev/null; then
+        : # Docker already running
+    else
+        log_info "Starting Docker..."
+        open -a Docker
+        if ! wait_for_docker; then
+            log_warning "Could not start Docker, skipping"
+            return 0
+        fi
+        DOCKER_STARTED_BY_US=true
+    fi
+
+    docker system prune -a --volumes -f 2>&1 | tail -5
+    log_success "Docker cleanup complete"
+}
+
+
+cleanup_npm() {
+    if command -v npm &>/dev/null; then
+        log_info "Cleaning npm cache..."
+        npm cache clean --force 2>&1 | grep -v "warn using --force" | tail -3 || true
+        log_success "npm cache cleaned"
+    fi
+}
+
+cleanup_pnpm() {
+    if command -v pnpm &>/dev/null; then
+        log_info "Cleaning pnpm store..."
+        pnpm store prune 2>&1 | tail -3 || true
+        log_success "pnpm store cleaned"
+    fi
+}
+
+cleanup_yarn() {
+    if command -v yarn &>/dev/null; then
+        log_info "Cleaning yarn cache..."
+        yarn cache clean 2>&1 | tail -3 || true
+        log_success "yarn cache cleaned"
+    fi
+}
+
+cleanup_ruby() {
+    if command -v gem &>/dev/null; then
+        log_info "Cleaning Ruby gems..."
+        gem cleanup 2>&1 | tail -5 || true
+        log_success "Ruby gems cleaned"
+    fi
+}
+
+cleanup_go() {
+    if command -v go &>/dev/null; then
+        log_info "Cleaning Go module cache..."
+        go clean -modcache 2>&1 || true
+        log_success "Go module cache cleaned"
+    fi
+}
+
+cleanup_macos_caches() {
+    log_info "Cleaning macOS caches..."
+
+    # User caches
+    if [[ -d "$HOME/Library/Caches" ]]; then
+        rm -rf "$HOME/Library/Caches/"* 2>/dev/null || true
+        log_success "User caches cleaned"
+    fi
+
+    # User logs
+    if [[ -d "$HOME/Library/Logs" ]]; then
+        rm -rf "$HOME/Library/Logs/"* 2>/dev/null || true
+        log_success "User logs cleaned"
+    fi
+
+    # System logs (requires sudo)
+    log_info "Cleaning system logs..."
+    sudo rm -rf /var/log/* 2>/dev/null || true
+    log_success "System logs cleaned"
+}
+
+cleanup_xcode() {
+    log_info "Cleaning Xcode..."
+
+    local cleaned=false
+
+    if [[ -d "$HOME/Library/Developer/Xcode/DerivedData" ]]; then
+        rm -rf "$HOME/Library/Developer/Xcode/DerivedData" 2>/dev/null || true
+        cleaned=true
+    fi
+
+    if [[ -d "$HOME/Library/Developer/Xcode/Archives" ]]; then
+        rm -rf "$HOME/Library/Developer/Xcode/Archives" 2>/dev/null || true
+        cleaned=true
+    fi
+
+    if [[ "$cleaned" == true ]]; then
+        log_success "Xcode cleanup complete"
+    else
+        log_info "No Xcode data to clean"
+    fi
+}
+
+# Acquire sudo upfront and keep it alive
+acquire_sudo() {
+    log_info "Acquiring sudo credentials..."
+    if ! sudo -v; then
+        log_error "Failed to acquire sudo credentials"
+        exit 1
+    fi
+
+    # Keep sudo alive in background
+    while true; do
+        sudo -n true
+        sleep 50
+    done &
+    SUDO_KEEPALIVE_PID=$!
+}
+
+# Main cleanup routine
+run_cleanup() {
+    local start_usage
+    local end_usage
+    local freed_bytes
+
+    CLEANUP_STARTED=true
+
+    echo ""
+    acquire_sudo
+    echo ""
+    log_info "Starting system cleanup..."
+    echo ""
+
+    start_usage=$(get_disk_usage)
+
+    # Run all cleanup tasks
+    cleanup_nix
+    echo ""
+
+    cleanup_homebrew
+    echo ""
+
+    cleanup_docker
+    echo ""
+
+    # Package manager caches
+    log_info "Cleaning package manager caches..."
+    cleanup_npm
+    cleanup_pnpm
+    cleanup_yarn
+    echo ""
+
+    cleanup_ruby
+    echo ""
+
+    cleanup_go
+    echo ""
+
+    cleanup_macos_caches
+    echo ""
+
+    cleanup_xcode
+    echo ""
+
+    # Calculate space freed
+    end_usage=$(get_disk_usage)
+    freed_bytes=$((start_usage - end_usage))
+
+    echo ""
+    echo "========================================="
+    if (( freed_bytes > 0 )); then
+        log_success "Cleanup complete! Freed $(bytes_to_human $freed_bytes)"
+    else
+        log_success "Cleanup complete! (disk usage unchanged or increased due to concurrent activity)"
+    fi
+    echo "========================================="
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo ""
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Main execution
+if [[ "$FORCE" == true ]]; then
+    run_cleanup
+else
+    echo ""
+    log_warning "This will run system cleanup tasks including:"
+    echo "  - Nix garbage collection (sudo required)"
+    echo "  - Homebrew cleanup"
+    echo "  - Docker prune (will start Docker if not running)"
+    echo "  - Package manager cache cleanup (npm, pnpm, yarn)"
+    echo "  - Ruby gem cleanup"
+    echo "  - Go module cache cleanup"
+    echo "  - macOS cache/log cleanup (sudo required for system logs)"
+    echo "  - Xcode derived data cleanup"
+    echo ""
+    log_warning "Continue? (y/N)"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        run_cleanup
+    else
+        log_info "Cleanup cancelled"
+    fi
+fi
