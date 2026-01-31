@@ -26,14 +26,12 @@ cleanup_on_exit() {
         kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
     fi
 
-    # Stop Docker if we started it
-    if [[ "$DOCKER_STARTED_BY_US" == true ]]; then
+    # Stop Docker if we started it (only in trap for interrupts - normal flow handles this separately)
+    if [[ "$DOCKER_STARTED_BY_US" == true ]] && [[ $exit_code -ne 0 ]]; then
         if command -v docker &>/dev/null && docker info &>/dev/null; then
             echo ""
             log_info "Stopping Docker (was not running before cleanup)..."
-            if ! osascript -e 'quit app "Docker"' 2>&1; then
-                log_warning "Could not stop Docker automatically - you may need to stop it manually"
-            fi
+            osascript -e 'quit app "Docker"' &>/dev/null || true
         fi
     fi
 
@@ -348,6 +346,27 @@ run_cleanup() {
 
     cleanup_xcode
     echo ""
+
+    # Stop Docker if we started it (before final summary so output is clean)
+    if [[ "$DOCKER_STARTED_BY_US" == true ]]; then
+        if command -v docker &>/dev/null && docker info &>/dev/null; then
+            log_info "Stopping Docker (was not running before cleanup)..."
+            if osascript -e 'quit app "Docker"' &>/dev/null; then
+                # Wait briefly for Docker to begin shutdown
+                sleep 2
+                if ! docker info &>/dev/null; then
+                    log_success "Docker stopped"
+                else
+                    log_warning "Docker may still be running - it will shut down shortly"
+                fi
+            else
+                log_warning "Could not stop Docker automatically - you may need to stop it manually"
+            fi
+            # Mark as handled so EXIT trap doesn't try again
+            DOCKER_STARTED_BY_US=false
+        fi
+        echo ""
+    fi
 
     end_usage=$(get_disk_usage)
     freed_bytes=$((start_usage - end_usage))
