@@ -31,7 +31,7 @@ cleanup_on_exit() {
         if command -v docker &>/dev/null && docker info &>/dev/null; then
             echo ""
             log_info "Stopping Docker (was not running before cleanup)..."
-            osascript -e 'quit app "Docker"' &>/dev/null || true
+            osascript -e 'quit app "Docker Desktop"' &>/dev/null || true
         fi
     fi
 
@@ -351,7 +351,7 @@ run_cleanup() {
     if [[ "$DOCKER_STARTED_BY_US" == true ]]; then
         if command -v docker &>/dev/null && docker info &>/dev/null; then
             log_info "Stopping Docker (was not running before cleanup)..."
-            if osascript -e 'quit app "Docker"' &>/dev/null; then
+            if osascript -e 'quit app "Docker Desktop"' &>/dev/null; then
                 # Wait briefly for Docker to begin shutdown
                 sleep 2
                 if ! docker info &>/dev/null; then
