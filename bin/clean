@@ -241,6 +241,8 @@ cleanup_macos_caches() {
     fi
 
     # System logs - only clean old/rotated logs to avoid breaking active logging
+    # Refresh sudo credentials in case keepalive failed
+    sudo -v 2>/dev/null || true
     log_info "Cleaning old system logs..."
     local cleaned=false
     if sudo find /var/log -type f \( -name "*.gz" -o -name "*.bz2" -o -name "*.old" -o -name "*.[0-9]" \) -delete 2>/dev/null; then
@@ -297,11 +299,11 @@ acquire_sudo() {
     fi
 
     # Keep sudo alive in background (sudo credentials expire after ~5 mins by default)
-    (
-        while sudo -n true 2>/dev/null; do
-            sleep 50
-        done
-    ) &
+    # Note: must not use subshell as it prevents credential sharing
+    while true; do
+        sleep 50
+        sudo -v 2>/dev/null || break
+    done &
     SUDO_KEEPALIVE_PID=$!
 }
 
