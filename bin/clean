@@ -7,6 +7,7 @@ set -euo pipefail
 
 # Get script directory and source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
 # shellcheck source=./shared
 source "$SCRIPT_DIR/shared"
 
@@ -31,7 +32,9 @@ cleanup_on_exit() {
         if command -v docker &>/dev/null && docker info &>/dev/null; then
             echo ""
             log_info "Stopping Docker (was not running before cleanup)..."
-            osascript -e 'quit app "Docker Desktop"' &>/dev/null || true
+            if ! osascript -e 'quit app "Docker Desktop"' 2>/dev/null; then
+                log_warning "Could not stop Docker automatically after interrupt"
+            fi
         fi
     fi
 
@@ -75,9 +78,17 @@ EXAMPLES:
 EOF
 }
 
-# Get used disk space in bytes for the root volume
+# Get used disk space in bytes for the root volume (macOS df output format)
 get_disk_usage() {
-    df -k / | tail -1 | awk '{print $3 * 1024}'
+    local usage
+    if usage=$(df -k / 2>/dev/null | tail -1 | awk '{print $3 * 1024}'); then
+        if [[ "$usage" =~ ^[0-9]+$ ]]; then
+            echo "$usage"
+            return 0
+        fi
+    fi
+    # Return 0 if we can't determine - will show "unchanged" in summary
+    echo "0"
 }
 
 # Convert bytes to human-readable format
@@ -118,12 +129,18 @@ cleanup_nix() {
     fi
 
     log_info "Running garbage collection..."
-    if ! sudo nix-collect-garbage -d 2>&1 | tail -5; then
+    local gc_output gc_status=0
+    gc_output=$(sudo nix-collect-garbage -d 2>&1) || gc_status=$?
+    echo "$gc_output" | tail -5
+    if [[ $gc_status -ne 0 ]]; then
         log_warning "Nix garbage collection had issues (continuing anyway)"
     fi
 
     log_info "Optimizing Nix store..."
-    if ! nix store optimise 2>&1 | tail -3; then
+    local opt_output opt_status=0
+    opt_output=$(nix store optimise 2>&1) || opt_status=$?
+    echo "$opt_output" | tail -3
+    if [[ $opt_status -ne 0 ]]; then
         log_warning "Nix store optimization had issues (non-fatal)"
     fi
 
@@ -173,40 +190,55 @@ cleanup_docker() {
 cleanup_npm() {
     if command -v npm &>/dev/null; then
         log_info "Cleaning npm cache..."
-        npm cache clean --force 2>&1 | grep -v "warn using --force" | tail -3 || true
-        log_success "npm cache cleaned"
+        if npm cache clean --force 2>&1 | grep -v "warn using --force" | tail -3; then
+            log_success "npm cache cleaned"
+        else
+            log_warning "npm cache cleanup had issues (continuing anyway)"
+        fi
     fi
 }
 
 cleanup_pnpm() {
     if command -v pnpm &>/dev/null; then
         log_info "Cleaning pnpm store..."
-        pnpm store prune 2>&1 | tail -3 || true
-        log_success "pnpm store cleaned"
+        if pnpm store prune 2>&1 | tail -3; then
+            log_success "pnpm store cleaned"
+        else
+            log_warning "pnpm store cleanup had issues (continuing anyway)"
+        fi
     fi
 }
 
 cleanup_yarn() {
     if command -v yarn &>/dev/null; then
         log_info "Cleaning yarn cache..."
-        yarn cache clean 2>&1 | tail -3 || true
-        log_success "yarn cache cleaned"
+        if yarn cache clean 2>&1 | tail -3; then
+            log_success "yarn cache cleaned"
+        else
+            log_warning "yarn cache cleanup had issues (continuing anyway)"
+        fi
     fi
 }
 
 cleanup_ruby() {
     if command -v gem &>/dev/null; then
         log_info "Cleaning Ruby gems..."
-        gem cleanup 2>&1 | tail -5 || true
-        log_success "Ruby gems cleaned"
+        if gem cleanup 2>&1 | tail -5; then
+            log_success "Ruby gems cleaned"
+        else
+            log_warning "Ruby gem cleanup had issues (continuing anyway)"
+        fi
     fi
 }
 
 cleanup_go() {
     if command -v go &>/dev/null; then
         log_info "Cleaning Go module cache..."
-        go clean -modcache 2>&1 || true
-        log_success "Go module cache cleaned"
+        if go clean -modcache 2>&1; then
+            log_success "Go module cache cleaned"
+        else
+            log_warning "Go module cache cleanup had issues (continuing anyway)"
+        fi
     fi
 }
 
@@ -216,8 +248,9 @@ cleanup_macos_caches() {
     # User caches - some may be skipped if in use by running applications
     if [[ -d "$HOME/Library/Caches" ]]; then
         log_info "Cleaning user caches (some may be skipped if in use)..."
-        local cache_errors
-        if cache_errors=$(rm -rf "$HOME/Library/Caches/"* 2>&1); then
+        local cache_errors rm_status=0
+        cache_errors=$(rm -rf "$HOME/Library/Caches/"* 2>&1) || rm_status=$?
+        if [[ $rm_status -eq 0 ]]; then
             log_success "User caches cleaned"
         else
             local error_count
@@ -225,7 +258,7 @@ cleanup_macos_caches() {
             if [[ "$error_count" -gt 0 ]]; then
                 log_warning "User caches partially cleaned ($error_count items skipped - in use or protected)"
             else
-                log_success "User caches cleaned"
+                log_warning "User caches cleanup had unexpected errors"
             fi
         fi
     fi
@@ -233,7 +266,9 @@ cleanup_macos_caches() {
     # User logs
     if [[ -d "$HOME/Library/Logs" ]]; then
         log_info "Cleaning user logs..."
-        if rm -rf "$HOME/Library/Logs/"* 2>&1; then
+        local logs_status=0
+        rm -rf "$HOME/Library/Logs/"* 2>&1 || logs_status=$?
+        if [[ $logs_status -eq 0 ]]; then
             log_success "User logs cleaned"
         else
             log_warning "User logs partially cleaned (some items in use)"
@@ -241,20 +276,20 @@ cleanup_macos_caches() {
     fi
 
     # System logs - only clean old/rotated logs to avoid breaking active logging
+    # Note: SIP may protect some logs from deletion on modern macOS
     # Refresh sudo credentials in case keepalive failed
-    sudo -v 2>/dev/null || true
-    log_info "Cleaning old system logs..."
-    local cleaned=false
-    if sudo find /var/log -type f \( -name "*.gz" -o -name "*.bz2" -o -name "*.old" -o -name "*.[0-9]" \) -delete 2>/dev/null; then
-        cleaned=true
+    if ! sudo -v 2>/dev/null; then
+        log_warning "Sudo credentials expired - skipping system log cleanup"
+        return 0
     fi
-    if sudo find /var/log -type f -name "*.log" -mtime +7 -delete 2>/dev/null; then
-        cleaned=true
-    fi
-    if [[ "$cleaned" == true ]]; then
-        log_success "Old system logs cleaned"
+    log_info "Cleaning old system logs (best-effort, some protected files may be skipped)..."
+    local deleted_count=0
+    deleted_count=$(sudo find /var/log -type f \( -name "*.gz" -o -name "*.bz2" -o -name "*.old" -o -name "*.[0-9]" \) -print -delete 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+    deleted_count=$((deleted_count + $(sudo find /var/log -type f -name "*.log" -mtime +7 -print -delete 2>/dev/null | wc -l | tr -d ' ' || echo "0")))
+    if [[ "$deleted_count" -gt 0 ]]; then
+        log_success "Removed $deleted_count old system log files"
     else
-        log_warning "System logs: some items could not be cleaned (protected or in use)"
+        log_info "No old system logs found (or all protected)"
     fi
 }
 
@@ -265,20 +300,36 @@ cleanup_xcode() {
     local partial=false
 
     if [[ -d "$HOME/Library/Developer/Xcode/DerivedData" ]]; then
-        if rm -rf "$HOME/Library/Developer/Xcode/DerivedData" 2>&1; then
-            cleaned=true
+        rm -rf "$HOME/Library/Developer/Xcode/DerivedData" 2>&1 || true
+        # Verify the directory is actually gone or empty
+        if [[ -d "$HOME/Library/Developer/Xcode/DerivedData" ]]; then
+            local remaining
+            remaining=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type f 2>/dev/null | wc -l | tr -d ' ')
+            if [[ "$remaining" -gt 0 ]]; then
+                log_warning "DerivedData partially cleaned ($remaining files remain - close Xcode to clean fully)"
+                partial=true
+            else
+                cleaned=true
+            fi
         else
-            log_warning "DerivedData partially cleaned (Xcode may be running)"
-            partial=true
+            cleaned=true
         fi
     fi
 
     if [[ -d "$HOME/Library/Developer/Xcode/Archives" ]]; then
-        if rm -rf "$HOME/Library/Developer/Xcode/Archives" 2>&1; then
-            cleaned=true
+        rm -rf "$HOME/Library/Developer/Xcode/Archives" 2>&1 || true
+        # Verify the directory is actually gone or empty
+        if [[ -d "$HOME/Library/Developer/Xcode/Archives" ]]; then
+            local remaining
+            remaining=$(find "$HOME/Library/Developer/Xcode/Archives" -type f 2>/dev/null | wc -l | tr -d ' ')
+            if [[ "$remaining" -gt 0 ]]; then
+                log_warning "Archives partially cleaned ($remaining files remain)"
+                partial=true
+            else
+                cleaned=true
+            fi
         else
-            log_warning "Archives partially cleaned (some files in use)"
-            partial=true
+            cleaned=true
         fi
     fi
 
