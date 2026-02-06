@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, pkgs, ... }:
 
 let
   commonExtensions = [
@@ -73,6 +73,17 @@ in
   home.activation.installEditorsExtensions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     set -euo pipefail
 
+    STATE_DIR="''${XDG_STATE_HOME:-$HOME/.local/state}/ide-extensions"
+    mkdir -p "$STATE_DIR"
+
+    # Hash the desired extension lists to detect config changes
+    DESIRED_HASH="$(printf '%s\n%s' '${lib.concatStringsSep "\n" vscodeExtensions}' '${lib.concatStringsSep "\n" cursorExtensions}' | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+    HASH_FILE="$STATE_DIR/extensions.hash"
+
+    if [ -f "$HASH_FILE" ] && [ "$(cat "$HASH_FILE")" = "$DESIRED_HASH" ]; then
+      exit 0
+    fi
+
     uninstall_if_present() {
       local cli="$1"; shift
       local ext
@@ -96,8 +107,6 @@ in
       $cli --list-extensions 2>/dev/null | tr -d '\r' | sed '/^$/d' | sort -u >"$tmp_installed" || true
       printf '%s\n' "$desired_exts" | sed '/^$/d' | sort -u >"$tmp_desired"
 
-      # Always proceed to reconcile and update to ensure latest versions
-
       # installed \ desired → uninstall
       local to_uninstall
       to_uninstall="$(comm -23 "$tmp_installed" "$tmp_desired" || true)"
@@ -117,9 +126,6 @@ in
           "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
         done <<<"$to_install"
       fi
-
-      # Update installed extensions to latest
-      "$cli" --update-extensions >/dev/null 2>&1 || true
 
       rm -f "$tmp_installed" "$tmp_desired"
     }
@@ -153,6 +159,9 @@ in
     if [ -n "$cursor_cli" ]; then
       install_exts "$cursor_cli" "$cursor_exts"
     fi
+
+    # Cache the hash so subsequent runs skip if nothing changed
+    printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
   '';
 }
 

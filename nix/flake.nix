@@ -85,6 +85,15 @@
         ];
       };
 
+    homeConfigurations."default" = home-manager.lib.homeManagerConfiguration {
+      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      extraSpecialArgs = commonConfig // { dotlib = lib; };
+      modules = [
+        ./home.nix
+        { home = homeManagerConfig; }
+      ];
+    };
+
     darwinModules.default = moduleIndex.systemModules;
   };
 }

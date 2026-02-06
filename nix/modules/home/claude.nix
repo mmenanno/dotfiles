@@ -174,6 +174,7 @@ in
   # Set GITHUB_PERSONAL_ACCESS_TOKEN for the official Claude Code GitHub plugin
   home.sessionVariables = {
     GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken;
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
   };
 
   # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
@@ -210,9 +211,12 @@ in
         "frontend-design@claude-plugins-official" = true;
         "github@claude-plugins-official" = true;
         "playwright@claude-plugins-official" = true;
+        "plugin-dev@claude-plugins-official" = false;
         "pr-review-toolkit@claude-plugins-official" = true;
         "ralph-loop@claude-plugins-official" = true;
         "superpowers@claude-plugins-official" = true;
+        # Local plugins
+        "gwa@local-plugins" = true;
       };
       permissions = {
         allow =

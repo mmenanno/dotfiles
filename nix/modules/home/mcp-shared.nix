@@ -31,11 +31,6 @@ let
       args = [ "stdio" ];
       env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
     };
-    rails = {
-      command = "rails-mcp-server";
-      args = [ "stdio" ];
-      env = { };
-    };
   };
 
   # Cursor-specific MCP configuration (includes type field)
@@ -45,12 +40,6 @@ let
       command = "github-mcp-server";
       args = [ "stdio" ];
       env = { "GITHUB_PERSONAL_ACCESS_TOKEN" = githubMcpToken; };
-    };
-    rails = {
-      type = "stdio";
-      command = "rails-mcp-server";
-      args = [ "stdio" ];
-      env = {};
     };
   };
 in
