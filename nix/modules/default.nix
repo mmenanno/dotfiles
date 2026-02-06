@@ -18,7 +18,6 @@
     ./home/gh.nix
     ./home/git.nix
     ./home/ruby.nix
-    ./home/rails-mcp.nix
     ./home/ssh.nix
     ./home/zsh.nix
     ./home/starship.nix

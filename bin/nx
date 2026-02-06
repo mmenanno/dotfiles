@@ -22,6 +22,7 @@ USAGE:
 
 COMMANDS:
     up, apply, a       Apply configuration (darwin-rebuild switch)
+                        -hm, --home-manager  Rebuild only Home Manager (faster)
     check, c          Check flake for errors
     lint, l           Run code quality checks (statix, deadnix)
     update, u         Update flake dependencies
@@ -35,6 +36,7 @@ COMMANDS:
 
 EXAMPLES:
     nix up            # Apply configuration
+    nix up -hm        # Rebuild Home Manager only (faster for config changes)
     nix c             # Check flake
     nix l             # Run linting checks
     nix u             # Update dependencies
@@ -119,7 +121,7 @@ update_flake() {
 
 apply_config() {
     log_info "Applying nix-darwin configuration..."
-    if nixup-with-secrets; then
+    if nixup-with-secrets "$@"; then
         # nixup-with-secrets already prints success message
         return 0
     else
@@ -362,7 +364,8 @@ create_pr() {
 # Main command handling
 case "${1:-help}" in
     up|apply|a)
-        apply_config
+        shift || true
+        apply_config "$@"
         ;;
     check|c)
         check_flake

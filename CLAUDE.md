@@ -7,7 +7,8 @@ Nix-darwin + Home Manager configuration for macOS.
 ```bash
 nx check    # Validate flake (ALWAYS run before nx up)
 nx diff     # Preview changes before applying
-nx up       # Apply configuration (darwin-rebuild switch)
+nx up       # Apply full configuration (darwin-rebuild switch)
+nx up -hm   # Apply Home Manager only (faster for config changes)
 nx lint     # Run statix + deadnix code quality checks
 nx build    # Build without applying
 nx clean    # Clean old generations
