@@ -33,6 +33,7 @@
     hugo
     hyperfine
     imagemagick
+    jdk17
     mariadb
     markdownlint-cli
     mkalias
@@ -65,7 +66,6 @@
     x265
     texliveFull
     unar
-    wrangler
     yarn
     yq
     yt-dlp

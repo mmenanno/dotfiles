@@ -111,6 +111,7 @@ in
       diff = "batdiff";  # Diffs with syntax highlighting
       c = "cursor .";  # Open Cursor in current directory
       allow = "allow-app";  # Quick alias for removing quarantine flags
+      wrangler = "npx wrangler";  # Avoid slow Nix source build
     };
 
     sessionVariables = {
