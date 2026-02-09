@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Super Linter
-        uses: super-linter/super-linter@v8.4.0
+        uses: super-linter/super-linter@v8.5.0
         env:
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
@@ -31,7 +31,7 @@ jobs:
           VALIDATE_GITHUB_ACTIONS: true
 
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@v3.92.5
+        uses: trufflesecurity/trufflehog@v3.93.1
         with:
           extra_args: --results=verified,unknown
 
@@ -52,7 +52,7 @@ jobs:
           fi
 
       - name: TODO to Issue
-        uses: alstr/todo-to-issue-action@v5.1.13
+        uses: alstr/todo-to-issue-action@v5.1.14
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
