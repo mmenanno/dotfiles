@@ -35,6 +35,9 @@ in
           zsh-users/zsh-history-substring-search \
           MichaelAquilina/zsh-you-should-use
 
+      # Ensure zinit completions cache exists for plugins that generate completions
+      mkdir -p "$HOME/.cache/zinit/completions"
+
       # Add in snippets
       zinit snippet OMZL::git.zsh
       zinit snippet OMZP::git
@@ -47,8 +50,6 @@ in
       zinit snippet OMZP::docker
       zinit snippet OMZP::gh
       zinit snippet OMZP::iterm2
-      zinit snippet OMZP::macos
-      zinit snippet OMZP::rails
 
       zinit cdreplay -q
 
