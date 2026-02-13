@@ -43,6 +43,12 @@ in
       zinit snippet OMZP::copypath
       zinit snippet OMZP::copyfile
       zinit snippet OMZP::brew
+      zinit snippet OMZP::bundler
+      zinit snippet OMZP::docker
+      zinit snippet OMZP::gh
+      zinit snippet OMZP::iterm2
+      zinit snippet OMZP::macos
+      zinit snippet OMZP::rails
 
       zinit cdreplay -q
 
