@@ -94,6 +94,10 @@ in
     };
 
     CustomUserPreferences = {
+      "NSGlobalDomain" = {
+        NSQuitAlwaysKeepsWindows = true; # "Close windows when quitting" = off
+      };
+
       "com.apple.TextEdit" = {
         RichText = false;
         SmartQuotes = false;
@@ -119,6 +123,10 @@ in
 
       "com.apple.sound.beep" = {
         flash = false;
+      };
+
+      "com.googlecode.iterm2" = {
+        EnableAPIServer = true;
       };
 
     };
@@ -173,6 +181,13 @@ in
 
     echo "Dock setup script created and executed"
     echo "You can re-run it anytime with: setup-dock"
+
+    # iTerm2: Set profile to reuse previous session's working directory
+    ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
+    if [ -f "$ITERM_PLIST" ]; then
+      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Custom Directory' Recycle\" '$ITERM_PLIST'" 2>/dev/null || true
+      echo "iTerm2 profile updated: reuse previous session directory"
+    fi
 
     # Force reload of preference cache to apply natural scrolling setting
     echo "Reloading trackpad preferences..."

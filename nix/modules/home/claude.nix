@@ -1,4 +1,4 @@
-{ config, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
+{ config, lib, pkgs, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
 
 let
   # Define permission groups and helpers reused in settings
@@ -165,21 +165,35 @@ let
     "nixos.org"
     "nixos.wiki"
     "home-manager-options.extranix.com"
+    # Apple/macOS admin
+    "gdmf.apple.com"
+    "ipsw.me"
+    "ipswdownloads.docs.apiary.io"
+    # General interest
+    "steamcommunity.com"
   ];
   toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
   toReadPermissions = files: map (file: "Read(${file})") files;
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
 in
 {
-  # Set GITHUB_PERSONAL_ACCESS_TOKEN for the official Claude Code GitHub plugin
-  home.sessionVariables = {
-    GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken;
-    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
-  };
+  home = {
+    # Set GITHUB_PERSONAL_ACCESS_TOKEN for the official Claude Code GitHub plugin
+    sessionVariables = {
+      GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken;
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
+    };
 
-  # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
-  # This is needed because the TUI checks for the binary at this location when install method is "native"
-  home.file.".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
+    # Install it2 CLI for Claude Code agent team split panes in iTerm2
+    activation.installIt2 = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      ${pkgs.pipx}/bin/pipx install it2 2>/dev/null || \
+        ${pkgs.pipx}/bin/pipx upgrade it2 2>/dev/null || true
+    '';
+
+    # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
+    # This is needed because the TUI checks for the binary at this location when install method is "native"
+    file.".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
+  };
 
   programs.claude-code = {
     enable = true;
@@ -200,6 +214,7 @@ in
       includeCoAuthoredBy = false;
       theme = "dark";
       autoUpdates = true;
+      teammateMode = "tmux";
       verbose = false;
       cleanupPeriodDays = 20;
       enabledPlugins = {
@@ -275,35 +290,70 @@ in
             "markdownlint:*"
             # 1Password CLI
             "op:*"
+            # Claude CLI management
+            "claude plugin:*"
+            # Full-path grep (Nix PATH resolution)
+            "/usr/bin/grep:*"
           ])
-          # GitHub MCP actions used by workflows/debugging
+          # GitHub MCP plugin - read-only tools
           ++ [
-            "mcp__github__list_workflows"
-            "mcp__github__list_workflow_runs"
-            "mcp__github__get_workflow_run"
-            "mcp__github__list_workflow_jobs"
-            "mcp__github__create_pull_request"
-            "mcp__github__pull_request_read"
-            "mcp__github__get_commit"
-            "mcp__github__get_file_contents"
-            "mcp__github__list_commits"
-            "mcp__github__list_branches"
-            "mcp__github__get_issue"
-            "mcp__github__get_issue_comments"
-            "mcp__github__list_issues"
-            "mcp__github__list_pull_requests"
-            "mcp__github__search_pull_requests"
-            "mcp__github__search_issues"
-            "mcp__github__search_code"
-            "mcp__github__search_repositories"
-            "mcp__github__search_users"
-            "mcp__github__list_releases"
-            "mcp__github__get_latest_release"
-            "mcp__github__list_tags"
-            "mcp__github__get_tag"
-            "mcp__github__get_me"
-            "mcp__github__get_teams"
-            "mcp__github__get_team_members"
+            "mcp__plugin_github_github__get_me"
+            "mcp__plugin_github_github__get_commit"
+            "mcp__plugin_github_github__get_file_contents"
+            "mcp__plugin_github_github__get_label"
+            "mcp__plugin_github_github__get_latest_release"
+            "mcp__plugin_github_github__get_release_by_tag"
+            "mcp__plugin_github_github__get_tag"
+            "mcp__plugin_github_github__issue_read"
+            "mcp__plugin_github_github__list_branches"
+            "mcp__plugin_github_github__list_commits"
+            "mcp__plugin_github_github__list_issues"
+            "mcp__plugin_github_github__list_pull_requests"
+            "mcp__plugin_github_github__list_releases"
+            "mcp__plugin_github_github__list_tags"
+            "mcp__plugin_github_github__pull_request_read"
+            "mcp__plugin_github_github__search_code"
+            "mcp__plugin_github_github__search_issues"
+            "mcp__plugin_github_github__search_pull_requests"
+            "mcp__plugin_github_github__search_repositories"
+            "mcp__plugin_github_github__search_users"
+          ]
+          # GitHub MCP plugin - safe write tools
+          ++ [
+            "mcp__plugin_github_github__create_branch"
+            "mcp__plugin_github_github__create_pull_request"
+            "mcp__plugin_github_github__update_pull_request"
+            "mcp__plugin_github_github__update_pull_request_branch"
+            "mcp__plugin_github_github__add_issue_comment"
+            "mcp__plugin_github_github__issue_write"
+            "mcp__plugin_github_github__request_copilot_review"
+            "mcp__plugin_github_github__pull_request_review_write"
+            "mcp__plugin_github_github__add_comment_to_pending_review"
+            "mcp__plugin_github_github__sub_issue_write"
+          ]
+          # Playwright MCP plugin - read-only/observational
+          ++ [
+            "mcp__plugin_playwright_playwright__browser_snapshot"
+            "mcp__plugin_playwright_playwright__browser_take_screenshot"
+            "mcp__plugin_playwright_playwright__browser_console_messages"
+            "mcp__plugin_playwright_playwright__browser_network_requests"
+            "mcp__plugin_playwright_playwright__browser_tabs"
+          ]
+          # Playwright MCP plugin - standard interaction
+          ++ [
+            "mcp__plugin_playwright_playwright__browser_navigate"
+            "mcp__plugin_playwright_playwright__browser_navigate_back"
+            "mcp__plugin_playwright_playwright__browser_click"
+            "mcp__plugin_playwright_playwright__browser_type"
+            "mcp__plugin_playwright_playwright__browser_fill_form"
+            "mcp__plugin_playwright_playwright__browser_select_option"
+            "mcp__plugin_playwright_playwright__browser_press_key"
+            "mcp__plugin_playwright_playwright__browser_hover"
+            "mcp__plugin_playwright_playwright__browser_close"
+            "mcp__plugin_playwright_playwright__browser_resize"
+            "mcp__plugin_playwright_playwright__browser_wait_for"
+            "mcp__plugin_playwright_playwright__browser_handle_dialog"
+            "mcp__plugin_playwright_playwright__browser_install"
           ];
         ask = toBashPermissions [
           "git push:*"
@@ -314,6 +364,23 @@ in
           "chmod:*"
           "brew install:*"
           "brew upgrade:*"
+        ]
+        # GitHub MCP plugin - mutating tools requiring confirmation
+        ++ [
+          "mcp__plugin_github_github__merge_pull_request"
+          "mcp__plugin_github_github__push_files"
+          "mcp__plugin_github_github__create_or_update_file"
+          "mcp__plugin_github_github__delete_file"
+          "mcp__plugin_github_github__create_repository"
+          "mcp__plugin_github_github__fork_repository"
+          "mcp__plugin_github_github__assign_copilot_to_issue"
+        ]
+        # Playwright MCP plugin - tools requiring confirmation
+        ++ [
+          "mcp__plugin_playwright_playwright__browser_evaluate"
+          "mcp__plugin_playwright_playwright__browser_run_code"
+          "mcp__plugin_playwright_playwright__browser_file_upload"
+          "mcp__plugin_playwright_playwright__browser_drag"
         ];
         deny = [];
         additionalDirectories = [];
