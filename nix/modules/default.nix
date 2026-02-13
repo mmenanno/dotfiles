@@ -34,5 +34,6 @@
     ./home/gemini.nix
     ./home/ide-extensions.nix
     ./home/ai-globals.nix
+    ./home/tmux.nix
   ];
 }

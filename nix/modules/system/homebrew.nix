@@ -38,6 +38,7 @@
       "handbrake-app"
       "imageoptim"
       "iterm2"
+      "itermbrowserplugin"
       "jordanbaird-ice@beta"
       "kindle-previewer"
       "logi-options+"
