@@ -37,6 +37,7 @@
       "google-chrome"
       "handbrake-app"
       "imageoptim"
+      "iterm2"
       "jordanbaird-ice@beta"
       "kindle-previewer"
       "logi-options+"
