@@ -127,6 +127,7 @@ in
 
       "com.googlecode.iterm2" = {
         EnableAPIServer = true;
+        DimInactiveSplitPanes = false;
       };
 
     };
