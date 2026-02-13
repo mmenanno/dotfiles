@@ -34,6 +34,7 @@
     hyperfine
     imagemagick
     jdk17
+    lazygit
     mariadb
     markdownlint-cli
     mkalias
@@ -67,8 +68,10 @@
     texliveFull
     unar
     yarn
+    yazi
     yq
     yt-dlp
+    zellij
     zoxide
   ];
 }
