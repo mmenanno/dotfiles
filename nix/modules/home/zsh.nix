@@ -106,6 +106,9 @@ in
       if [[ $- == *i* ]]; then
         eval "$(${pkgs.zoxide}/bin/zoxide init zsh --cmd cd)"
       fi
+
+      # Auto-list directory contents on cd
+      chpwd() { eza --icons --group-directories-first; }
     '';
 
     shellAliases = {
@@ -117,6 +120,8 @@ in
       man = "batman";  # Man pages with syntax highlighting
       diff = "batdiff";  # Diffs with syntax highlighting
       c = "cursor .";  # Open Cursor in current directory
+      ".." = "cd ..";
+      "..." = "cd $(git rev-parse --show-toplevel)";
       allow = "allow-app";  # Quick alias for removing quarantine flags
       wrangler = "npx wrangler";  # Avoid slow Nix source build
     };
