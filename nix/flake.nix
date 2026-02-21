@@ -25,6 +25,11 @@
       url = "github:mmenanno/ralph-claude-code";
       flake = false;
     };
+
+    get-shit-done = {
+      url = "github:gsd-build/get-shit-done";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, ... }:
