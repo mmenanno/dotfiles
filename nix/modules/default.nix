@@ -30,6 +30,7 @@
     ./home/mcp-shared.nix
     ./home/claude.nix
     ./home/claude-skills.nix
+    ./home/get-shit-done.nix
     ./home/codex.nix
     ./home/gemini.nix
     ./home/ide-extensions.nix

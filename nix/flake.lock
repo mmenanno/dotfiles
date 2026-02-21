@@ -17,6 +17,22 @@
         "type": "github"
       }
     },
+    "get-shit-done": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1771620082,
+        "narHash": "sha256-gYo8FuXb7ZJJUZPmYoPLhJq7eDV/8h2uDnri6q9pr5Q=",
+        "owner": "gsd-build",
+        "repo": "get-shit-done",
+        "rev": "131f24b5cd9014a1e910807565ad522416932053",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gsd-build",
+        "repo": "get-shit-done",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -129,6 +145,7 @@
     },
     "root": {
       "inputs": {
+        "get-shit-done": "get-shit-done",
         "home-manager": "home-manager",
         "nix-darwin": "nix-darwin",
         "nix-homebrew": "nix-homebrew",

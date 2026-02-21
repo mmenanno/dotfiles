@@ -74,6 +74,9 @@ in
     ];
 
     settings = {
+      alias = {
+        sw = "!f() { case \"$1\" in *:*) gh pr checkout \"$@\" ;; *) git switch \"$@\" ;; esac; }; f";
+      };
       user = {
         name = githubUser;
         email = personalEmail;
