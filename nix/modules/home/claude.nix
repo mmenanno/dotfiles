@@ -1,4 +1,4 @@
-{ config, lib, pkgs, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
+{ config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
 
 let
   # Define permission groups and helpers reused in settings
@@ -175,6 +175,8 @@ let
   toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
   toReadPermissions = files: map (file: "Read(${file})") files;
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
+
+  hooksDir = "${homeDirectory}/.claude/hooks";
 in
 {
   home = {
@@ -190,9 +192,57 @@ in
         ${pkgs.pipx}/bin/pipx upgrade it2 2>/dev/null || true
     '';
 
-    # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
-    # This is needed because the TUI checks for the binary at this location when install method is "native"
-    file.".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
+    file = {
+      # Create symlink at ~/.local/bin/claude to satisfy Claude Code's native installation detection
+      # This is needed because the TUI checks for the binary at this location when install method is "native"
+      ".local/bin/claude".source = config.lib.file.mkOutOfStoreSymlink "/opt/homebrew/bin/claude";
+
+      # Statusline: model name + context progress bar + starship prompt
+      ".claude/hooks/statusline.js".text = ''
+        let input = "";
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", chunk => input += chunk);
+        process.stdin.on("end", () => {
+          try {
+            const data = JSON.parse(input);
+            const model = data.model?.display_name || "";
+            const remaining = data.context_window?.remaining_percentage;
+            const parts = [];
+            if (model) parts.push("\x1b[2m" + model + "\x1b[0m");
+            if (remaining != null) {
+              const rawUsed = Math.max(0, Math.min(100, 100 - Math.round(remaining)));
+              const used = Math.min(100, Math.round((rawUsed / 80) * 100));
+              const filled = Math.floor(used / 10);
+              const bar = "▰".repeat(filled) + "▱".repeat(10 - filled);
+              let color;
+              let prefix = "";
+              if (used < 63) color = "32";
+              else if (used < 81) color = "33";
+              else if (used < 95) color = "38;5;208";
+              else { color = "5;31"; prefix = "🚨 "; }
+              parts.push("\x1b[" + color + "m" + prefix + bar + " " + used + "%" + "\x1b[0m");
+            }
+            process.stdout.write(parts.join(" │ "));
+          } catch (e) {}
+        });
+      '';
+      ".claude/hooks/statusline.sh" = {
+        executable = true;
+        text = ''
+          #!/bin/bash
+          input=$(cat)
+          info=$(echo "$input" | node "${hooksDir}/statusline.js" 2>/dev/null || true)
+          star=$(STARSHIP_SHELL=fish STARSHIP_CONFIG="$HOME/.config/starship.toml" starship prompt 2>/dev/null | head -1 || true)
+          if [ -n "$info" ] && [ -n "$star" ]; then
+            printf '%s %s' "$info" "$star"
+          elif [ -n "$info" ]; then
+            printf '%s' "$info"
+          else
+            printf '%s' "$star"
+          fi
+        '';
+      };
+    };
   };
 
   programs.claude-code = {
@@ -207,9 +257,7 @@ in
     settings = {
       statusLine = {
         type = "command";
-        # Use fish shell for status line to escape wrappers showing in the prompt
-        command = "STARSHIP_SHELL=fish STARSHIP_CONFIG=$HOME/.config/starship.toml starship prompt | head -1";
-
+        command = "${hooksDir}/statusline.sh";
       };
       includeCoAuthoredBy = false;
       theme = "dark";
