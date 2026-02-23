@@ -17,22 +17,6 @@
         "type": "github"
       }
     },
-    "get-shit-done": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1771620082,
-        "narHash": "sha256-gYo8FuXb7ZJJUZPmYoPLhJq7eDV/8h2uDnri6q9pr5Q=",
-        "owner": "gsd-build",
-        "repo": "get-shit-done",
-        "rev": "131f24b5cd9014a1e910807565ad522416932053",
-        "type": "github"
-      },
-      "original": {
-        "owner": "gsd-build",
-        "repo": "get-shit-done",
-        "type": "github"
-      }
-    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -40,11 +24,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1771625283,
-        "narHash": "sha256-1T88/PSNKpRNtaiXATTae0hpRnBpjmIL0b1QfGO6HBA=",
+        "lastModified": 1771851181,
+        "narHash": "sha256-gFgE6mGUftwseV3DUENMb0k0EiHd739lZexPo5O/sdQ=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "a913ae61bf3b9f4312f6097b68cdf0a0fa699279",
+        "rev": "9a4b494b1aa1b93d8edf167f46dc8e0c0011280c",
         "type": "github"
       },
       "original": {
@@ -98,11 +82,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1771130777,
-        "narHash": "sha256-UIKOwG0D9XVIJfNWg6+gENAvQP+7LO46eO0Jpe+ItJ0=",
+        "lastModified": 1771734689,
+        "narHash": "sha256-/phvMgr1yutyAMjKnZlxkVplzxHiz60i4rc+gKzpwhg=",
         "owner": "nix-community",
         "repo": "nix-index-database",
-        "rev": "efec7aaad8d43f8e5194df46a007456093c40f88",
+        "rev": "8f590b832326ab9699444f3a48240595954a4b10",
         "type": "github"
       },
       "original": {
@@ -145,7 +129,6 @@
     },
     "root": {
       "inputs": {
-        "get-shit-done": "get-shit-done",
         "home-manager": "home-manager",
         "nix-darwin": "nix-darwin",
         "nix-homebrew": "nix-homebrew",
