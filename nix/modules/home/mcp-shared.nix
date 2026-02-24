@@ -33,21 +33,11 @@ let
     };
   };
 
-  # VS Code MCP configuration (includes type field required by VS Code)
-  vscodeMcpServers = {
-    github = {
-      type = "stdio";
-      command = "github-mcp-server";
-      args = [ "stdio" ];
-      env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
-    };
-  };
-
 in
 {
   # Export the shared configurations and helpers for use by other modules
   # This allows other modules to import and use these standardized configs
   _module.args = {
-    inherit mcpServers vscodeMcpServers githubMcpToken mkHomebrewWrapper;
+    inherit mcpServers githubMcpToken mkHomebrewWrapper;
   };
 }
