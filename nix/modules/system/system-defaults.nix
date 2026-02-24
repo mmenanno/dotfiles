@@ -5,7 +5,6 @@ let
   appsDir = "/Applications";
   localAppsDir = "${homeDirectory}${appsDir}";
   systemAppsDir = "/System${appsDir}";
-  systemUtilitiesDir = "${systemAppsDir}/Utilities";
   cryptexAppsDir = "/System/Cryptexes/App/System/Applications";
 
   # Define dock apps in order
