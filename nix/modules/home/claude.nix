@@ -278,6 +278,15 @@ in
         "pr-review-toolkit@claude-plugins-official" = true;
         "ralph-loop@claude-plugins-official" = true;
         "superpowers@claude-plugins-official" = true;
+        "gopls-lsp@claude-plugins-official" = true;
+        "csharp-lsp@claude-plugins-official" = true;
+        "rust-analyzer-lsp@claude-plugins-official" = true;
+        "php-lsp@claude-plugins-official" = true;
+        "jdtls-lsp@claude-plugins-official" = true;
+        "clangd-lsp@claude-plugins-official" = true;
+        "swift-lsp@claude-plugins-official" = true;
+        "kotlin-lsp@claude-plugins-official" = true;
+        "lua-lsp@claude-plugins-official" = true;
         # Local plugins
         "gwa@local-plugins" = true;
       };
