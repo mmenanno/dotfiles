@@ -141,6 +141,9 @@ in
 
       # Zoxide configuration
       _ZO_DOCTOR = "0";  # Disable zoxide doctor warnings
+
+      # Font directories for XeLaTeX/fontconfig (system + Nix-managed fonts)
+      OSFONTDIR = "/System/Library/Fonts/Supplemental:/Library/Fonts:/Library/Fonts/Nix Fonts:$HOME/Library/Fonts";
     };
     };
 
