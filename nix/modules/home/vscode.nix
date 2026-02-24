@@ -1,11 +1,23 @@
-{ homeDirectory, ... }:
+{ pkgs, homeDirectory, vscodeMcpServers, ... }:
 # Scope: Home (Home Manager). Configures VS Code user settings and keybindings.
+
+let
+  # Pretty-printed VS Code MCP JSON generated at build time
+  vscodeMcpJson = pkgs.runCommand "vscode-mcp.json" { nativeBuildInputs = [ pkgs.jq ]; } ''
+    cat > mcp.min.json <<'JSON'
+    ${builtins.toJSON {
+      mcpServers = vscodeMcpServers;
+    }}
+    JSON
+    jq -S . mcp.min.json > $out
+  '';
+in
 {
   home.file = {
     "Library/Application Support/Code/User/settings.json".text = ''
       {
         "workbench.startupEditor": "none",
-        "editor.inlineSuggest.enabled": false,
+        "editor.inlineSuggest.enabled": true,
         "git.autofetch": true,
         "[ruby]": {
           "editor.defaultFormatter": "Shopify.ruby-lsp",
@@ -56,8 +68,13 @@
         "shopifyGlobal.mysqlEditor": "external",
         "workbench.editor.wrapTabs": true,
         "scm.showHistoryGraph": false,
-        "github.copilot.enable": { "*": false },
-        "github.copilot.editor.enableAutoCompletions": false,
+        "github.copilot.enable": {
+          "*": true,
+          "yaml": true,
+          "plaintext": false,
+          "markdown": false
+        },
+        "github.copilot.editor.enableAutoCompletions": true,
         "editor.wordWrap": "on",
         "workbench.activityBar.orientation": "vertical",
         "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace, MesloLGS Nerd Font ",
@@ -85,14 +102,32 @@
         },
         "rubyLsp.featureFlags": { "tapiocaAddon": true },
         "rubyLsp.addonSettings": {},
-        "diffEditor.maxComputationTime": 0
+        "diffEditor.maxComputationTime": 0,
+        "keyboard.dispatch": "keyCode",
+        "settingsSync.keybindingsPerPlatform": false,
+        "[dockercompose]": {
+          "editor.insertSpaces": true,
+          "editor.tabSize": 2,
+          "editor.autoIndent": "advanced",
+          "editor.quickSuggestions": {
+            "other": true,
+            "comments": false,
+            "strings": true
+          },
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        },
+        "[github-actions-workflow]": {
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        },
+        "claudeCode.preferredLocation": "panel"
       }
     '';
 
     "Library/Application Support/Code/User/keybindings.json".text = ''
       []
     '';
+
+    # MCP configuration for VS Code (pretty-formatted)
+    ".vscode/mcp.json".source = vscodeMcpJson;
   };
 }
-
-

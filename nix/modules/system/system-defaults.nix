@@ -5,7 +5,6 @@ let
   appsDir = "/Applications";
   localAppsDir = "${homeDirectory}${appsDir}";
   systemAppsDir = "/System${appsDir}";
-  systemUtilitiesDir = "${systemAppsDir}/Utilities";
   cryptexAppsDir = "/System/Cryptexes/App/System/Applications";
 
   # Define dock apps in order
@@ -27,9 +26,8 @@ let
     "${appsDir}/Transmit.app"
     "${appsDir}/1Password.app"
     "${systemAppsDir}/iPhone Mirroring.app"
-    "${systemUtilitiesDir}/Terminal.app"
-    "${appsDir}/Cursor.app"
-    "${appsDir}/Session.app"
+    "${appsDir}/iTerm.app"
+    "${appsDir}/Visual Studio Code.app"
   ];
 
   # Optimized dock setup - batch operations for better performance

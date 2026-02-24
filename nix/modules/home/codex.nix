@@ -11,7 +11,7 @@
     settings = {
       approval_policy = "on-request";
       sandbox_mode = "danger-full-access";
-      file_opener = "cursor";
+      file_opener = "code";
       tools = { web_search = true; };
       mcp_servers = mcpServers;
     };

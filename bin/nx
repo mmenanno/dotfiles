@@ -26,7 +26,7 @@ COMMANDS:
     check, c          Check flake for errors
     lint, l           Run code quality checks (statix, deadnix)
     update, u         Update flake dependencies
-    edit, e           Open dotfiles in Cursor editor
+    edit, e           Open dotfiles in VS Code
     status, s         Show git status of dotfiles
     build, b          Build configuration without applying
     diff, d           Show what would change (dry-run)
@@ -40,7 +40,7 @@ EXAMPLES:
     nix c             # Check flake
     nix l             # Run linting checks
     nix u             # Update dependencies
-    nix e             # Edit in Cursor
+    nix e             # Edit in VS Code
     nix s             # Git status
     nix cl            # Clean old generations
     nix pr            # Create PR from current changes
@@ -152,8 +152,8 @@ show_diff() {
 }
 
 edit_config() {
-    log_info "Opening dotfiles in Cursor..."
-    cursor "$DOTFILES_DIR"
+    log_info "Opening dotfiles in VS Code..."
+    code "$DOTFILES_DIR"
 }
 
 show_status() {

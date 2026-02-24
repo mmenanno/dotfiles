@@ -119,7 +119,7 @@ in
       # Additional convenience aliases
       man = "batman";  # Man pages with syntax highlighting
       diff = "batdiff";  # Diffs with syntax highlighting
-      c = "cursor .";  # Open Cursor in current directory
+      c = "code .";  # Open VS Code in current directory
       ".." = "cd ..";
       "..." = "cd $(git rev-parse --show-toplevel)";
       allow = "allow-app";  # Quick alias for removing quarantine flags
@@ -127,7 +127,7 @@ in
     };
 
     sessionVariables = {
-      EDITOR = "cursor --wait";
+      EDITOR = "code --wait";
 
       # Claude Code configuration
       DISABLE_TELEMETRY = "false";
