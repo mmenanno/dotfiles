@@ -1,26 +1,31 @@
 { lib, pkgs, ... }:
 
 let
-  commonExtensions = [
+  extensions = [
     "alefragnani.project-manager"
     "alexcvzz.vscode-sqlite"
     "aliariff.auto-add-brackets"
     "aliariff.vscode-erb-beautify"
     "andrewmcgoveran.react-component-generator"
+    "anthropic.claude-code"
+    "bbenoist.nix"
     "bradlc.vscode-tailwindcss"
     "davidanson.vscode-markdownlint"
     "dbaeumer.vscode-eslint"
     "donjayamanne.githistory"
     "eamodio.gitlens"
+    "editorconfig.editorconfig"
     "esbenp.prettier-vscode"
     "github.vscode-github-actions"
     "github.vscode-pull-request-github"
     "golang.go"
     "google.gemini-cli-vscode-ide-companion"
+    "graphite.gti-vscode"
     "graphql.vscode-graphql"
     "graphql.vscode-graphql-syntax"
     "gruntfuggly.todo-tree"
     "gusto.packwerk-vscode"
+    "hverlin.mise-vscode"
     "itarato.byesig"
     "janisdd.vscode-edit-csv"
     "kenhowardpdx.vscode-gist"
@@ -28,6 +33,7 @@ let
     "mechatroner.rainbow-csv"
     "mrmlnc.vscode-scss"
     "ms-azuretools.vscode-containers"
+    "ms-azuretools.vscode-docker"
     "ms-python.debugpy"
     "ms-python.isort"
     "ms-python.python"
@@ -37,6 +43,7 @@ let
     "ms-vscode-remote.remote-ssh-edit"
     "ms-vscode.atom-keybindings"
     "ms-vscode.remote-explorer"
+    "orta.vscode-jest"
     "redhat.vscode-xml"
     "redhat.vscode-yaml"
     "rioj7.regex-text-gen"
@@ -50,24 +57,6 @@ let
     "wayou.vscode-todo-highlight"
     "yzhang.markdown-all-in-one"
   ];
-
-  vscodeOnlyExtensions = [
-    "graphite.gti-vscode"
-    "hverlin.mise-vscode"
-  ];
-
-  cursorOnlyExtensions = [
-    "anthropic.claude-code"
-    "anysphere.cursorpyright"
-    "anysphere.pyright"
-    "bbenoist.nix"
-    "editorconfig.editorconfig"
-    "ms-azuretools.vscode-docker"
-    "orta.vscode-jest"
-  ];
-
-  vscodeExtensions = builtins.concatLists [ commonExtensions vscodeOnlyExtensions ];
-  cursorExtensions = builtins.concatLists [ commonExtensions cursorOnlyExtensions ];
 in
 {
   home.activation.installEditorsExtensions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -76,21 +65,13 @@ in
     STATE_DIR="''${XDG_STATE_HOME:-$HOME/.local/state}/ide-extensions"
     mkdir -p "$STATE_DIR"
 
-    # Hash the desired extension lists to detect config changes
-    DESIRED_HASH="$(printf '%s\n%s' '${lib.concatStringsSep "\n" vscodeExtensions}' '${lib.concatStringsSep "\n" cursorExtensions}' | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+    # Hash the desired extension list to detect config changes
+    DESIRED_HASH="$(printf '%s' '${lib.concatStringsSep "\n" extensions}' | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
     HASH_FILE="$STATE_DIR/extensions.hash"
 
     if [ -f "$HASH_FILE" ] && [ "$(cat "$HASH_FILE")" = "$DESIRED_HASH" ]; then
       exit 0
     fi
-
-    uninstall_if_present() {
-      local cli="$1"; shift
-      local ext
-      for ext in "$@"; do
-        "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
-      done
-    }
 
     install_exts() {
       local cli="$1"; shift
@@ -130,8 +111,7 @@ in
       rm -f "$tmp_installed" "$tmp_desired"
     }
 
-    vscode_exts='${lib.concatStringsSep "\n" vscodeExtensions}'
-    cursor_exts='${lib.concatStringsSep "\n" cursorExtensions}'
+    vscode_exts='${lib.concatStringsSep "\n" extensions}'
 
     vscode_cli=""
     if command -v code >/dev/null 2>&1; then
@@ -140,29 +120,11 @@ in
       vscode_cli="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
     fi
 
-    cursor_cli=""
-    if command -v cursor >/dev/null 2>&1; then
-      cursor_cli="$(command -v cursor)"
-    elif [ -x "/Applications/Cursor.app/Contents/Resources/app/bin/cursor" ]; then
-      cursor_cli="/Applications/Cursor.app/Contents/Resources/app/bin/cursor"
-    elif [ -x "/Applications/Cursor.app/Contents/Resources/app/bin/code" ]; then
-      cursor_cli="/Applications/Cursor.app/Contents/Resources/app/bin/code"
-    fi
-
     if [ -n "$vscode_cli" ]; then
-      # Ensure Copilot is not installed in VS Code
-      uninstall_if_present "$vscode_cli" \
-        github.copilot github.copilot-chat GitHub.copilot GitHub.copilot-chat
       install_exts "$vscode_cli" "$vscode_exts"
-    fi
-
-    if [ -n "$cursor_cli" ]; then
-      install_exts "$cursor_cli" "$cursor_exts"
     fi
 
     # Cache the hash so subsequent runs skip if nothing changed
     printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
   '';
 }
-
-

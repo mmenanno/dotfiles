@@ -27,9 +27,8 @@ let
     "${appsDir}/Transmit.app"
     "${appsDir}/1Password.app"
     "${systemAppsDir}/iPhone Mirroring.app"
-    "${systemUtilitiesDir}/Terminal.app"
-    "${appsDir}/Cursor.app"
-    "${appsDir}/Session.app"
+    "${appsDir}/iTerm.app"
+    "${appsDir}/Visual Studio Code.app"
   ];
 
   # Optimized dock setup - batch operations for better performance

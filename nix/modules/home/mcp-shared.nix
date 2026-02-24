@@ -2,7 +2,7 @@
 
 # Shared MCP (Model Context Protocol) server configurations and helpers
 # This module provides common MCP server definitions and utility functions
-# that can be reused across different AI coding assistants (Claude, Cursor, Codex, etc.)
+# that can be reused across different AI coding assistants (Claude, Codex, etc.)
 
 let
   inherit (dotlib) getEnvOrFallback;
@@ -33,20 +33,21 @@ let
     };
   };
 
-  # Cursor-specific MCP configuration (includes type field)
-  cursorMcpServers = {
+  # VS Code MCP configuration (includes type field required by VS Code)
+  vscodeMcpServers = {
     github = {
       type = "stdio";
       command = "github-mcp-server";
       args = [ "stdio" ];
-      env = { "GITHUB_PERSONAL_ACCESS_TOKEN" = githubMcpToken; };
+      env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
     };
   };
+
 in
 {
   # Export the shared configurations and helpers for use by other modules
   # This allows other modules to import and use these standardized configs
   _module.args = {
-    inherit mcpServers cursorMcpServers githubMcpToken mkHomebrewWrapper;
+    inherit mcpServers vscodeMcpServers githubMcpToken mkHomebrewWrapper;
   };
 }

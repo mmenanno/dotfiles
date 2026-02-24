@@ -1,5 +1,5 @@
 #!/bin/bash
-# gclone - Clone git repository and optionally open in Cursor
+# gclone - Clone git repository and optionally open in VS Code
 # Usage: gclone [options] <repository_url>
 
 set -euo pipefail
@@ -8,24 +8,24 @@ set -euo pipefail
 source "${BASH_SOURCE[0]%/*}/shared"
 
 # Default configuration
-OPEN_CURSOR=false
+OPEN_EDITOR=false
 
 # Print usage information
 show_help() {
     cat << EOF
-gclone - Clone git repository and optionally open in Cursor
+gclone - Clone git repository and optionally open in VS Code
 
 USAGE:
     gclone [OPTIONS] <repository_url>
 
 OPTIONS:
     -h, --help              Show this help message
-    -c, --cursor            Open cloned directory in Cursor after cloning
+    -c, --code              Open cloned directory in VS Code after cloning
 
 EXAMPLES:
     gclone git@github.com:user/repo.git         # Clone repository
-    gclone -c git@github.com:user/repo.git      # Clone and open in Cursor
-    gclone --cursor git@github.com:user/repo    # Clone and open in Cursor
+    gclone -c git@github.com:user/repo.git      # Clone and open in VS Code
+    gclone --code git@github.com:user/repo      # Clone and open in VS Code
 
 NOTE:
     Only SSH URLs are supported (git@hostname:user/repo.git format).
@@ -65,8 +65,8 @@ get_repo_name() {
 check_dependencies() {
     check_command "git"
 
-    if [[ "$OPEN_CURSOR" == true ]]; then
-        check_command "cursor" "Please install Cursor CLI or run without --cursor flag"
+    if [[ "$OPEN_EDITOR" == true ]]; then
+        check_command "code" "Please install VS Code CLI or run without --code flag"
     fi
 }
 
@@ -76,8 +76,8 @@ parse_args() {
 
     while (( $# > 0 )); do
         case "$1" in
-            -c|--cursor)
-                OPEN_CURSOR=true
+            -c|--code)
+                OPEN_EDITOR=true
                 shift
                 ;;
             -*)
@@ -163,20 +163,20 @@ main() {
 
     log_success "Now in directory: $(pwd)"
 
-    # Open in Cursor if requested
-    if [[ "$OPEN_CURSOR" == true ]]; then
-        log_info "Opening in Cursor..."
-        if cursor .; then
-            log_success "Opened in Cursor"
+    # Open in VS Code if requested
+    if [[ "$OPEN_EDITOR" == true ]]; then
+        log_info "Opening in VS Code..."
+        if code .; then
+            log_success "Opened in VS Code"
         else
-            log_error "Failed to open in Cursor"
+            log_error "Failed to open in VS Code"
             exit 1
         fi
     fi
 
-    # If not opening in Cursor, start a new shell in the directory
+    # If not opening in editor, start a new shell in the directory
     # This allows the user to continue working in the cloned directory
-    if [[ "$OPEN_CURSOR" == false ]]; then
+    if [[ "$OPEN_EDITOR" == false ]]; then
         log_info "Starting new shell in cloned directory"
         log_info "Type 'exit' to return to the previous directory"
         exec "$SHELL"

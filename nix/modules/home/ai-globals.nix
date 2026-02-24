@@ -69,8 +69,8 @@ let
 
   # Common editor and tool preferences
   commonToolPreferences = {
-    editor = "Cursor";
-    gitCommand = "cursor --wait";
+    editor = "VS Code";
+    gitCommand = "code --wait";
     shell = "zsh with modern plugin management";
     terminalFont = "MesloLGS Nerd Font";
     modernCliTools = [
@@ -80,29 +80,6 @@ let
       "fd - fast find alternative (use for finding files)"
       "atuin - magical shell history with sync (Ctrl+R for search)"
       "direnv - automatic environment activation for .envrc files"
-    ];
-  };
-
-  # Common security guidelines template
-  securityGuidelines = {
-    permissionBoundaries = [
-      "Respect all security constraints from AGENTS.md"
-      "Never bypass security restrictions without explicit approval"
-      "Maintain principle of least privilege for all operations"
-      "Provide clear warnings for potentially risky operations"
-    ];
-
-    dataProtection = [
-      "Handle sensitive information appropriately"
-      "Avoid logging or storing credentials"
-      "Respect privacy boundaries and data sensitivity"
-      "Follow secure coding practices consistently"
-    ];
-
-    onePasswordIntegration = [
-      "Shell aliases don't work in non-interactive subshells"
-      "In scripts that spawn subshells, explicitly wrap plugin-enabled commands: op plugin run -- gh <command>"
-      "See: https://developer.1password.com/docs/cli/shell-plugins/troubleshooting/#if-your-script-doesnt-inherit-shell-plugin-aliases"
     ];
   };
 
@@ -118,17 +95,6 @@ let
     - Document any deviations from global defaults
   '';
 
-  # Common validation requirements template for Cursor rules
-  validationRequirementsTemplate = ''
-    ## Universal Validation Requirements
-
-    All AI agents must execute appropriate validation commands before changes:
-
-    - `${validationCommands.nix}` for Nix projects
-    - `${validationCommands.shell}` for shell scripts
-    - `${validationCommands.markdown}` for markdown files
-    - Language-specific linting and testing
-  '';
 in
 {
   home.file = {
@@ -309,45 +275,5 @@ in
       ${integrationTemplate "GEMINI.md"}
     '';
 
-    # Global Cursor rules directory
-    # Supported by: Cursor IDE (modern rules system)
-    ".cursor/rules/global-ai-integration.md".text = ''
-      ---
-      type: always
-      description: "Global AI Agent Configuration Integration"
-      ---
-
-      # Global AI Agent Configuration
-
-      This rule integrates with global AI agent configuration files in the home directory.
-
-      ## Global Configuration Hierarchy
-
-      1. **~/AGENTS.md**: Universal execution constraints and security boundaries
-      2. **~/.claude/CLAUDE.md**: Claude-specific global behavioral preferences
-      3. **~/GEMINI.md**: Gemini-specific global instruction memory
-      4. **Project-specific files**: Override global defaults as needed
-
-      ${validationRequirementsTemplate}
-
-      ## Security Boundaries
-
-      Global security constraints apply to all projects:
-
-      - No destructive file operations without approval
-      - No sudo or system modification commands
-      - No access to sensitive files (.env, secrets)
-      - Principle of least privilege for all operations
-
-      ### 1Password CLI Integration
-      ${formatBulletList securityGuidelines.onePasswordIntegration}
-
-      ## Integration Behavior
-
-      - Reference global configurations as baseline
-      - Allow project-specific overrides
-      - Maintain consistency across all AI tools
-      - Prioritize security constraints over convenience
-    '';
   };
 }

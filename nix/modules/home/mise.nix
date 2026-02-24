@@ -25,7 +25,7 @@
     };
   };
 
-  # Ensure Ruby LSP can find mise when launched from GUI apps like Cursor.
+  # Ensure Ruby LSP can find mise when launched from GUI apps like VS Code.
   # Ruby LSP looks for mise in ~/.local/bin, /opt/homebrew/bin, or /usr/bin.
   # Since mise is installed via Nix in the store, provide a stable symlink.
   home.file = {

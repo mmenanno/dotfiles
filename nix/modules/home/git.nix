@@ -103,7 +103,7 @@ in
       };
       init.defaultBranch = "main";
       tag.gpgsign = true;
-      core.editor = "cursor --wait";
+      core.editor = "code --wait";
 
       # Git LFS locking support
       lfs.locksverify = true;
