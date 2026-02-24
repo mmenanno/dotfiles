@@ -9,5 +9,8 @@ result
 result-*
 tmp-*
 
+# Worktrees
+.worktrees/
+
 # Gemini
 .gemini-clipboard
