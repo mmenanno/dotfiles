@@ -1,12 +1,23 @@
-{ pkgs, homeDirectory, vscodeMcpServers, ... }:
+{ pkgs, homeDirectory, ... }:
 # Scope: Home (Home Manager). Configures VS Code user settings and keybindings.
 
 let
+  # VS Code MCP servers installed from the marketplace/gallery
+  # Managed declaratively like extensions — updates require changing this config
+  vscodeMcpServers = {
+    "io.github.github/github-mcp-server" = {
+      type = "http";
+      url = "https://api.githubcopilot.com/mcp/";
+      gallery = "https://api.mcp.github.com";
+    };
+  };
+
   # Pretty-printed VS Code MCP JSON generated at build time
   vscodeMcpJson = pkgs.runCommand "vscode-mcp.json" { nativeBuildInputs = [ pkgs.jq ]; } ''
     cat > mcp.min.json <<'JSON'
     ${builtins.toJSON {
-      mcpServers = vscodeMcpServers;
+      servers = vscodeMcpServers;
+      inputs = [];
     }}
     JSON
     jq -S . mcp.min.json > $out
@@ -119,7 +130,8 @@ in
         "[github-actions-workflow]": {
           "editor.defaultFormatter": "redhat.vscode-yaml"
         },
-        "claudeCode.preferredLocation": "panel"
+        "claudeCode.preferredLocation": "panel",
+        "chat.mcp.gallery.enabled": true
       }
     '';
 
@@ -127,7 +139,7 @@ in
       []
     '';
 
-    # MCP configuration for VS Code (pretty-formatted)
-    ".vscode/mcp.json".source = vscodeMcpJson;
+    # MCP configuration for VS Code marketplace servers (user-level)
+    "Library/Application Support/Code/User/mcp.json".source = vscodeMcpJson;
   };
 }
