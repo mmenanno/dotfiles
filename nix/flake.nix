@@ -25,11 +25,6 @@
       url = "github:mmenanno/ralph-claude-code";
       flake = false;
     };
-
-    starship-presets = {
-      url = "github:starship/starship";
-      flake = false;
-    };
   };
 
   outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, ... }:

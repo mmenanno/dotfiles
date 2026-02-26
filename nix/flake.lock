@@ -134,24 +134,7 @@
         "nix-homebrew": "nix-homebrew",
         "nix-index-database": "nix-index-database",
         "nixpkgs": "nixpkgs",
-        "ralph-claude-code": "ralph-claude-code",
-        "starship-presets": "starship-presets"
-      }
-    },
-    "starship-presets": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1771994868,
-        "narHash": "sha256-9pn3szVt55ksPxoxcKj3aicGbL/18CE/2m9N27W7Zbs=",
-        "owner": "starship",
-        "repo": "starship",
-        "rev": "622ea6068af5d098f2e03d4df29042fddf4b85a3",
-        "type": "github"
-      },
-      "original": {
-        "owner": "starship",
-        "repo": "starship",
-        "type": "github"
+        "ralph-claude-code": "ralph-claude-code"
       }
     }
   },
