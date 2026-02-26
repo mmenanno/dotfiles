@@ -1,11 +1,10 @@
-{ pkgs, lib, ... }:
+{ inputs, lib, ... }:
 
 let
   # Load the complete nerd-font preset and merge with our customizations
-  nerdFontPreset = builtins.fromTOML (builtins.readFile (pkgs.fetchurl {
-    url = "https://starship.rs/presets/toml/nerd-font-symbols.toml";
-    hash = "sha256-zxXDmI6V6wwKeoifF1+qC9sOtIQKHaF2ZyX7RvP0Fzg=";
-  }));
+  nerdFontPreset = builtins.fromTOML (
+    builtins.readFile "${inputs.starship-presets}/docs/public/presets/toml/nerd-font-symbols.toml"
+  );
 
   # Our custom overrides
   customSettings = {
