@@ -56,6 +56,7 @@ darwin-rebuild --rollback                 # Undo last change
 
 ## Gotchas
 
+- **Homebrew + Home Manager pattern**: Use `mkHomebrewWrapper` from `mcp-shared.nix` to install via Homebrew but keep Home Manager config (see `claude.nix`, `mise.nix`, `codex.nix`, `gemini.nix`)
 - **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`
 - **System vs Home**: System = nix-darwin (OS-level), Home = Home Manager (user-level)
 - **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`
