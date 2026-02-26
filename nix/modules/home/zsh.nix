@@ -66,10 +66,10 @@ in
       compinit -C -d "$HOME/.cache/zsh/compdump"
 
       # Source dv script to enable 'dv cd' functionality
-      source ${config.home.homeDirectory}/dotfiles/bin/dv
+      [[ -f ${config.home.homeDirectory}/dotfiles/bin/dv ]] && source ${config.home.homeDirectory}/dotfiles/bin/dv
 
       # Source 1Password plugins (managed by home-manager)
-      source ${config.home.homeDirectory}/.config/op/plugins.sh
+      [[ -f ${config.home.homeDirectory}/.config/op/plugins.sh ]] && source ${config.home.homeDirectory}/.config/op/plugins.sh
 
       # Keybindings
       bindkey -e
