@@ -264,6 +264,7 @@ in
       autoUpdates = true;
       teammateMode = "tmux";
       verbose = false;
+      respectGitignore = false;
       cleanupPeriodDays = 20;
       enabledPlugins = {
         "claude-code-setup@claude-plugins-official" = true;
