@@ -7,6 +7,7 @@
       "gemini-cli"
       "libyaml"
       "mas"
+      "mise"
       "pandoc"
     ];
 

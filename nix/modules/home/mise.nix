@@ -1,12 +1,16 @@
-{ pkgs, ... }:
+{ mkHomebrewWrapper, ... }:
 
 {
   # Mise (development environment manager) configuration
+  # Binary installed via Homebrew for faster updates; config managed by Home Manager
   programs.mise = {
     enable = true;
     # Disable auto-integration to use lazy loading with shims instead
     enableZshIntegration = false;
-    package = pkgs.mise;
+    package = mkHomebrewWrapper {
+      name = "mise";
+      homebrewBinary = "mise";
+    };
     globalConfig = {
       tools = {
         python = "latest";
@@ -23,12 +27,5 @@
         disable_tools = ["node" "pnpm" "rust"];
       };
     };
-  };
-
-  # Ensure Ruby LSP can find mise when launched from GUI apps like VS Code.
-  # Ruby LSP looks for mise in ~/.local/bin, /opt/homebrew/bin, or /usr/bin.
-  # Since mise is installed via Nix in the store, provide a stable symlink.
-  home.file = {
-    ".local/bin/mise".source = "${pkgs.mise}/bin/mise";
   };
 }
