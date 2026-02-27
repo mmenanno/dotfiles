@@ -1,7 +1,7 @@
 { config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
 
 let
-  # Define permission groups and helpers reused in settings
+  # --- Development tool commands (npm, cargo, pytest, go, make) ---
   devTools = [
     "npm run lint"
     "npm run test:*"
@@ -13,6 +13,7 @@ let
     "go test:*"
     "make test"
   ];
+  # --- Ruby/Rails ecosystem (bundle, rake, rails, rspec, rubocop, etc.) ---
   coreRubyTools = [
     "brakeman"
     "erb_lint"
@@ -34,6 +35,7 @@ let
   ] ++ (map (tool: "bundle exec ${tool}:*") coreRubyTools)
       ++ (map (tool: "${tool}:*") coreRubyTools)
       ++ (map (tool: "bin/${tool}:*") coreRubyTools);
+  # --- Git operations (status, diff, log, commit, branch, etc.) ---
   gitOps = [
     "git status"
     "git diff:*"
@@ -50,6 +52,7 @@ let
     "git rev-parse:*"
     "git merge-base:*"
   ];
+  # --- Safe read-only shell commands (ls, cat, find, stat, curl, etc.) ---
   safeShellCommands = [
     "ls:*"
     "ll:*"
@@ -126,6 +129,7 @@ let
     "tr:*"
     "column:*"
   ];
+  # --- Safe file read patterns (package.json, Gemfile, READMEs, etc.) ---
   safeReads = [
     "package.json"
     "Gemfile"
@@ -138,6 +142,7 @@ let
     "~/.gitconfig"
     "**/*.toml"
   ];
+  # --- Allowed web domains for fetching (GitHub, docs, Nix, Ruby/Rails) ---
   webDomains = [
     "github.com"
     "raw.githubusercontent.com"
@@ -172,6 +177,7 @@ let
     # General interest
     "steamcommunity.com"
   ];
+  # --- Permission list builders ---
   toBashPermissions = commands: map (cmd: "Bash(${cmd})") commands;
   toReadPermissions = files: map (file: "Read(${file})") files;
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
@@ -264,6 +270,7 @@ in
       autoUpdates = true;
       teammateMode = "tmux";
       verbose = false;
+      respectGitignore = false;
       cleanupPeriodDays = 20;
       enabledPlugins = {
         "claude-code-setup@claude-plugins-official" = true;

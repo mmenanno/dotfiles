@@ -3,6 +3,8 @@
 let
   customFonts = pkgs.stdenv.mkDerivation {
     name = "custom-fonts";
+    # Optional: Place custom .ttf/.otf fonts in nix/files/fonts/
+    # If the directory is empty or missing, only nerd-fonts.meslo-lg is installed
     src = ../../files/fonts;
     dontUnpack = true;
     installPhase = ''

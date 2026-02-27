@@ -20,7 +20,10 @@ in
             echo -e "\033[32mRuby $version installation verified\033[0m"
           else
             echo -e "\033[33mInstalling Ruby $version...\033[0m"
-            mise install ruby@$version
+            if ! mise install ruby@$version; then
+              echo -e "\033[31mFailed to install Ruby $version\033[0m"
+              exit 1
+            fi
             echo -e "\033[32mRuby $version installation completed\033[0m"
           fi
         done

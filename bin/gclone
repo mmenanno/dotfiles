@@ -31,6 +31,9 @@ NOTE:
     Only SSH URLs are supported (git@hostname:user/repo.git format).
     HTTPS URLs will be rejected for security reasons.
 
+    Without -c, gclone spawns a new shell in the cloned directory.
+    Type 'exit' to return to your original directory.
+
 EOF
 }
 

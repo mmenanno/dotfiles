@@ -22,7 +22,20 @@ let
     '';
 
   # Shared environment variables
+  #
+  # GitHub MCP token (classic PAT) scopes:
+  #   repo, workflow, write:packages, read:packages, write:repo_hook,
+  #   read:repo_hook, gist, notifications, read:user, write:discussion,
+  #   read:discussion, project, read:project
+  #   Manage at: GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
   githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
+
+  # Shared identity values (centralized to avoid drift between git.nix and ssh.nix)
+  sharedIdentity = {
+    personalEmail = getEnvOrFallback "NIX_PERSONAL_EMAIL" "bootstrap@example.com" "placeholder@example.com";
+    privateEmail = getEnvOrFallback "NIX_PRIVATE_EMAIL" "bootstrap-alt@example.com" "placeholder-alt@example.com";
+    privateUser = getEnvOrFallback "NIX_PRIVATE_USER" "bootstrap-private-user" "placeholder-private-user";
+  };
 
   # Common MCP server configurations
   mcpServers = {
@@ -38,6 +51,6 @@ in
   # Export the shared configurations and helpers for use by other modules
   # This allows other modules to import and use these standardized configs
   _module.args = {
-    inherit mcpServers githubMcpToken mkHomebrewWrapper;
+    inherit mcpServers githubMcpToken mkHomebrewWrapper sharedIdentity;
   };
 }

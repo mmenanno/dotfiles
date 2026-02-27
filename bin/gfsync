@@ -397,6 +397,8 @@ main() {
 
     # Ensure we restore starting branch on exit if we switched and haven't restored yet
     restore_on_exit() {
+        # Clean up temp files
+        rm -f "${fetch_output:-}"
         # Don't modify anything in dry-run
         if [[ "$DRY_RUN" == true ]]; then
             return 0

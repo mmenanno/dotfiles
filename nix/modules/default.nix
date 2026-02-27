@@ -14,6 +14,9 @@
   ];
 
   # Home (Home Manager) modules: user programs, shells, editors, dotfiles
+  # NOTE: mcp-shared.nix must precede claude.nix, codex.nix, gemini.nix, mise.nix
+  #       (provides mkHomebrewWrapper, mcpServers, githubMcpToken via _module.args)
+  # NOTE: ai-globals.nix should be last (generates files referencing other module outputs)
   homeModules = [
     ./home/gh.nix
     ./home/git.nix
