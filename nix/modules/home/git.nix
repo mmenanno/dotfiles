@@ -1,19 +1,17 @@
-{ dotlib, ... }:
+{ dotlib, sharedIdentity, ... }:
 # Scope: Home (Home Manager). Configures Git identity, signing, and defaults.
 let
   inherit (dotlib) getEnvOrFallback;
+  inherit (sharedIdentity) personalEmail privateEmail privateUser;
 
   # Bootstrap mode detection
   isBootstrap = builtins.getEnv "NIX_BOOTSTRAP_MODE" == "1";
 
   # Main configuration
-  personalEmail = getEnvOrFallback "NIX_PERSONAL_EMAIL" "bootstrap@example.com" "placeholder+github@example.com";
   githubUser = getEnvOrFallback "NIX_GITHUB_USER" "bootstrap-user" "placeholder-user";
   signingKey = getEnvOrFallback "NIX_SIGNING_KEY" "bootstrap-key" "ssh-ed25519 PLACEHOLDER_SIGNING_KEY_CHANGE_ME";
 
   # Private configuration
-  privateEmail = getEnvOrFallback "NIX_PRIVATE_EMAIL" "bootstrap-private@example.com" "placeholder-private@example.com";
-  privateUser = getEnvOrFallback "NIX_PRIVATE_USER" "bootstrap-private-user" "placeholder-private-user";
   privateSigningKey = getEnvOrFallback "NIX_PRIVATE_SIGNING_KEY" "bootstrap-private-key" "ssh-ed25519 PLACEHOLDER_PRIVATE_SIGNING_KEY_CHANGE_ME";
   privateGitDir = getEnvOrFallback "NIX_PRIVATE_GITDIR" "~/dev/bootstrap/" "~/dev/placeholder-private/";
 

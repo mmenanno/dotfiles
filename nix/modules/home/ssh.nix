@@ -1,9 +1,10 @@
-{ config, dotlib, ... }:
+{ config, dotlib, sharedIdentity, ... }:
 # Scope: Home (Home Manager). Configures SSH hosts and 1Password agent usage.
 
 let
   inherit (dotlib) getEnvOrFallback;
   inherit (config.home) username;
+  inherit (sharedIdentity) personalEmail privateEmail privateUser;
 
   sshDir = "${config.home.homeDirectory}/.ssh";
   laptopName = getEnvOrFallback "NIX_LAPTOP_NAME" "bootstrap-laptop" "placeholder-laptop";
@@ -15,14 +16,9 @@ let
     nvm_server = getEnvOrFallback "NIX_SERVER_IP_NVM" "192.168.y.y" "192.168.y.y";
   };
 
-  # Environment-based configurations
-  personalEmail = getEnvOrFallback "NIX_PERSONAL_EMAIL" "bootstrap@example.com" "placeholder@example.com";
-  privateEmail = getEnvOrFallback "NIX_PRIVATE_EMAIL" "bootstrap-alt@example.com" "placeholder-alt@example.com";
-
   # Server and user names from environment
   mainServerName = getEnvOrFallback "NIX_SERVER_NAME_L" "bootstrap-server" "placeholder-server";
   nvmServerName = getEnvOrFallback "NIX_SERVER_NVM_NAME" "bootstrap-vm" "placeholder-vm";
-  privateUser = getEnvOrFallback "NIX_PRIVATE_USER" "bootstrap-user" "placeholder-user";
   privateUserShort = getEnvOrFallback "NIX_PRIVATE_USER_SHORT" "bootstrap-short" "placeholder-short";
 
   # Identity file names from environment
