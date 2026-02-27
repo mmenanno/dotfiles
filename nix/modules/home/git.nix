@@ -4,9 +4,6 @@ let
   inherit (dotlib) getEnvOrFallback;
   inherit (sharedIdentity) personalEmail privateEmail privateUser;
 
-  # Bootstrap mode detection
-  isBootstrap = builtins.getEnv "NIX_BOOTSTRAP_MODE" == "1";
-
   # Main configuration
   githubUser = getEnvOrFallback "NIX_GITHUB_USER" "bootstrap-user" "placeholder-user";
   signingKey = getEnvOrFallback "NIX_SIGNING_KEY" "bootstrap-key" "ssh-ed25519 PLACEHOLDER_SIGNING_KEY_CHANGE_ME";
@@ -90,10 +87,10 @@ in
       credential = {
         "${forgejoDomain}" = {
           provider = "generic";
-        } // (if isBootstrap then {} else {});  # Conditional personal forge config
+        };
         "${levForgejoDomain}" = {
           provider = "generic";
-        } // (if isBootstrap then {} else {});  # Conditional Lev forge config
+        };
         helper = "/usr/local/share/gcm-core/git-credential-manager";
         "https://dev.azure.com" = {
           useHttpPath = true;
