@@ -1,8 +1,8 @@
 { config, pkgs, ... }:
 
 let
-  zshPackages = with pkgs; [
-    zinit
+  zshPackages = [
+    pkgs.zinit
   ];
 in
 
