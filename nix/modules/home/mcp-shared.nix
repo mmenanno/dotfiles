@@ -22,6 +22,12 @@ let
     '';
 
   # Shared environment variables
+  #
+  # GitHub MCP token (classic PAT) scopes:
+  #   repo, workflow, write:packages, read:packages, write:repo_hook,
+  #   read:repo_hook, gist, notifications, read:user, write:discussion,
+  #   read:discussion, project, read:project
+  #   Manage at: GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
   githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
 
   # Shared identity values (centralized to avoid drift between git.nix and ssh.nix)
