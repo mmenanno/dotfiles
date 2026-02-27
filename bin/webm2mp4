@@ -269,6 +269,11 @@ process_files() {
         done
     fi
 
+    # Defensive check: verify all jobs were accounted for
+    if (( success_count + failed_count != total_files )); then
+        log_warning "Job count mismatch: success=$success_count failed=$failed_count total=$total_files"
+    fi
+
     # Print summary
     log_info "Conversion complete: $success_count successful, $failed_count failed"
 
