@@ -196,11 +196,43 @@ in
     echo "Dock setup script created and executed"
     echo "You can re-run it anytime with: setup-dock"
 
-    # iTerm2: Set profile to reuse previous session's working directory
+    # iTerm2: Set profile defaults
     ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
     if [ -f "$ITERM_PLIST" ]; then
       su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Custom Directory' Recycle\" '$ITERM_PLIST'" 2>/dev/null || true
-      echo "iTerm2 profile updated: reuse previous session directory"
+      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' 'MesloLGSNFM-Regular 12'\" '$ITERM_PLIST'" 2>/dev/null || true
+      echo "iTerm2 profile updated: font and directory settings"
+    fi
+
+    # Terminal.app: Set font to MesloLGS Nerd Font 12pt
+    # Terminal stores fonts as serialized NSFont objects, so we use osascript to generate the data
+    TERMINAL_PLIST="${homeDirectory}/Library/Preferences/com.apple.Terminal.plist"
+    if [ -f "$TERMINAL_PLIST" ]; then
+      FONT_SCRIPT=$(mktemp)
+      cat > "$FONT_SCRIPT" << 'FONTSCRIPT'
+    use framework "Foundation"
+    use framework "AppKit"
+    on run argv
+      set plistPath to item 1 of argv
+      set theFont to current application's NSFont's fontWithName:"MesloLGSNFM-Regular" |size|:12
+      if theFont is missing value then
+        set theFont to current application's NSFont's fontWithName:"MesloLGSNF-Regular" |size|:12
+      end if
+      if theFont is not missing value then
+        set theData to current application's NSKeyedArchiver's archivedDataWithRootObject:theFont requiringSecureCoding:false |error|:(missing value)
+        set thePlist to current application's NSMutableDictionary's dictionaryWithContentsOfFile:plistPath
+        set windowSettings to (thePlist's objectForKey:"Window Settings")'s mutableCopy()
+        set basicProfile to (windowSettings's objectForKey:"Basic")'s mutableCopy()
+        basicProfile's setObject:theData forKey:"Font"
+        windowSettings's setObject:basicProfile forKey:"Basic"
+        thePlist's setObject:windowSettings forKey:"Window Settings"
+        thePlist's writeToURL:(current application's NSURL's fileURLWithPath:plistPath) |error|:(missing value)
+      end if
+    end run
+    FONTSCRIPT
+      su ${username} -c "osascript '$FONT_SCRIPT' '$TERMINAL_PLIST'" 2>/dev/null || true
+      rm -f "$FONT_SCRIPT"
+      echo "Terminal.app profile updated: font set to MesloLGS Nerd Font 12pt"
     fi
 
     # Force reload of preference cache to apply natural scrolling setting
