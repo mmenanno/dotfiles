@@ -294,6 +294,7 @@ in
         "swift-lsp@claude-plugins-official" = true;
         "kotlin-lsp@claude-plugins-official" = true;
         "lua-lsp@claude-plugins-official" = true;
+        "Notion@claude-plugins-official" = true;
         # Local plugins
         "gwa@local-plugins" = true;
       };

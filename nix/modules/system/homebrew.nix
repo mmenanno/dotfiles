@@ -50,6 +50,7 @@
       "mediainfo"
       "megasync"
       "minecraft"
+      "notion"
       "obsidian"
       "pearcleaner"
       "plex"
