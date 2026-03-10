@@ -32,9 +32,14 @@ let
     "pearcleaner"
     "rectangle"
     "sequel-ace"
+    "shottr"
     "slack"
     "the-unarchiver"
     "visual-studio-code"
+  ];
+
+  workOnlyCasks = [
+    "meetingbar"
   ];
 
   personalOnlyCasks = [
@@ -76,7 +81,6 @@ let
     "renpy"
     "scummvm-app"
     "session"
-    "shottr"
     "signal"
     "steam"
     "syncthing-app"
@@ -114,7 +118,7 @@ in
   homebrew = {
     enable = true;
     brews = commonBrews ++ (if isWorkMachine then [] else personalOnlyBrews);
-    casks = commonCasks ++ (if isWorkMachine then [] else personalOnlyCasks);
+    casks = commonCasks ++ (if isWorkMachine then workOnlyCasks else personalOnlyCasks);
     masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
     onActivation = {
       cleanup = "zap";
