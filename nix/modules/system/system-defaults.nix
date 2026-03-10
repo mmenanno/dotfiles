@@ -200,7 +200,7 @@ in
     ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
     if [ -f "$ITERM_PLIST" ]; then
       su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Custom Directory' Recycle\" '$ITERM_PLIST'" 2>/dev/null || true
-      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' 'MesloLGSNFM-Regular 11'\" '$ITERM_PLIST'" 2>/dev/null || true
+      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' MesloLGSNFM-Regular\ 11\" '$ITERM_PLIST'" 2>/dev/null || true
       echo "iTerm2 profile updated: font and directory settings"
     fi
 
