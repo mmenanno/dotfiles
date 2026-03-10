@@ -6,6 +6,7 @@ let
   localAppsDir = "${homeDirectory}${appsDir}";
   systemAppsDir = "/System${appsDir}";
   cryptexAppsDir = "/System/Cryptexes/App/System/Applications";
+  chromeAppsDir = "${localAppsDir}/Chrome Apps.localized";
 
   # Define dock apps in order
   dockApps = [
@@ -32,9 +33,9 @@ let
 
   workDockApps = [
     "${appsDir}/Google Chrome.app"
-    "${localAppsDir}/Gmail.app"
-    "${localAppsDir}/Google Meet.app"
-    "${localAppsDir}/Google Calendar.app"
+    "${chromeAppsDir}/Gmail.app"
+    "${chromeAppsDir}/Google Meet.app"
+    "${chromeAppsDir}/Calendar.app"
     "${appsDir}/Slack.app"
     "${appsDir}/iTerm.app"
     "${appsDir}/Visual Studio Code.app"
