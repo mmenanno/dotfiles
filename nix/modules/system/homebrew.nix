@@ -35,7 +35,6 @@ let
     "slack"
     "the-unarchiver"
     "visual-studio-code"
-    "zoom"
   ];
 
   personalOnlyCasks = [
@@ -90,6 +89,7 @@ let
     "vlc"
     "webpquicklook"
     "whatsapp"
+    "zoom"
   ];
 
   commonMasApps = {
