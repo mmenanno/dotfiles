@@ -22,6 +22,7 @@
       settings = {
         idiomatic_version_file_enable_tools = ["ruby" "python" "node" "nodejs" "rust"];
         auto_install = true;
+        ruby.compile = false;
         # Disable tools that are managed by Nix instead of mise
         # This prevents mise from checking/installing these on every shell startup
         disable_tools = ["node" "pnpm" "rust"];
