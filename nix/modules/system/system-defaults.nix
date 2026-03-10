@@ -200,11 +200,11 @@ in
     ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
     if [ -f "$ITERM_PLIST" ]; then
       su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Custom Directory' Recycle\" '$ITERM_PLIST'" 2>/dev/null || true
-      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' 'MesloLGSNFM-Regular 12'\" '$ITERM_PLIST'" 2>/dev/null || true
+      su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' 'MesloLGSNFM-Regular 11'\" '$ITERM_PLIST'" 2>/dev/null || true
       echo "iTerm2 profile updated: font and directory settings"
     fi
 
-    # Terminal.app: Set font to MesloLGS Nerd Font 12pt
+    # Terminal.app: Set font to MesloLGS Nerd Font 11pt
     # Terminal stores fonts as serialized NSFont objects, so we use osascript to generate the data
     TERMINAL_PLIST="${homeDirectory}/Library/Preferences/com.apple.Terminal.plist"
     if [ -f "$TERMINAL_PLIST" ]; then
@@ -215,9 +215,9 @@ in
     use framework "AppKit"
     on run argv
       set plistPath to item 1 of argv
-      set theFont to current application's NSFont's fontWithName:"MesloLGSNFM-Regular" |size|:12
+      set theFont to current application's NSFont's fontWithName:"MesloLGSNFM-Regular" |size|:11
       if theFont is missing value then
-        set theFont to current application's NSFont's fontWithName:"MesloLGSNF-Regular" |size|:12
+        set theFont to current application's NSFont's fontWithName:"MesloLGSNF-Regular" |size|:11
       end if
       if theFont is not missing value then
         set theData to current application's NSKeyedArchiver's archivedDataWithRootObject:theFont requiringSecureCoding:false |error|:(missing value)
@@ -233,7 +233,7 @@ in
     FONTSCRIPT
       su ${username} -c "osascript '$FONT_SCRIPT' '$TERMINAL_PLIST'" 2>/dev/null || true
       rm -f "$FONT_SCRIPT"
-      echo "Terminal.app profile updated: font set to MesloLGS Nerd Font 12pt"
+      echo "Terminal.app profile updated: font set to MesloLGS Nerd Font 11pt"
     fi
 
     # Force reload of preference cache to apply natural scrolling setting
