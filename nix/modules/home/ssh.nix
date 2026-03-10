@@ -1,10 +1,12 @@
-{ config, dotlib, sharedIdentity, ... }:
+{ config, lib, dotlib, sharedIdentity, isWorkMachine ? false, ... }:
 # Scope: Home (Home Manager). Configures SSH hosts and 1Password agent usage.
 
 let
-  inherit (dotlib) getEnvOrFallback;
+  inherit (dotlib) getEnvOrFallback getPersonalEnvOrFallback;
   inherit (config.home) username;
   inherit (sharedIdentity) personalEmail privateEmail privateUser;
+
+  getPersonalEnv = getPersonalEnvOrFallback isWorkMachine;
 
   sshDir = "${config.home.homeDirectory}/.ssh";
   laptopName = getEnvOrFallback "NIX_LAPTOP_NAME" "bootstrap-laptop" "placeholder-laptop";
@@ -19,23 +21,23 @@ let
   # Server and user names from environment
   mainServerName = getEnvOrFallback "NIX_SERVER_NAME_L" "bootstrap-server" "placeholder-server";
   nvmServerName = getEnvOrFallback "NIX_SERVER_NVM_NAME" "bootstrap-vm" "placeholder-vm";
-  privateUserShort = getEnvOrFallback "NIX_PRIVATE_USER_SHORT" "bootstrap-short" "placeholder-short";
+  privateUserShort = getPersonalEnv "NIX_PRIVATE_USER_SHORT" "bootstrap-short" "placeholder-short";
 
   # Identity file names from environment
   mainServerKeyFile = getEnvOrFallback "NIX_SSH_MAIN_SERVER_KEYFILE" "bootstrap-main" "placeholder-main";
   nvmServerKeyFile = getEnvOrFallback "NIX_SSH_NVM_SERVER_KEYFILE" "bootstrap-nvm" "placeholder-nvm";
   mainGithubKeyFile = getEnvOrFallback "NIX_SSH_MAIN_GITHUB_KEYFILE" "bootstrap-main-github" "placeholder-main-github";
-  privateGithubKeyFile = getEnvOrFallback "NIX_SSH_PRIVATE_GITHUB_KEYFILE" "bootstrap-private-github" "placeholder-private-github";
+  privateGithubKeyFile = getPersonalEnv "NIX_SSH_PRIVATE_GITHUB_KEYFILE" "bootstrap-private-github" "placeholder-private-github";
 
   # SSH public keys from environment
   mainServerKey = getEnvOrFallback "NIX_SSH_MAIN_SERVER_KEY" "ssh-ed25519 BOOTSTRAP_MAIN_SERVER_KEY" "ssh-ed25519 PLACEHOLDER_MAIN_SERVER_KEY_CHANGE_ME";
   nvmServerKey = getEnvOrFallback "NIX_SSH_NVM_SERVER_KEY" "ssh-ed25519 BOOTSTRAP_NVM_SERVER_KEY" "ssh-ed25519 PLACEHOLDER_NVM_SERVER_KEY_CHANGE_ME";
   mainGithubKey = getEnvOrFallback "NIX_SSH_MAIN_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_MAIN_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_MAIN_GITHUB_KEY_CHANGE_ME";
-  privateGithubKey = getEnvOrFallback "NIX_SSH_PRIVATE_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_PRIVATE_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_PRIVATE_GITHUB_KEY_CHANGE_ME";
+  privateGithubKey = getPersonalEnv "NIX_SSH_PRIVATE_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_PRIVATE_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_PRIVATE_GITHUB_KEY_CHANGE_ME";
 
   # Forgejo domains from environment
-  forgejoDomainFull = getEnvOrFallback "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
-  levForgejoDomainFull = getEnvOrFallback "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
+  forgejoDomainFull = getPersonalEnv "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
+  levForgejoDomainFull = getPersonalEnv "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
 
   # Extract hostname from full URL (remove https://)
   forgejoDomain = builtins.replaceStrings ["https://" "http://"] ["" ""] forgejoDomainFull;
@@ -96,18 +98,8 @@ in
         mkNvmBlock "-down" "cd /mnt/unmanic/staging"
       else {};
 
-    in {
-      enable = true;
-      enableDefaultConfig = false;
-      matchBlocks = baseBlocks // nvmBlocks // {
-        "*" = {
-          identityAgent = onePasswordAgentSymlink;
-          identitiesOnly = true;
-        };
-        "github.com" = {
-          hostname = "github.com";
-          identityFile = "~/.ssh/${mainGithubKeyFile}";
-        };
+      # Personal-only SSH hosts (servers, private GitHub, Forgejo)
+      personalBlocks = baseBlocks // nvmBlocks // {
         "github.${privateUserShort}" = {
           hostname = "github.com";
           identityFile = "~/.ssh/${privateGithubKeyFile}";
@@ -121,12 +113,27 @@ in
           identityFile = "~/.ssh/${mainGithubKeyFile}";
         };
       };
+
+    in {
+      enable = true;
+      enableDefaultConfig = false;
+      matchBlocks = {
+        "*" = {
+          identityAgent = onePasswordAgentSymlink;
+          identitiesOnly = true;
+        };
+        "github.com" = {
+          hostname = "github.com";
+          identityFile = "~/.ssh/${mainGithubKeyFile}";
+        };
+      } // lib.optionalAttrs (!isWorkMachine) personalBlocks;
     };
 
   home.file = {
+    "${sshDir}/${mainGithubKeyFile}.pub".text = "${mainGithubKey} ${personalEmail}";
+  } // lib.optionalAttrs (!isWorkMachine) {
     "${sshDir}/${mainServerKeyFile}.pub".text = "${mainServerKey} ${macbook_hostname}";
     "${sshDir}/${nvmServerKeyFile}.pub".text = "${nvmServerKey} ${macbook_hostname}";
-    "${sshDir}/${mainGithubKeyFile}.pub".text = "${mainGithubKey} ${personalEmail}";
     "${sshDir}/${privateGithubKeyFile}.pub".text = "${privateGithubKey} ${privateEmail}";
   };
 }

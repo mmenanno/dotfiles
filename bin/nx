@@ -13,6 +13,33 @@ source "$SCRIPT_DIR/shared"
 DOTFILES_DIR="/Users/michaelmenanno/dotfiles"
 NIX_DIR="$DOTFILES_DIR/nix"
 
+# Build the darwin-rebuild command as an array, falling back to nix run on fresh systems
+get_darwin_rebuild_cmd() {
+    if command -v darwin-rebuild >/dev/null 2>&1; then
+        DARWIN_REBUILD_CMD=(darwin-rebuild)
+    else
+        DARWIN_REBUILD_CMD=(nix --extra-experimental-features "nix-command flakes" run nix-darwin --)
+    fi
+}
+
+# Determine which darwinConfiguration to use based on hostname
+get_config_name() {
+    local work_hostname="${NIX_WORK_HOSTNAME:-}"
+    # If env var not set, try reading from 1Password directly
+    if [[ -z "$work_hostname" ]]; then
+        work_hostname="$(op read "op://Nix/Work/hostname" 2>/dev/null || echo "")"
+    fi
+    if [[ -n "$work_hostname" ]]; then
+        local current_hostname
+        current_hostname="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+        if [[ "$current_hostname" == "$work_hostname" ]]; then
+            echo "work_macbook"
+            return
+        fi
+    fi
+    echo "macbook_setup"
+}
+
 show_help() {
     cat << EOF
 Nix Dotfiles Management Script
@@ -121,7 +148,7 @@ update_flake() {
 
 apply_config() {
     log_info "Applying nix-darwin configuration..."
-    if nixup-with-secrets "$@"; then
+    if "$SCRIPT_DIR/nixup-with-secrets" "$@"; then
         # nixup-with-secrets already prints success message
         return 0
     else
@@ -132,7 +159,8 @@ apply_config() {
 
 build_config() {
     log_info "Building nix-darwin configuration..."
-    if darwin-rebuild build --flake "$NIX_DIR#macbook_setup"; then
+    get_darwin_rebuild_cmd
+    if "${DARWIN_REBUILD_CMD[@]}" build --flake "$NIX_DIR#$(get_config_name)"; then
         log_success "Configuration built successfully"
         # Clean up result symlink automatically
         if [[ -L "$NIX_DIR/result" ]]; then
@@ -148,7 +176,8 @@ build_config() {
 
 show_diff() {
     log_info "Showing configuration diff (dry-run)..."
-    darwin-rebuild build --flake "$NIX_DIR#macbook_setup" --dry-run
+    get_darwin_rebuild_cmd
+    "${DARWIN_REBUILD_CMD[@]}" build --flake "$NIX_DIR#$(get_config_name)" --dry-run
 }
 
 edit_config() {

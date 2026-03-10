@@ -1,107 +1,121 @@
-{ username, ... }: {
+{ username, isWorkMachine ? false, ... }:
+let
+  commonBrews = [
+    "coreutils"
+    "dotenvx/brew/dotenvx"
+    "libyaml"
+    "mas"
+    "mise"
+  ];
+
+  personalOnlyBrews = [
+    "gemini-cli"
+    "pandoc"
+  ];
+
+  commonCasks = [
+    "1password@beta"
+    "1password-cli"
+    "adguard"
+    "claude"
+    "claude-code"
+    "db-browser-for-sqlite"
+    "docker-desktop"
+    "git-credential-manager"
+    "google-chrome"
+    "iterm2"
+    "itermbrowserplugin"
+    "jordanbaird-ice@beta"
+    "logi-options+"
+    "logitune"
+    "notion"
+    "pearcleaner"
+    "rectangle"
+    "sequel-ace"
+    "slack"
+    "the-unarchiver"
+    "visual-studio-code"
+  ];
+
+  personalOnlyCasks = [
+    "affinity-designer"
+    "affinity-photo"
+    "affinity-publisher"
+    "battle-net"
+    "chatgpt"
+    "codex"
+    "daisydisk"
+    "discord"
+    "downie"
+    "ea"
+    "filebot"
+    "firefox"
+    "gas-mask"
+    "ghostty"
+    "handbrake-app"
+    "imageoptim"
+    "kindle-previewer"
+    "logseq"
+    "lulu"
+    "maccy"
+    "makemkv"
+    "mediainfo"
+    "megasync"
+    "minecraft"
+    "obsidian"
+    "plex"
+    "postman"
+    "proton-drive"
+    "proton-mail"
+    "proton-mail-bridge"
+    "proton-pass"
+    "protonvpn"
+    "proxyman"
+    "qlvideo"
+    "quicklook-json"
+    "renpy"
+    "scummvm-app"
+    "session"
+    "shottr"
+    "signal"
+    "steam"
+    "syncthing-app"
+    "tailscale-app"
+    "telegram"
+    "textual"
+    "torrent-file-editor"
+    "transmit"
+    "unraid-usb-creator-next"
+    "vlc"
+    "webpquicklook"
+    "whatsapp"
+    "zoom"
+  ];
+
+  commonMasApps = {
+    "1Password for Safari" = 1569813296;
+    "Tampermonkey" = 6738342400;
+  };
+
+  personalOnlyMasApps = {
+    "Brother iPrint&Scan" = 1193539993;
+    "Cookie-Editor" = 6446215341;
+    "Deliveries" = 290986013;
+    "JSON Peep for Safari" = 1458969831;
+    "MetaDoctor" = 988250390;
+    "Numbers" = 409203825;
+    "Pages" = 409201541;
+    "Proton Pass for Safari" = 6502835663;
+    "Tampermonkey Classic" = 1482490089;
+    "The Camelizer" = 1532579087;
+  };
+in
+{
   homebrew = {
     enable = true;
-    brews = [
-      "coreutils"
-      "dotenvx/brew/dotenvx"
-      "gemini-cli"
-      "libyaml"
-      "mas"
-      "mise"
-      "pandoc"
-    ];
-
-    casks = [
-      "1password@beta"
-      "1password-cli"
-      "adguard"
-      "affinity-designer"
-      "affinity-photo"
-      "affinity-publisher"
-      "battle-net"
-      "chatgpt"
-      "claude"
-      "claude-code"
-      "codex"
-      "daisydisk"
-      "db-browser-for-sqlite"
-      "discord"
-      "docker-desktop"
-      "downie"
-      "ea"
-      "filebot"
-      "firefox"
-      "gas-mask"
-      "ghostty"
-      "git-credential-manager"
-      "google-chrome"
-      "handbrake-app"
-      "imageoptim"
-      "iterm2"
-      "itermbrowserplugin"
-      "jordanbaird-ice@beta"
-      "kindle-previewer"
-      "logi-options+"
-      "logitune"
-      "logseq"
-      "lulu"
-      "maccy"
-      "makemkv"
-      "mediainfo"
-      "megasync"
-      "minecraft"
-      "notion"
-      "obsidian"
-      "pearcleaner"
-      "plex"
-      "postman"
-      "proton-drive"
-      "proton-mail"
-      "proton-mail-bridge"
-      "proton-pass"
-      "protonvpn"
-      "proxyman"
-      "qlvideo"
-      "quicklook-json"
-      "rectangle"
-      "renpy"
-      "scummvm-app"
-      "sequel-ace"
-      "session"
-      "shottr"
-      "signal"
-      "slack"
-      "steam"
-      "syncthing-app"
-      "tailscale-app"
-      "telegram"
-      "textual"
-      "the-unarchiver"
-      "torrent-file-editor"
-      "transmit"
-      "unraid-usb-creator-next"
-      "visual-studio-code"
-      "vlc"
-      "webpquicklook"
-      "whatsapp"
-      "zoom"
-    ];
-
-    masApps = {
-        "1Password for Safari" = 1569813296;
-        "Brother iPrint&Scan" = 1193539993;
-        "Cookie-Editor" = 6446215341;
-        "Deliveries" = 290986013;
-        "JSON Peep for Safari" = 1458969831;
-        "MetaDoctor" = 988250390;
-        "Numbers" = 409203825;
-        "Pages" = 409201541;
-        "Proton Pass for Safari" = 6502835663;
-        "Tampermonkey" = 6738342400;
-        "Tampermonkey Classic" = 1482490089;
-        "The Camelizer" = 1532579087;
-    };
-
+    brews = commonBrews ++ (if isWorkMachine then [] else personalOnlyBrews);
+    casks = commonCasks ++ (if isWorkMachine then [] else personalOnlyCasks);
+    masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
     onActivation = {
       cleanup = "zap";
       autoUpdate = true;

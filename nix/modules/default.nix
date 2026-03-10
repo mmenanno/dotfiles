@@ -38,4 +38,37 @@
     ./home/ai-globals.nix
     ./home/tmux.nix
   ];
+
+  # Work machine system modules (excludes personal apps/services)
+  workSystemModules = [
+    ./system/base-configuration.nix
+    ./system/packages.nix
+    ./system/homebrew.nix
+    ./system/system-defaults.nix
+    ./system/rectangle.nix
+    ./system/fonts.nix
+    ./system/app-aliases.nix
+  ];
+
+  # Work machine home modules
+  # NOTE: mcp-shared.nix must precede claude.nix, mise.nix
+  # NOTE: ai-globals.nix should be last
+  workHomeModules = [
+    ./home/gh.nix
+    ./home/git.nix
+    ./home/ruby.nix
+    ./home/ssh.nix
+    ./home/zsh.nix
+    ./home/starship.nix
+    ./home/home-manager-system-defaults.nix
+    ./home/vscode.nix
+    ./home/mise.nix
+    ./home/modern-cli-tools.nix
+    ./home/onepassword.nix
+    ./home/mcp-shared.nix
+    ./home/claude.nix
+    ./home/ide-extensions.nix
+    ./home/ai-globals.nix
+    ./home/tmux.nix
+  ];
 }

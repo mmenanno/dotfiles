@@ -1,16 +1,18 @@
 # macOS Dotfiles with Nix-Darwin
 
-> Declarative macOS system configuration using nix-darwin, managing applications, system settings, development tools, and more.
+> Declarative macOS system configuration using nix-darwin, managing applications, system settings, development tools, and more. Supports multiple machines (personal and work) from a single repo.
 
 ## 🚀 Quick Start
 
-### Method 1: Bootstrap Script (Recommended)
+### Personal Machine
+
+#### Method 1: Bootstrap Script (Recommended)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh | bash
 ```
 
-### Method 2: Manual Installation
+#### Method 2: Manual Installation
 
 ```bash
 # Install Nix
@@ -28,34 +30,62 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup
 ```
 
+### Work Machine
+
+```bash
+# Install Nix
+sh <(curl -L https://nixos.org/nix/install) --daemon
+
+# Clone dotfiles
+git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
+cd ~/dotfiles
+
+# Enable flakes
+mkdir -p ~/.config/nix
+echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+
+# Bootstrap (installs 1Password CLI and essentials)
+NIX_BOOTSTRAP_MODE=1 sudo darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup --impure
+
+# After bootstrap: sign into 1Password, add Work item to Nix vault with hostname field
+# Then run nx up — config is auto-detected via hostname
+nx up
+```
+
+The `nx` script auto-detects which configuration to use by comparing the local hostname against the value stored in 1Password (`Nix/Work/hostname`). No manual config name selection is needed after initial setup.
+
 ## 📦 What Gets Installed
 
-### Applications (85+ apps via Homebrew)
+### Both Machines (Shared)
 
-- **Development**: Cursor, VS Code, Docker, Postman, Proxyman
-- **Communication**: Discord, Slack, Signal, WhatsApp, Telegram
-- **Media**: VLC, HandBrake, Steam, Plex
-- **Productivity**: 1Password, Rectangle, Obsidian, Logseq
-- **System**: Tailscale, LuLu, Gas Mask, CleanMyMac
-
-### Development Environment
-
-- **Languages**: Python, Ruby, Node.js (via mise)
-- **Tools**: Git, GitHub CLI, SSH configuration
+- **Development**: VS Code, Docker, Git, GitHub CLI, Node.js
+- **Tools**: 1Password, Rectangle, iTerm2, Claude Code
 - **Shell**: Zsh with Starship prompt, zinit plugins
+- **System**: Nerd Fonts, macOS defaults, Dock configuration
+
+### Personal Machine (Additional)
+
+- **Apps**: Discord, Slack, Signal, Steam, Plex, VLC, Obsidian, and 60+ more
+- **Services**: Tailscale, PWA apps (Gmail, Google Calendar)
+- **AI Tools**: Codex, Gemini CLI, Claude Skills
+- **Dev**: Rust, Go, Python, Hugo, MariaDB, and more
+
+### Work Machine (Focused)
+
+- **Apps**: Chrome, Slack, Notion, Zoom, Sequel Ace
+- **Dev**: Ruby/Rails tooling, Docker, ejson
+- **Dock**: Chrome, Google Meet, 1Password, iTerm, VS Code, Slack
 
 ### System Configuration
 
-- **Dock**: Custom app layout and settings
+- **Dock**: Custom app layout per machine
 - **Trackpad**: Natural scrolling, force click settings
 - **Finder**: Show extensions, status bar configuration
 - **Fonts**: Nerd Fonts + custom fonts (PlayfairDisplay, etc.)
 
 ### App Configurations
 
-- **Cursor**: Complete settings and keybindings
 - **Rectangle**: Window management shortcuts
-- **Tailscale**: Auto-start and VPN settings
 - **Git**: Signing, credentials, aliases
 
 ## 🔧 Post-Installation
@@ -71,14 +101,19 @@ After running the bootstrap:
 
 ### Adding Applications
 
-Edit `nix/modules/system/homebrew.nix` to add new casks:
+Edit `nix/modules/system/homebrew.nix`:
 
-```nix
-casks = [
-  "your-new-app"
-  # ... existing apps
-];
-```
+- **Both machines**: Add to `commonCasks`
+- **Personal only**: Add to `personalOnlyCasks`
+
+Same pattern applies for `brews` and `masApps`.
+
+### Adding Packages
+
+Edit `nix/modules/system/packages.nix`:
+
+- **Both machines**: Add to `commonPackages`
+- **Personal only**: Add to `personalOnlyPackages`
 
 ### Modifying System Settings
 
@@ -87,6 +122,21 @@ Edit `nix/modules/system/system-defaults.nix` for system preferences.
 ### Updating Development Tools
 
 Edit `nix/modules/home/mise.nix` to manage language versions.
+
+### Machine-Specific Module Logic
+
+Modules receive `isWorkMachine ? false`. Use conditionals for machine-specific behavior:
+
+```nix
+{ isWorkMachine ? false, ... }:
+{
+  # Attribute sets: lib.optionalAttrs
+  settings = lib.optionalAttrs (!isWorkMachine) { ... };
+
+  # Lists: if/then/else or lib.optionals
+  items = commonItems ++ (if isWorkMachine then [] else personalItems);
+}
+```
 
 ## 📱 Available Commands
 
@@ -112,23 +162,27 @@ nx up      # or nixup
 
 ```text
 ├── nix/
-│   ├── flake.nix                      # Main flake configuration
-│   ├── home.nix                       # Home Manager imports
+│   ├── flake.nix                      # Entry point — darwinConfigurations for each machine
+│   ├── home.nix                       # Home Manager imports (selects modules by machine)
 │   ├── modules/
+│   │   ├── default.nix                # Module index (systemModules, homeModules, work variants)
+│   │   ├── lib.nix                    # Helpers: getEnvOrFallback, getPersonalEnvOrFallback
 │   │   ├── system/                    # nix-darwin (system-wide)
-│   │   │   ├── homebrew.nix           # Applications (casks)
-│   │   │   ├── system-defaults.nix    # macOS system settings
-│   │   │   ├── packages.nix           # System packages
+│   │   │   ├── homebrew.nix           # Applications (common + machine-specific)
+│   │   │   ├── system-defaults.nix    # macOS system settings + dock
+│   │   │   ├── packages.nix           # System packages (common + machine-specific)
 │   │   │   └── ...
 │   │   └── home/                      # Home Manager (user)
-│   │       ├── cursor.nix             # Cursor settings
 │   │       ├── git.nix                # Git configuration
+│   │       ├── ssh.nix                # SSH hosts and keys
+│   │       ├── mcp-shared.nix         # Shared MCP/identity config
+│   │       ├── claude.nix             # Claude Code settings
 │   │       ├── mise.nix               # Language/runtime manager
 │   │       └── ...
 │   └── files/                         # Static files (fonts, PWAs, etc.)
 ├── bin/                               # Utility scripts
 │   ├── nx                             # Main nix management script
-│   ├── nixup-with-secrets             # Bootstrap-aware rebuild
+│   ├── nixup-with-secrets             # Bootstrap-aware rebuild with 1Password
 │   ├── gbclean                        # Git branch cleanup
 │   └── ...                            # Other development tools
 ├── bootstrap.sh                       # Setup script
@@ -168,6 +222,7 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 - No secrets or credentials are stored in this repository
 - 1Password integration provides secure credential management
 - SSH keys and signing keys are managed externally
+- Machine detection uses hostname from 1Password (not hardcoded)
 
 ## ⚡ Performance
 
@@ -178,6 +233,7 @@ echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 ## 🌟 Features
 
 - ✅ **Declarative**: Everything defined in configuration files
+- ✅ **Multi-machine**: Single repo supports personal and work machines
 - ✅ **Reproducible**: Same setup on any macOS machine
 - ✅ **Rollback**: Previous configurations always available
 - ✅ **Modular**: Easy to enable/disable components
