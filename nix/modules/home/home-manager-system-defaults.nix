@@ -21,10 +21,6 @@ _:
         "NSStatusItem Visible Sound" = true;
         "NSStatusItem Visible WiFi" = true;
       };
-
-      Terminal = {
-        Font = "MesloLGSNerdFontMono-Regular 12";
-      };
     };
   };
 }
