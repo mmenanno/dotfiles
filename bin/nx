@@ -53,6 +53,7 @@ COMMANDS:
     check, c          Check flake for errors
     lint, l           Run code quality checks (statix, deadnix)
     update, u         Update flake dependencies
+    pull, p           Pull latest dotfiles from remote
     edit, e           Open dotfiles in VS Code
     status, s         Show git status of dotfiles
     build, b          Build configuration without applying
@@ -67,6 +68,7 @@ EXAMPLES:
     nix c             # Check flake
     nix l             # Run linting checks
     nix u             # Update dependencies
+    nix p             # Pull latest from remote
     nix e             # Edit in VS Code
     nix s             # Git status
     nix cl            # Clean old generations
@@ -178,6 +180,17 @@ show_diff() {
     log_info "Showing configuration diff (dry-run)..."
     get_darwin_rebuild_cmd
     "${DARWIN_REBUILD_CMD[@]}" build --flake "$NIX_DIR#$(get_config_name)" --dry-run
+}
+
+pull_dotfiles() {
+    log_info "Pulling latest dotfiles from remote..."
+    if git -C "$DOTFILES_DIR" pull; then
+        log_success "Dotfiles updated successfully"
+        return 0
+    else
+        log_error "Failed to pull dotfiles"
+        return 1
+    fi
 }
 
 edit_config() {
@@ -404,6 +417,9 @@ case "${1:-help}" in
         ;;
     update|u)
         update_flake
+        ;;
+    pull|p)
+        pull_dotfiles
         ;;
     edit|e)
         edit_config
