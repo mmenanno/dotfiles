@@ -148,7 +148,7 @@ update_flake() {
 
 apply_config() {
     log_info "Applying nix-darwin configuration..."
-    if nixup-with-secrets "$@"; then
+    if "$SCRIPT_DIR/nixup-with-secrets" "$@"; then
         # nixup-with-secrets already prints success message
         return 0
     else
