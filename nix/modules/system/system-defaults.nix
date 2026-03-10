@@ -1,4 +1,4 @@
-{ username, homeDirectory, lib, ... }:
+{ username, homeDirectory, lib, isWorkMachine ? false, ... }:
 # Scope: System (nix-darwin). Configures macOS defaults and Dock.
 # Behavior: Applies preferences via system.defaults and runs Dock setup during activation.
 let
@@ -30,6 +30,20 @@ let
     "${appsDir}/Visual Studio Code.app"
   ];
 
+  workDockApps = [
+    "${appsDir}/Google Chrome.app"
+    "${localAppsDir}/Gmail.app"
+    "${localAppsDir}/Google Meet.app"
+    "${localAppsDir}/Google Calendar.app"
+    "${appsDir}/Slack.app"
+    "${appsDir}/iTerm.app"
+    "${appsDir}/Visual Studio Code.app"
+    "${appsDir}/1Password.app"
+    "${appsDir}/Self Service.app"
+  ];
+
+  activeDockApps = if isWorkMachine then workDockApps else dockApps;
+
   # Optimized dock setup - batch operations for better performance
   dockPlistEntries = map (app: ''
     <dict>
@@ -45,7 +59,7 @@ let
       </dict>
       <key>tile-type</key>
       <string>file-tile</string>
-    </dict>'') dockApps;
+    </dict>'') activeDockApps;
 
   # Create complete dock plist in one operation
   dockSetupCommand = ''

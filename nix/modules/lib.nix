@@ -8,4 +8,14 @@
       if isBootstrap then bootstrapVal else
         let envValue = builtins.getEnv envVar;
         in if envValue != "" then envValue else fallbackVal;
+
+  # Like getEnvOrFallback, but returns "" on work machines (personal-only secrets)
+  getPersonalEnvOrFallback = isWorkMachine: envVar: bootstrapVal: fallbackVal:
+    if isWorkMachine then "" else
+      let
+        isBootstrap = builtins.getEnv "NIX_BOOTSTRAP_MODE" == "1";
+      in
+        if isBootstrap then bootstrapVal else
+          let envValue = builtins.getEnv envVar;
+          in if envValue != "" then envValue else fallbackVal;
 }

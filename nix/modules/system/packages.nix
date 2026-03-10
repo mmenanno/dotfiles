@@ -1,8 +1,77 @@
-{ pkgs, lib, ... }: {
+{ pkgs, lib, isWorkMachine ? false, ... }:
+let
+  commonPackages = with pkgs; [
+    docker
+    ejson
+    ejson2env
+    ffmpeg
+    findutils
+    fzf
+    gh
+    git
+    git-lfs
+    github-mcp-server
+    imagemagick
+    lazygit
+    markdownlint-cli
+    mkalias
+    nodejs
+    openssl
+    rclone
+    rsync
+    shellcheck
+    pay-respects
+    watchman
+    yarn
+    yq
+    zellij
+    zoxide
+  ];
+
+  personalOnlyPackages = with pkgs; [
+    audacity
+    automake
+    autoconf
+    cargo
+    exiftool
+    gmp
+    go
+    gum
+    hugo
+    hyperfine
+    jdk17
+    mariadb
+    mkvtoolnix
+    mediainfo
+    pipx
+    pnpm
+    pnpm_9
+    pylint
+    python3
+    readline
+    ruff
+    rustc
+    scc
+    speedtest-cli
+    terminal-notifier
+    typescript
+    undmg
+    wget
+    wireguard-go
+    wireguard-tools
+    x264
+    x265
+    texliveFull
+    unar
+    yazi
+    yt-dlp
+  ];
+in
+{
   nixpkgs.config.allowUnfree = true;
 
-  # Create symlinks for Audacity to find FFmpeg libraries
-  system.activationScripts.postActivation.text = lib.mkAfter ''
+  # Create symlinks for Audacity to find FFmpeg libraries (personal only)
+  system.activationScripts.postActivation.text = if isWorkMachine then "" else lib.mkAfter ''
     echo "Setting up Audacity FFmpeg symlinks..."
     mkdir -p /usr/local/lib/audacity
     for f in ${pkgs.ffmpeg_7.lib}/lib/*.dylib; do
@@ -11,67 +80,5 @@
     echo "Audacity FFmpeg symlinks created in /usr/local/lib/audacity/"
   '';
 
-  environment.systemPackages = with pkgs; [
-    audacity
-    automake
-    autoconf
-    cargo
-    docker
-    ejson
-    ejson2env
-    exiftool
-    ffmpeg
-    findutils
-    fzf
-    gh
-    git
-    git-lfs
-    github-mcp-server
-    gmp
-    go
-    gum
-    hugo
-    hyperfine
-    imagemagick
-    jdk17
-    lazygit
-    mariadb
-    markdownlint-cli
-    mkalias
-    mkvtoolnix
-    mediainfo
-    nodejs
-    openssl
-    pipx
-    pnpm
-    pnpm_9
-    pylint
-    python3
-    readline
-    rclone
-    rsync
-    ruff
-    rustc
-    scc
-    shellcheck
-    speedtest-cli
-    terminal-notifier
-    pay-respects
-    typescript
-    undmg
-    watchman
-    wget
-    wireguard-go
-    wireguard-tools
-    x264
-    x265
-    texliveFull
-    unar
-    yarn
-    yazi
-    yq
-    yt-dlp
-    zellij
-    zoxide
-  ];
+  environment.systemPackages = commonPackages ++ (if isWorkMachine then [] else personalOnlyPackages);
 }

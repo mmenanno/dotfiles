@@ -1,4 +1,4 @@
-{ config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, githubMcpToken, ... }:
+{ config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, githubMcpToken, isWorkMachine ? false, ... }:
 
 let
   # --- Development tool commands (npm, cargo, pytest, go, make) ---
@@ -296,7 +296,7 @@ in
         "lua-lsp@claude-plugins-official" = true;
         "Notion@claude-plugins-official" = true;
         # Local plugins
-        "gwa@local-plugins" = true;
+        "gwa@local-plugins" = !isWorkMachine;
       };
       permissions = {
         allow =

@@ -1,11 +1,12 @@
-{ pkgs, dotlib, ... }:
+{ pkgs, dotlib, isWorkMachine ? false, ... }:
 
 # Shared MCP (Model Context Protocol) server configurations and helpers
 # This module provides common MCP server definitions and utility functions
 # that can be reused across different AI coding assistants (Claude, Codex, etc.)
 
 let
-  inherit (dotlib) getEnvOrFallback;
+  inherit (dotlib) getEnvOrFallback getPersonalEnvOrFallback;
+  getPersonalEnv = getPersonalEnvOrFallback isWorkMachine;
 
   # Helper to create a wrapper package for Homebrew-installed binaries
   # This allows Nix to manage configuration while Homebrew manages updates
@@ -33,8 +34,8 @@ let
   # Shared identity values (centralized to avoid drift between git.nix and ssh.nix)
   sharedIdentity = {
     personalEmail = getEnvOrFallback "NIX_PERSONAL_EMAIL" "bootstrap@example.com" "placeholder@example.com";
-    privateEmail = getEnvOrFallback "NIX_PRIVATE_EMAIL" "bootstrap-alt@example.com" "placeholder-alt@example.com";
-    privateUser = getEnvOrFallback "NIX_PRIVATE_USER" "bootstrap-private-user" "placeholder-private-user";
+    privateEmail = getPersonalEnv "NIX_PRIVATE_EMAIL" "bootstrap-alt@example.com" "placeholder-alt@example.com";
+    privateUser = getPersonalEnv "NIX_PRIVATE_USER" "bootstrap-private-user" "placeholder-private-user";
   };
 
   # Common MCP server configurations

@@ -44,6 +44,7 @@
       commonConfig = {
         inherit username homeDirectory;
         inherit inputs self;
+        isWorkMachine = false;
       };
     in {
     darwinConfigurations."macbook_setup" = nix-darwin.lib.darwinSystem {
@@ -67,6 +68,27 @@
       specialArgs = commonConfig;
     };
 
+    darwinConfigurations."work_macbook" = nix-darwin.lib.darwinSystem {
+      modules =
+        moduleIndex.workSystemModules
+        ++ [
+          nix-homebrew.darwinModules.nix-homebrew
+          home-manager.darwinModules.home-manager
+          {
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              extraSpecialArgs = commonConfig // { dotlib = lib; isWorkMachine = true; };
+              users.${username} = {
+                imports = [ ./home.nix ];
+                home = homeManagerConfig;
+              };
+            };
+          }
+        ];
+      specialArgs = commonConfig // { isWorkMachine = true; };
+    };
+
     # Expose the package set under a standard flake output to avoid warnings.
     legacyPackages.aarch64-darwin = self.darwinConfigurations."macbook_setup".pkgs;
 
@@ -88,6 +110,15 @@
     homeConfigurations."default" = home-manager.lib.homeManagerConfiguration {
       pkgs = nixpkgs.legacyPackages.aarch64-darwin;
       extraSpecialArgs = commonConfig // { dotlib = lib; };
+      modules = [
+        ./home.nix
+        { home = homeManagerConfig; }
+      ];
+    };
+
+    homeConfigurations."work" = home-manager.lib.homeManagerConfiguration {
+      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      extraSpecialArgs = commonConfig // { dotlib = lib; isWorkMachine = true; };
       modules = [
         ./home.nix
         { home = homeManagerConfig; }
