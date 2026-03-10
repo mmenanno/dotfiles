@@ -18,7 +18,7 @@ get_darwin_rebuild_cmd() {
     if command -v darwin-rebuild >/dev/null 2>&1; then
         DARWIN_REBUILD_CMD=(darwin-rebuild)
     else
-        DARWIN_REBUILD_CMD=(nix --extra-experimental-features "nix-command flakes" run nix-darwin -- darwin-rebuild)
+        DARWIN_REBUILD_CMD=(nix --extra-experimental-features "nix-command flakes" run nix-darwin --)
     fi
 }
 
