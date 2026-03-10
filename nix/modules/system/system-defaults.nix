@@ -209,6 +209,7 @@ in
     TERMINAL_PLIST="${homeDirectory}/Library/Preferences/com.apple.Terminal.plist"
     if [ -f "$TERMINAL_PLIST" ]; then
       FONT_SCRIPT=$(mktemp)
+      chmod 644 "$FONT_SCRIPT"
       cat > "$FONT_SCRIPT" << 'FONTSCRIPT'
     use framework "Foundation"
     use framework "AppKit"
