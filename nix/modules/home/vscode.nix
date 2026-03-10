@@ -10,6 +10,10 @@ let
       url = "https://api.githubcopilot.com/mcp/";
       gallery = "https://api.mcp.github.com";
     };
+    "makenotion/notion-mcp-server" = {
+      type = "http";
+      url = "https://mcp.notion.com/sse";
+    };
   };
 
   # Pretty-printed VS Code MCP JSON generated at build time
