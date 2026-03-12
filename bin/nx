@@ -59,6 +59,7 @@ COMMANDS:
     build, b          Build configuration without applying
     diff, d           Show what would change (dry-run)
     clean, cl         Clean old generations
+    managed, m        Manage mutable config files (status/diff/accept)
     pr                Create PR from current changes (opts: --merge, --title, --body)
     help, h           Show this help message
 
@@ -72,6 +73,8 @@ EXAMPLES:
     nix e             # Edit in VS Code
     nix s             # Git status
     nix cl            # Clean old generations
+    nix m             # Show mutable file status
+    nix m d           # Diff mutable files against baseline
     nix pr            # Create PR from current changes
 
 EOF
@@ -403,6 +406,144 @@ create_pr() {
     return 0
 }
 
+# --- Mutable file management ---
+# Must match mutablePaths in nix/modules/home/mutable-files.nix
+# Ordered list of shorthand names (used for iteration order)
+MANAGED_NAMES=(claude vscode vsmcp)
+BASELINE_DIR="$HOME/.local/share/nix-managed-baselines"
+
+# Shorthand -> full path mapping
+declare -A MANAGED_FILES=(
+    [claude]=".claude/settings.json"
+    [vscode]="Library/Application Support/Code/User/settings.json"
+    [vsmcp]="Library/Application Support/Code/User/mcp.json"
+)
+
+# Resolve a filter to a list of shorthand names
+# Sets RESOLVED_NAMES array
+resolve_managed_filter() {
+    local filter="${*}"
+    RESOLVED_NAMES=()
+
+    if [ -z "$filter" ] || [ "$filter" = "all" ]; then
+        RESOLVED_NAMES=("${MANAGED_NAMES[@]}")
+        return 0
+    fi
+
+    # Check for exact shorthand match
+    if [[ -n "${MANAGED_FILES[$filter]+x}" ]]; then
+        RESOLVED_NAMES=("$filter")
+        return 0
+    fi
+
+    # Substring match against paths
+    for name in "${MANAGED_NAMES[@]}"; do
+        local path="${MANAGED_FILES[$name]}"
+        if [[ "$path" == *"$filter"* ]]; then
+            RESOLVED_NAMES+=("$name")
+        fi
+    done
+
+    if [ ${#RESOLVED_NAMES[@]} -eq 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+managed_show_names() {
+    echo -e "\n${DIM}Available names:${NC}"
+    for name in "${MANAGED_NAMES[@]}"; do
+        echo -e "  ${CYAN}${name}${NC}  ${DIM}${MANAGED_FILES[$name]}${NC}"
+    done
+    echo -e "  ${CYAN}all${NC}   ${DIM}all managed files${NC}"
+}
+
+managed_status() {
+    echo ""
+    echo -e "${BOLD}Mutable Config Files${NC}"
+    echo ""
+    for name in "${MANAGED_NAMES[@]}"; do
+        local path="${MANAGED_FILES[$name]}"
+        local target="$HOME/$path"
+        local baseline="$BASELINE_DIR/$path"
+        local icon color label
+
+        if [ -L "$target" ]; then
+            icon="~" color="$YELLOW" label="symlink (not yet converted)"
+        elif [ ! -f "$target" ]; then
+            icon="x" color="$RED" label="missing"
+        elif [ ! -f "$baseline" ]; then
+            icon="?" color="$YELLOW" label="no baseline"
+        elif cmp -s "$target" "$baseline"; then
+            icon="✓" color="$GREEN" label="clean"
+        else
+            icon="!" color="$YELLOW" label="modified by app"
+        fi
+
+        echo -e "  ${color}${icon}${NC}  ${CYAN}${name}${NC}  ${DIM}${path}${NC}  ${color}${label}${NC}"
+    done
+    echo ""
+}
+
+managed_diff() {
+    if ! resolve_managed_filter "$@"; then
+        log_error "No managed file matching: $*"
+        managed_show_names
+        return 1
+    fi
+
+    for name in "${RESOLVED_NAMES[@]}"; do
+        local path="${MANAGED_FILES[$name]}"
+        local target="$HOME/$path"
+        local baseline="$BASELINE_DIR/$path"
+
+        if [ ! -f "$baseline" ]; then
+            echo -e "  ${YELLOW}?${NC}  ${CYAN}${name}${NC}  ${YELLOW}no baseline${NC}"
+            continue
+        fi
+        if [ ! -f "$target" ]; then
+            echo -e "  ${RED}x${NC}  ${CYAN}${name}${NC}  ${RED}missing${NC}"
+            continue
+        fi
+
+        if cmp -s "$target" "$baseline"; then
+            echo -e "  ${GREEN}✓${NC}  ${CYAN}${name}${NC}  ${GREEN}no changes${NC}"
+        else
+            echo -e "  ${YELLOW}!${NC}  ${CYAN}${name}${NC}  ${YELLOW}modified by app${NC}"
+            code --diff "$baseline" "$target"
+        fi
+    done
+}
+
+managed_accept() {
+    if [ $# -eq 0 ]; then
+        log_error "Usage: nx managed accept <name|all>"
+        managed_show_names
+        return 1
+    fi
+
+    if ! resolve_managed_filter "$@"; then
+        log_error "No managed file matching: $*"
+        managed_show_names
+        return 1
+    fi
+
+    for name in "${RESOLVED_NAMES[@]}"; do
+        local path="${MANAGED_FILES[$name]}"
+        local target="$HOME/$path"
+        local baseline="$BASELINE_DIR/$path"
+
+        if [ ! -f "$baseline" ]; then
+            log_error "No baseline for $name: $path"
+            continue
+        fi
+
+        cp "$baseline" "$target"
+        chmod 644 "$target"
+        log_success "Accepted Nix version for: ${name} ($path)"
+    done
+}
+
 # Main command handling
 case "${1:-help}" in
     up|apply|a)
@@ -435,6 +576,22 @@ case "${1:-help}" in
         ;;
     clean|cl)
         clean_generations
+        ;;
+    managed|m)
+        shift || true
+        case "${1:-}" in
+            diff|d)
+                shift || true
+                managed_diff "$@"
+                ;;
+            accept|a)
+                shift || true
+                managed_accept "$@"
+                ;;
+            *)
+                managed_status
+                ;;
+        esac
         ;;
     pr)
         shift || true

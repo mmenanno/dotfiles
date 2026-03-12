@@ -35,6 +35,7 @@
     ./home/codex.nix
     ./home/gemini.nix
     ./home/ide-extensions.nix
+    ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix
   ];
@@ -68,6 +69,7 @@
     ./home/mcp-shared.nix
     ./home/claude.nix
     ./home/ide-extensions.nix
+    ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix
   ];
