@@ -37,8 +37,10 @@ _nx() {
     managed_subcommands=(
         'diff:Show diff of changed files in VS Code'
         'd:Diff (alias)'
-        'accept:Accept Nix version, discarding app changes'
-        'a:Accept (alias)'
+        'revert:Revert to Nix version, discarding app changes'
+        'r:Revert (alias)'
+        'apply:Apply app changes back into Nix module via Claude'
+        'a:Apply (alias)'
     )
 
     local -a managed_names
@@ -73,7 +75,7 @@ _nx() {
         case "$words[2]" in
             managed|m)
                 case "$words[3]" in
-                    diff|d|accept|a)
+                    diff|d|revert|r|apply|a)
                         _describe 'file' managed_names
                         ;;
                 esac

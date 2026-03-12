@@ -78,7 +78,7 @@ in
       echo "  Both the application and Nix config have changed."
       echo "  Keeping application's version."
       echo "  Run 'nx managed diff' to see differences."
-      echo "  Run 'nx managed accept $rel_path' to accept the Nix version."
+      echo "  Run 'nx managed revert $rel_path' to revert to the Nix version."
     }
 
     ${deployCommands}

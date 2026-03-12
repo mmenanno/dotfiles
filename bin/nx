@@ -59,7 +59,7 @@ COMMANDS:
     build, b          Build configuration without applying
     diff, d           Show what would change (dry-run)
     clean, cl         Clean old generations
-    managed, m        Manage mutable config files (status/diff/accept)
+    managed, m        Manage mutable config files (status/diff/revert/apply)
     pr                Create PR from current changes (opts: --merge, --title, --body)
     help, h           Show this help message
 
@@ -75,6 +75,8 @@ EXAMPLES:
     nix cl            # Clean old generations
     nix m             # Show mutable file status
     nix m d           # Diff mutable files against baseline
+    nix m r claude    # Revert managed file to Nix version
+    nix m a claude    # Apply app changes back into Nix module
     nix pr            # Create PR from current changes
 
 EOF
@@ -419,6 +421,13 @@ declare -A MANAGED_FILES=(
     [vsmcp]="Library/Application Support/Code/User/mcp.json"
 )
 
+# Shorthand -> Nix source file mapping
+declare -A MANAGED_NIX_SOURCES=(
+    [claude]="nix/modules/home/claude.nix"
+    [vscode]="nix/modules/home/vscode.nix"
+    [vsmcp]="nix/modules/home/vscode.nix"
+)
+
 # Resolve a filter to a list of shorthand names
 # Sets RESOLVED_NAMES array
 resolve_managed_filter() {
@@ -515,9 +524,9 @@ managed_diff() {
     done
 }
 
-managed_accept() {
+managed_revert() {
     if [ $# -eq 0 ]; then
-        log_error "Usage: nx managed accept <name|all>"
+        log_error "Usage: nx managed revert <name|all>"
         managed_show_names
         return 1
     fi
@@ -540,8 +549,81 @@ managed_accept() {
 
         cp "$baseline" "$target"
         chmod 644 "$target"
-        log_success "Accepted Nix version for: ${name} ($path)"
+        log_success "Reverted to Nix version for: ${name} ($path)"
     done
+}
+
+managed_apply() {
+    if [ $# -eq 0 ]; then
+        log_error "Usage: nx managed apply <name|all>"
+        managed_show_names
+        return 1
+    fi
+
+    if ! command -v claude >/dev/null 2>&1; then
+        log_error "claude CLI is required but not found in PATH"
+        return 1
+    fi
+
+    if ! resolve_managed_filter "$@"; then
+        log_error "No managed file matching: $*"
+        managed_show_names
+        return 1
+    fi
+
+    local applied=0
+    for name in "${RESOLVED_NAMES[@]}"; do
+        local path="${MANAGED_FILES[$name]}"
+        local target="$HOME/$path"
+        local baseline="$BASELINE_DIR/$path"
+        local nix_source="${MANAGED_NIX_SOURCES[$name]}"
+
+        if [ ! -f "$baseline" ]; then
+            log_warning "No baseline for $name — skipping"
+            continue
+        fi
+        if [ ! -f "$target" ]; then
+            log_warning "Target missing for $name — skipping"
+            continue
+        fi
+        if cmp -s "$target" "$baseline"; then
+            log_info "$name is clean — nothing to apply"
+            continue
+        fi
+
+        log_info "Applying changes from $name into $nix_source..."
+
+        local file_diff
+        file_diff=$(diff -u "$baseline" "$target" || true)
+
+        local prompt
+        prompt="$(cat <<PROMPT
+The managed config file '$path' has been modified by the application at runtime.
+Here is the diff between the Nix baseline and the current runtime version:
+
+\`\`\`diff
+$file_diff
+\`\`\`
+
+The Nix module that generates this file is at: $nix_source
+
+Please update ONLY the relevant section in the Nix module to incorporate these changes.
+Preserve the existing code style and formatting. Do not modify any other parts of the file.
+PROMPT
+)"
+
+        if claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR" "$prompt"; then
+            log_success "Applied changes for: ${name} ($path)"
+            applied=$((applied + 1))
+        else
+            log_error "Failed to apply changes for: ${name}"
+        fi
+    done
+
+    if [ $applied -gt 0 ]; then
+        echo ""
+        log_info "Run 'nx check' to validate the updated flake."
+    fi
 }
 
 # Main command handling
@@ -584,9 +666,13 @@ case "${1:-help}" in
                 shift || true
                 managed_diff "$@"
                 ;;
-            accept|a)
+            revert|r)
                 shift || true
-                managed_accept "$@"
+                managed_revert "$@"
+                ;;
+            apply|a)
+                shift || true
+                managed_apply "$@"
                 ;;
             *)
                 managed_status
