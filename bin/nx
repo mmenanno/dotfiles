@@ -525,13 +525,7 @@ managed_diff() {
 }
 
 managed_revert() {
-    if [ $# -eq 0 ]; then
-        log_error "Usage: nx managed revert <name|all>"
-        managed_show_names
-        return 1
-    fi
-
-    if ! resolve_managed_filter "$@"; then
+    if ! resolve_managed_filter "${@:-all}"; then
         log_error "No managed file matching: $*"
         managed_show_names
         return 1
@@ -554,18 +548,12 @@ managed_revert() {
 }
 
 managed_apply() {
-    if [ $# -eq 0 ]; then
-        log_error "Usage: nx managed apply <name|all>"
-        managed_show_names
-        return 1
-    fi
-
     if ! command -v claude >/dev/null 2>&1; then
         log_error "claude CLI is required but not found in PATH"
         return 1
     fi
 
-    if ! resolve_managed_filter "$@"; then
+    if ! resolve_managed_filter "${@:-all}"; then
         log_error "No managed file matching: $*"
         managed_show_names
         return 1
@@ -597,22 +585,19 @@ managed_apply() {
         file_diff=$(diff -u "$baseline" "$target" || true)
 
         local prompt
-        prompt="$(cat <<PROMPT
-The managed config file '$path' has been modified by the application at runtime.
+        prompt="The managed config file '${path}' has been modified by the application at runtime.
 Here is the diff between the Nix baseline and the current runtime version:
 
 \`\`\`diff
-$file_diff
+${file_diff}
 \`\`\`
 
-The Nix module that generates this file is at: $nix_source
+The Nix module that generates this file is at: ${nix_source}
 
 Please update ONLY the relevant section in the Nix module to incorporate these changes.
-Preserve the existing code style and formatting. Do not modify any other parts of the file.
-PROMPT
-)"
+Preserve the existing code style and formatting. Do not modify any other parts of the file."
 
-        if claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR" "$prompt"; then
+        if echo "$prompt" | claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR"; then
             log_success "Applied changes for: ${name} ($path)"
             applied=$((applied + 1))
         else
