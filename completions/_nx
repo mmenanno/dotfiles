@@ -1,0 +1,86 @@
+#compdef nx
+
+# Zsh completion for nx (nix dotfiles management script)
+
+_nx() {
+    local -a commands
+    commands=(
+        'up:Apply configuration (darwin-rebuild switch)'
+        'apply:Apply configuration (alias)'
+        'a:Apply configuration (alias)'
+        'check:Check flake for errors'
+        'c:Check flake (alias)'
+        'lint:Run code quality checks (statix, deadnix)'
+        'l:Lint (alias)'
+        'update:Update flake dependencies'
+        'u:Update (alias)'
+        'pull:Pull latest dotfiles from remote'
+        'p:Pull (alias)'
+        'edit:Open dotfiles in VS Code'
+        'e:Edit (alias)'
+        'status:Show git status of dotfiles'
+        's:Status (alias)'
+        'build:Build configuration without applying'
+        'b:Build (alias)'
+        'diff:Show what would change (dry-run)'
+        'd:Diff (alias)'
+        'clean:Clean old generations'
+        'cl:Clean (alias)'
+        'managed:Manage mutable config files'
+        'm:Managed (alias)'
+        'pr:Create PR from current changes'
+        'help:Show help message'
+        'h:Help (alias)'
+    )
+
+    local -a managed_subcommands
+    managed_subcommands=(
+        'diff:Show diff of changed files in VS Code'
+        'd:Diff (alias)'
+        'accept:Accept Nix version, discarding app changes'
+        'a:Accept (alias)'
+    )
+
+    local -a managed_names
+    managed_names=(
+        'claude:.claude/settings.json'
+        'vscode:Library/Application Support/Code/User/settings.json'
+        'vsmcp:Library/Application Support/Code/User/mcp.json'
+        'all:All managed files'
+    )
+
+    if (( CURRENT == 2 )); then
+        _describe 'command' commands
+    elif (( CURRENT == 3 )); then
+        case "$words[2]" in
+            managed|m)
+                # With no subcommand, show status + subcommands + file names
+                _describe 'subcommand' managed_subcommands -- managed_names
+                ;;
+            up|apply|a)
+                _values 'option' \
+                    '-hm[Rebuild only Home Manager (faster)]' \
+                    '--home-manager[Rebuild only Home Manager (faster)]'
+                ;;
+            pr)
+                _values 'option' \
+                    '--merge[Enable auto-merge]' \
+                    '--title[PR title]' \
+                    '--body[PR body]'
+                ;;
+        esac
+    elif (( CURRENT == 4 )); then
+        case "$words[2]" in
+            managed|m)
+                case "$words[3]" in
+                    diff|d|accept|a)
+                        _describe 'file' managed_names
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+}
+
+_nx "$@"
+compdef _nx nx

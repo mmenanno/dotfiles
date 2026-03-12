@@ -12,6 +12,7 @@ nx up -hm   # Apply Home Manager only (faster for config changes)
 nx lint     # Run statix + deadnix code quality checks
 nx build    # Build without applying
 nx clean    # Clean old generations
+nx managed  # Show mutable config file status (alias: nx m)
 ```
 
 ## Multi-Machine Support
@@ -40,12 +41,21 @@ dotfiles/
 └── bin/                       # Shell scripts (nx, gbclean, etc.)
 ```
 
+## Mutable Config Files
+
+`mutable-files.nix` deploys writable copies instead of read-only HM symlinks for files that apps need to modify (VS Code settings, Claude settings). Uses `home.file.*.enable = lib.mkForce false` to suppress symlinks while keeping `.source` evaluable, then an activation script copies with conflict detection. Baselines stored at `~/.local/share/nix-managed-baselines/`.
+
+- `nx m` — status, `nx m d <name>` — diff in VS Code, `nx m a <name>` — accept Nix version
+- Shorthands: `claude`, `vscode`, `vsmcp`, `all`
+- Zsh completions in `completions/_nx`
+
 ## Key Modules
 
 - `ai-globals.nix` - Generates global CLAUDE.md, AGENTS.md, GEMINI.md
 - `claude.nix` - Claude Code settings and MCP servers
 - `claude-skills.nix` - Skill imports from repos (ralph-claude-code)
 - `zsh.nix` - Shell config with zinit plugin management
+- `mutable-files.nix` - Writable copies of app config files with conflict detection
 - `modern-cli-tools.nix` - bat, eza, ripgrep, fd, atuin, etc.
 
 ## Adding a New Module
@@ -76,4 +86,6 @@ darwin-rebuild --rollback                 # Undo last change
 - **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`
 - **Module pattern**: Import in `modules/default.nix`, use `{ config, pkgs, ... }:` signature
 - **1Password in scripts**: Use `op plugin run -- <cmd>` in subshells (aliases don't inherit)
+- **New Nix files must be `git add`ed before eval**: Nix flakes only see git-tracked files — `nix eval` will error on untracked `.nix` files
+- **delta is the git pager**: `git diff --no-index` pipes through delta; use `git -c core.pager= diff` to bypass
 - **deadnix warnings**: Remove unused `let` bindings - deadnix (part of `nx lint`) fails on dead code
