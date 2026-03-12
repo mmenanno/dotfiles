@@ -45,7 +45,7 @@ dotfiles/
 
 `mutable-files.nix` deploys writable copies instead of read-only HM symlinks for files that apps need to modify (VS Code settings, Claude settings). Uses `home.file.*.enable = lib.mkForce false` to suppress symlinks while keeping `.source` evaluable, then an activation script copies with conflict detection. Baselines stored at `~/.local/share/nix-managed-baselines/`.
 
-- `nx m` — status, `nx m d <name>` — diff in VS Code, `nx m a <name>` — accept Nix version
+- `nx m` — status, `nx m d <name>` — diff in VS Code, `nx m r <name>` — revert to Nix version, `nx m a <name>` — apply app changes into Nix module
 - Shorthands: `claude`, `vscode`, `vsmcp`, `all`
 - Zsh completions in `completions/_nx`
 
