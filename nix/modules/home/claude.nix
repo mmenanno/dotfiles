@@ -295,6 +295,9 @@ in
         "kotlin-lsp@claude-plugins-official" = true;
         "lua-lsp@claude-plugins-official" = true;
         "Notion@claude-plugins-official" = true;
+        "ruby-lsp@claude-plugins-official" = true;
+        "slack@claude-plugins-official" = isWorkMachine;
+
         # Local plugins
         "gwa@local-plugins" = !isWorkMachine;
       };
