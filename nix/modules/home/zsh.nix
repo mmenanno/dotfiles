@@ -60,10 +60,14 @@ in
       # Add custom completions to fpath
       fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
 
-      # Initialize zsh completion system
+      # Initialize zsh completion system (regenerate dump daily, use cache otherwise)
       autoload -Uz compinit
       mkdir -p "$HOME/.cache/zsh"
-      compinit -C -d "$HOME/.cache/zsh/compdump"
+      if [[ -f "$HOME/.cache/zsh/compdump" && $(find "$HOME/.cache/zsh/compdump" -mtime -1 2>/dev/null) ]]; then
+        compinit -C -d "$HOME/.cache/zsh/compdump"
+      else
+        compinit -d "$HOME/.cache/zsh/compdump"
+      fi
 
       # Source dv script to enable 'dv cd' functionality
       [[ -f ${config.home.homeDirectory}/dotfiles/bin/dv ]] && source ${config.home.homeDirectory}/dotfiles/bin/dv
