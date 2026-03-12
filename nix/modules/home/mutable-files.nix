@@ -37,40 +37,37 @@ in
       # Case 1: Target is a symlink (first-run conversion from HM)
       if [ -L "$target" ]; then
         rm "$target"
-        cp "$store_path" "$target"
-        chmod 644 "$target"
-        cp "$store_path" "$baseline"
+        install -m 644 "$store_path" "$target"
+        install -m 644 "$store_path" "$baseline"
         echo "mutable-files: converted symlink to writable copy: $rel_path"
         return
       fi
 
       # Case 2: Target doesn't exist
       if [ ! -f "$target" ]; then
-        cp "$store_path" "$target"
-        chmod 644 "$target"
-        cp "$store_path" "$baseline"
+        install -m 644 "$store_path" "$target"
+        install -m 644 "$store_path" "$baseline"
         echo "mutable-files: created writable copy: $rel_path"
         return
       fi
 
       # Case 3: Target content matches Nix content — no conflict, update baseline
       if cmp -s "$target" "$store_path"; then
-        cp "$store_path" "$baseline"
+        install -m 644 "$store_path" "$baseline"
         return
       fi
 
       # Case 4: Target matches baseline — app didn't change, safe to overwrite
       if [ -f "$baseline" ] && cmp -s "$target" "$baseline"; then
-        cp "$store_path" "$target"
-        chmod 644 "$target"
-        cp "$store_path" "$baseline"
+        install -m 644 "$store_path" "$target"
+        install -m 644 "$store_path" "$baseline"
         echo "mutable-files: updated writable copy: $rel_path"
         return
       fi
 
       # Case 5: No baseline exists — first run with existing file
       if [ ! -f "$baseline" ]; then
-        cp "$store_path" "$baseline"
+        install -m 644 "$store_path" "$baseline"
         echo "mutable-files WARNING: existing file differs from Nix config: $rel_path"
         echo "  Keeping existing file. Run 'nx managed diff' to compare."
         return
