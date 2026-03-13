@@ -595,7 +595,8 @@ ${file_diff}
 The Nix module that generates this file is at: ${nix_source}
 
 Please update ONLY the relevant section in the Nix module to incorporate these changes.
-Preserve the existing code style and formatting. Do not modify any other parts of the file."
+Preserve the existing code style and formatting. Do not modify any other parts of the file.
+You may reorder sections to match the preferred order that the application is ordering them in."
 
         if echo "$prompt" | claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR"; then
             log_success "Applied changes for: ${name} ($path)"

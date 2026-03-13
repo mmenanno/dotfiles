@@ -261,46 +261,9 @@ in
     };
 
     settings = {
-      statusLine = {
-        type = "command";
-        command = "${hooksDir}/statusline.sh";
-      };
-      includeCoAuthoredBy = false;
-      theme = "dark";
-      autoUpdates = true;
-      teammateMode = "tmux";
-      verbose = false;
       respectGitignore = false;
       cleanupPeriodDays = 20;
-      enabledPlugins = {
-        "claude-code-setup@claude-plugins-official" = true;
-        "claude-md-management@claude-plugins-official" = true;
-        "code-review@claude-plugins-official" = true;
-        "code-simplifier@claude-plugins-official" = true;
-        "commit-commands@claude-plugins-official" = true;
-        "frontend-design@claude-plugins-official" = true;
-        "github@claude-plugins-official" = true;
-        "playwright@claude-plugins-official" = true;
-        "plugin-dev@claude-plugins-official" = false;
-        "pr-review-toolkit@claude-plugins-official" = true;
-        "ralph-loop@claude-plugins-official" = true;
-        "superpowers@claude-plugins-official" = true;
-        "gopls-lsp@claude-plugins-official" = true;
-        "csharp-lsp@claude-plugins-official" = true;
-        "rust-analyzer-lsp@claude-plugins-official" = true;
-        "php-lsp@claude-plugins-official" = true;
-        "jdtls-lsp@claude-plugins-official" = true;
-        "clangd-lsp@claude-plugins-official" = true;
-        "swift-lsp@claude-plugins-official" = true;
-        "kotlin-lsp@claude-plugins-official" = true;
-        "lua-lsp@claude-plugins-official" = true;
-        "Notion@claude-plugins-official" = true;
-        "ruby-lsp@claude-plugins-official" = true;
-        "slack@claude-plugins-official" = isWorkMachine;
-
-        # Local plugins
-        "gwa@local-plugins" = !isWorkMachine;
-      };
+      includeCoAuthoredBy = false;
       permissions = {
         allow =
           (toBashPermissions devTools)
@@ -423,6 +386,7 @@ in
             "mcp__plugin_playwright_playwright__browser_handle_dialog"
             "mcp__plugin_playwright_playwright__browser_install"
           ];
+        deny = [];
         ask = toBashPermissions [
           "git push:*"
           "git rebase:*"
@@ -450,10 +414,47 @@ in
           "mcp__plugin_playwright_playwright__browser_file_upload"
           "mcp__plugin_playwright_playwright__browser_drag"
         ];
-        deny = [];
-        additionalDirectories = [];
         defaultMode = "acceptEdits";
+        additionalDirectories = [];
       };
+      statusLine = {
+        type = "command";
+        command = "${hooksDir}/statusline.sh";
+      };
+      enabledPlugins = {
+        "claude-code-setup@claude-plugins-official" = true;
+        "claude-md-management@claude-plugins-official" = true;
+        "code-review@claude-plugins-official" = true;
+        "code-simplifier@claude-plugins-official" = true;
+        "commit-commands@claude-plugins-official" = true;
+        "frontend-design@claude-plugins-official" = true;
+        "github@claude-plugins-official" = true;
+        "playwright@claude-plugins-official" = true;
+        "plugin-dev@claude-plugins-official" = false;
+        "pr-review-toolkit@claude-plugins-official" = true;
+        "ralph-loop@claude-plugins-official" = true;
+        "superpowers@claude-plugins-official" = true;
+        "gopls-lsp@claude-plugins-official" = true;
+        "csharp-lsp@claude-plugins-official" = true;
+        "rust-analyzer-lsp@claude-plugins-official" = true;
+        "php-lsp@claude-plugins-official" = true;
+        "jdtls-lsp@claude-plugins-official" = true;
+        "clangd-lsp@claude-plugins-official" = true;
+        "swift-lsp@claude-plugins-official" = true;
+        "kotlin-lsp@claude-plugins-official" = true;
+        "lua-lsp@claude-plugins-official" = true;
+        "Notion@claude-plugins-official" = true;
+        "ruby-lsp@claude-plugins-official" = true;
+        "slack@claude-plugins-official" = isWorkMachine;
+
+        # Local plugins
+        "gwa@local-plugins" = !isWorkMachine;
+      };
+      autoUpdates = true;
+      teammateMode = "tmux";
+      theme = "dark";
+      verbose = false;
+      model = "opus";
     };
 
     # Use shared MCP servers but exclude GitHub (Claude Code has official GitHub plugin)

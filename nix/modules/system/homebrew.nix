@@ -8,6 +8,13 @@ let
     "mise"
   ];
 
+  workOnlyBrews = [
+    "memcached"
+    "mysql@8.0"
+    "puma-dev"
+    "redis"
+  ];
+
   personalOnlyBrews = [
     "gemini-cli"
     "pandoc"
@@ -39,6 +46,7 @@ let
   ];
 
   workOnlyCasks = [
+    "gather"
     "meetingbar"
   ];
 
@@ -117,7 +125,7 @@ in
 {
   homebrew = {
     enable = true;
-    brews = commonBrews ++ (if isWorkMachine then [] else personalOnlyBrews);
+    brews = commonBrews ++ (if isWorkMachine then workOnlyBrews else personalOnlyBrews);
     casks = commonCasks ++ (if isWorkMachine then workOnlyCasks else personalOnlyCasks);
     masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
     onActivation = {
