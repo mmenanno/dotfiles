@@ -38,6 +38,7 @@ in
       ".bundle/config".text = ''
         ---
         BUNDLE_IGNORE_FUNDING_REQUESTS: "true"
+        BUNDLE_BUILD__MYSQL2: "--with-opt-dir=${pkgs.openssl}/lib"
       '';
     };
   };

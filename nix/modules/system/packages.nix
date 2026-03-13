@@ -17,6 +17,7 @@ let
     mkalias
     nodejs
     openssl
+    pnpm
     rclone
     rsync
     shellcheck
@@ -26,6 +27,16 @@ let
     yq
     zellij
     zoxide
+  ];
+
+  workOnlyPackages = with pkgs; [
+    awscli2
+    graphviz
+    librsvg
+    pre-commit
+    shared-mime-info
+    xz
+    zstd
   ];
 
   personalOnlyPackages = with pkgs; [
@@ -44,7 +55,6 @@ let
     mkvtoolnix
     mediainfo
     pipx
-    pnpm
     pnpm_9
     pylint
     python3
@@ -80,5 +90,5 @@ in
     echo "Audacity FFmpeg symlinks created in /usr/local/lib/audacity/"
   '';
 
-  environment.systemPackages = commonPackages ++ (if isWorkMachine then [] else personalOnlyPackages);
+  environment.systemPackages = commonPackages ++ (if isWorkMachine then workOnlyPackages else personalOnlyPackages);
 }
