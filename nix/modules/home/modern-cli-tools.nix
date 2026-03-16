@@ -23,6 +23,10 @@
     eza = {
       enable = true;
       git = true;
+      icons = "auto";
+      extraOptions = [
+        "--group-directories-first"
+      ];
     };
 
     # ripgrep - fast grep alternative
