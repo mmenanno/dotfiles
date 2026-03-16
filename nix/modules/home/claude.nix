@@ -446,6 +446,7 @@ in
         "Notion@claude-plugins-official" = true;
         "ruby-lsp@claude-plugins-official" = true;
         "slack@claude-plugins-official" = isWorkMachine;
+        "atlassian@claude-plugins-official" = isWorkMachine;
 
         # Local plugins
         "gwa@local-plugins" = !isWorkMachine;
