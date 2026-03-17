@@ -31,7 +31,7 @@ typeset -gr TEMP_CLEANUP_DAYS=7
 
 # Version and platform regex patterns
 # Numeric versions: v1.0, 0.36.dv-mac, 1.2.3a-pc
-typeset -gr VERSION_PATTERN='v?[0-9]+\.[0-9]+(\.[0-9]+)?'
+typeset -gr VERSION_PATTERN='[vr]?[0-9]+\.[0-9]+(\.[0-9]+)?'
 # Episodic versions: S1-C1-E01-A (Season-Chapter-Episode-Version)
 typeset -gr EPISODIC_PATTERN='S[0-9]+-C[0-9]+-E[0-9]+-[A-Z]+'
 typeset -gr PLATFORM_SUFFIX_PATTERN='(\.(dv-mac|dv-win|dv-pc)|(-pc|-mac|-win|-linux))?'
@@ -242,7 +242,7 @@ extract_version() {
     # The regex matches version numbers with optional 'v' prefix, patch versions, letter suffixes,
     # and platform-specific extensions (common in adult game distribution)
     # We wrap the version pattern in a capture group to extract just the numeric version
-    if [[ "$basename" =~ -v?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN} ]]; then
+    if [[ "$basename" =~ -[vr]?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN} ]]; then
         echo "${match[1]}"
         return 0
     fi
