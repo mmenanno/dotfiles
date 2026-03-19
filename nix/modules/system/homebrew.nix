@@ -9,8 +9,11 @@ let
   ];
 
   workOnlyBrews = [
+    "just"
     "memcached"
     "mysql@8.0"
+    "pre-commit"
+    "pyenv"
     "puma-dev"
     "redis"
   ];

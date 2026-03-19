@@ -69,6 +69,7 @@
     ./home/mcp-shared.nix
     ./home/claude.nix
     ./home/ide-extensions.nix
+    ./home/npmrc.nix
     ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix
