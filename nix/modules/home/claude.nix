@@ -455,7 +455,7 @@ in
       teammateMode = "tmux";
       theme = "dark";
       verbose = false;
-      model = "opus";
+      model = "opus[1m]";
     };
 
     # Use shared MCP servers but exclude GitHub (Claude Code has official GitHub plugin)

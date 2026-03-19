@@ -4,6 +4,6 @@ let
 in
 {
   home.file.".npmrc".text = ''
-    //packages.sierra.ai/:_authToken=${sierraToken}
+    //packages.sierra.ai/:_authToken=user:${sierraToken}
   '';
 }
