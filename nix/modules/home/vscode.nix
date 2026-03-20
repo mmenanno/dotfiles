@@ -135,7 +135,8 @@ in
           "editor.defaultFormatter": "redhat.vscode-yaml"
         },
         "claudeCode.preferredLocation": "panel",
-        "chat.mcp.gallery.enabled": true
+        "chat.mcp.gallery.enabled": true,
+        "python.analysis.typeCheckingMode": "standard"
       }
     '';
 
