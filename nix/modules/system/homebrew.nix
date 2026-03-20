@@ -12,6 +12,7 @@ let
     "just"
     "memcached"
     "mysql@8.0"
+    "pipenv"
     "pre-commit"
     "pyenv"
     "puma-dev"
