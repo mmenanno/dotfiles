@@ -181,6 +181,25 @@ in
       Other available tools:
       - `atuin` - Shell history search (Ctrl+R)
       - `direnv` - Auto-loads `.envrc` files
+      - `delta` - Git pager with syntax highlighting (auto-used by git diff/log)
+      - `mise` - Development tool version manager (replaces asdf/nvm/rbenv)
+
+      ## MCP Tool Preferences
+
+      When an MCP tool exists for an operation, prefer it over the CLI equivalent. MCP tools provide structured output, better error handling, and avoid shell quoting issues.
+
+      ### GitHub: MCP plugin over `gh` CLI
+
+      Use the GitHub MCP plugin (`mcp__plugin_github_github__*`) for all GitHub operations: reading issues/PRs/commits, creating branches, searching code, etc. Fall back to `gh` CLI only when the MCP plugin lacks the needed capability (e.g., `gh run` for workflow runs, `gh api` for arbitrary API calls, `gh pr checkout` for local checkout).
+
+      ### Browser: Playwright MCP vs Claude In Chrome
+
+      - **Playwright MCP** (`mcp__plugin_playwright_playwright__*`): Use for testing application features — dev servers, staging environments, localhost. Opens its own browser session.
+      - **Claude In Chrome**: Use when you need an authenticated user session that already exists in the user's browser — work apps (Jira, Slack), personal accounts (Gmail, GitHub UI, banking), or any site requiring existing cookies/login.
+
+      ### Notion: MCP plugin over web
+
+      Use the Notion MCP plugin (`mcp__claude_ai_Notion__*`) for searching, reading, creating, and updating Notion pages. Do not scrape Notion via browser.
 
       ## 1Password CLI
 
