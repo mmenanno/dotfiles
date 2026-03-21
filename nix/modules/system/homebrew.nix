@@ -88,7 +88,7 @@ let
     "proton-pass"
     "protonvpn"
     "proxyman"
-    "qlvideo"
+    "quicklook-video"
     "quicklook-json"
     "renpy"
     "scummvm-app"

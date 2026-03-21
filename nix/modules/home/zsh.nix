@@ -117,7 +117,6 @@ in
 
     shellAliases = {
       # Modern CLI tool replacements
-      grep = "rg";
       find = "fd";
 
       # Additional convenience aliases

@@ -52,7 +52,7 @@ let
     "git rev-parse:*"
     "git merge-base:*"
   ];
-  # --- Safe read-only shell commands (ls, cat, find, stat, curl, etc.) ---
+  # --- Safe shell commands (ls, cat, find, stat, curl, mv, touch, etc.) ---
   safeShellCommands = [
     "ls:*"
     "ll:*"
@@ -182,6 +182,109 @@ let
   toReadPermissions = files: map (file: "Read(${file})") files;
   toWebFetchPermissions = domains: map (domain: "WebFetch(domain:${domain})") domains;
 
+  # --- GitHub MCP plugin permissions ---
+  ghMcp = tool: "mcp__plugin_github_github__${tool}";
+  githubMcpReadTools = map ghMcp [
+    "get_me"
+    "get_commit"
+    "get_file_contents"
+    "get_label"
+    "get_latest_release"
+    "get_release_by_tag"
+    "get_tag"
+    "get_team_members"
+    "get_teams"
+    "get_copilot_job_status"
+    "issue_read"
+    "list_branches"
+    "list_commits"
+    "list_issues"
+    "list_issue_types"
+    "list_pull_requests"
+    "list_releases"
+    "list_tags"
+    "pull_request_read"
+    "search_code"
+    "search_issues"
+    "search_pull_requests"
+    "search_repositories"
+    "search_users"
+  ];
+  githubMcpWriteTools = map ghMcp [
+    "create_branch"
+    "create_pull_request"
+    "update_pull_request"
+    "update_pull_request_branch"
+    "add_issue_comment"
+    "add_reply_to_pull_request_comment"
+    "issue_write"
+    "request_copilot_review"
+    "pull_request_review_write"
+    "add_comment_to_pending_review"
+    "sub_issue_write"
+  ];
+  githubMcpAskTools = map ghMcp [
+    "merge_pull_request"
+    "push_files"
+    "create_or_update_file"
+    "delete_file"
+    "create_repository"
+    "fork_repository"
+    "assign_copilot_to_issue"
+    "create_pull_request_with_copilot"
+    "run_secret_scanning"
+  ];
+  # --- Playwright MCP plugin permissions ---
+  pwMcp = tool: "mcp__plugin_playwright_playwright__${tool}";
+  playwrightMcpReadTools = map pwMcp [
+    "browser_snapshot"
+    "browser_take_screenshot"
+    "browser_console_messages"
+    "browser_network_requests"
+    "browser_tabs"
+  ];
+  playwrightMcpInteractionTools = map pwMcp [
+    "browser_navigate"
+    "browser_navigate_back"
+    "browser_click"
+    "browser_type"
+    "browser_fill_form"
+    "browser_select_option"
+    "browser_press_key"
+    "browser_hover"
+    "browser_close"
+    "browser_resize"
+    "browser_wait_for"
+    "browser_handle_dialog"
+    "browser_install"
+  ];
+  playwrightMcpAskTools = map pwMcp [
+    "browser_evaluate"
+    "browser_run_code"
+    "browser_file_upload"
+    "browser_drag"
+  ];
+  # --- Notion MCP plugin permissions ---
+  notionMcp = tool: "mcp__claude_ai_Notion__notion-${tool}";
+  notionMcpReadTools = map notionMcp [
+    "search"
+    "fetch"
+    "get-comments"
+    "get-teams"
+    "get-users"
+  ];
+  notionMcpAskTools = map notionMcp [
+    "create-comment"
+    "create-database"
+    "create-pages"
+    "create-view"
+    "duplicate-page"
+    "move-pages"
+    "update-data-source"
+    "update-page"
+    "update-view"
+  ];
+
   hooksDir = "${homeDirectory}/.claude/hooks";
 in
 {
@@ -297,12 +400,20 @@ in
           ])
           ++ [ "WebSearch" ]
           ++ (toWebFetchPermissions webDomains)
-          ++ [ "Bash(gh repo view:*)" "Bash(gh release:*)" ]
+          # gh CLI fallback — prefer GitHub MCP plugin (see ~/.claude/CLAUDE.md)
+          ++ (toBashPermissions [
+            "gh repo view:*"
+            "gh release:*"
+            # gh CLI operations with no MCP equivalent
+            "gh run:*"
+            "gh pr checkout:*"
+            "gh pr view:*"
+            "gh pr diff:*"
+          ])
           ++ (toBashPermissions [
             "brew search:*"
             "brew list:*"
             "brew info:*"
-            "defaults read:*"
             "grep:*"
             "mkdir:*"
             "mise:*"
@@ -326,66 +437,14 @@ in
             # Full-path grep (Nix PATH resolution)
             "/usr/bin/grep:*"
           ])
-          # GitHub MCP plugin - read-only tools
-          ++ [
-            "mcp__plugin_github_github__get_me"
-            "mcp__plugin_github_github__get_commit"
-            "mcp__plugin_github_github__get_file_contents"
-            "mcp__plugin_github_github__get_label"
-            "mcp__plugin_github_github__get_latest_release"
-            "mcp__plugin_github_github__get_release_by_tag"
-            "mcp__plugin_github_github__get_tag"
-            "mcp__plugin_github_github__issue_read"
-            "mcp__plugin_github_github__list_branches"
-            "mcp__plugin_github_github__list_commits"
-            "mcp__plugin_github_github__list_issues"
-            "mcp__plugin_github_github__list_pull_requests"
-            "mcp__plugin_github_github__list_releases"
-            "mcp__plugin_github_github__list_tags"
-            "mcp__plugin_github_github__pull_request_read"
-            "mcp__plugin_github_github__search_code"
-            "mcp__plugin_github_github__search_issues"
-            "mcp__plugin_github_github__search_pull_requests"
-            "mcp__plugin_github_github__search_repositories"
-            "mcp__plugin_github_github__search_users"
-          ]
-          # GitHub MCP plugin - safe write tools
-          ++ [
-            "mcp__plugin_github_github__create_branch"
-            "mcp__plugin_github_github__create_pull_request"
-            "mcp__plugin_github_github__update_pull_request"
-            "mcp__plugin_github_github__update_pull_request_branch"
-            "mcp__plugin_github_github__add_issue_comment"
-            "mcp__plugin_github_github__issue_write"
-            "mcp__plugin_github_github__request_copilot_review"
-            "mcp__plugin_github_github__pull_request_review_write"
-            "mcp__plugin_github_github__add_comment_to_pending_review"
-            "mcp__plugin_github_github__sub_issue_write"
-          ]
-          # Playwright MCP plugin - read-only/observational
-          ++ [
-            "mcp__plugin_playwright_playwright__browser_snapshot"
-            "mcp__plugin_playwright_playwright__browser_take_screenshot"
-            "mcp__plugin_playwright_playwright__browser_console_messages"
-            "mcp__plugin_playwright_playwright__browser_network_requests"
-            "mcp__plugin_playwright_playwright__browser_tabs"
-          ]
-          # Playwright MCP plugin - standard interaction
-          ++ [
-            "mcp__plugin_playwright_playwright__browser_navigate"
-            "mcp__plugin_playwright_playwright__browser_navigate_back"
-            "mcp__plugin_playwright_playwright__browser_click"
-            "mcp__plugin_playwright_playwright__browser_type"
-            "mcp__plugin_playwright_playwright__browser_fill_form"
-            "mcp__plugin_playwright_playwright__browser_select_option"
-            "mcp__plugin_playwright_playwright__browser_press_key"
-            "mcp__plugin_playwright_playwright__browser_hover"
-            "mcp__plugin_playwright_playwright__browser_close"
-            "mcp__plugin_playwright_playwright__browser_resize"
-            "mcp__plugin_playwright_playwright__browser_wait_for"
-            "mcp__plugin_playwright_playwright__browser_handle_dialog"
-            "mcp__plugin_playwright_playwright__browser_install"
-          ];
+          # GitHub MCP plugin
+          ++ githubMcpReadTools
+          ++ githubMcpWriteTools
+          # Playwright MCP plugin
+          ++ playwrightMcpReadTools
+          ++ playwrightMcpInteractionTools
+          # Notion MCP plugin
+          ++ notionMcpReadTools;
         deny = [];
         ask = toBashPermissions [
           "git push:*"
@@ -396,24 +455,13 @@ in
           "chmod:*"
           "brew install:*"
           "brew upgrade:*"
+          # gh CLI operations requiring confirmation
+          "gh pr merge:*"
+          "gh api:*"
         ]
-        # GitHub MCP plugin - mutating tools requiring confirmation
-        ++ [
-          "mcp__plugin_github_github__merge_pull_request"
-          "mcp__plugin_github_github__push_files"
-          "mcp__plugin_github_github__create_or_update_file"
-          "mcp__plugin_github_github__delete_file"
-          "mcp__plugin_github_github__create_repository"
-          "mcp__plugin_github_github__fork_repository"
-          "mcp__plugin_github_github__assign_copilot_to_issue"
-        ]
-        # Playwright MCP plugin - tools requiring confirmation
-        ++ [
-          "mcp__plugin_playwright_playwright__browser_evaluate"
-          "mcp__plugin_playwright_playwright__browser_run_code"
-          "mcp__plugin_playwright_playwright__browser_file_upload"
-          "mcp__plugin_playwright_playwright__browser_drag"
-        ];
+        ++ githubMcpAskTools
+        ++ playwrightMcpAskTools
+        ++ notionMcpAskTools;
         defaultMode = "acceptEdits";
         additionalDirectories = [];
       };
@@ -452,7 +500,7 @@ in
         "gwa@local-plugins" = !isWorkMachine;
       };
       autoUpdates = true;
-      teammateMode = "tmux";
+      teammateMode = "auto";
       theme = "dark";
       verbose = false;
       model = "opus[1m]";
