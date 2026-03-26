@@ -148,6 +148,13 @@ in
       # Font directories for XeLaTeX/fontconfig (system + Nix-managed fonts)
       OSFONTDIR = "/System/Library/Fonts/Supplemental:/Library/Fonts:/Library/Fonts/Nix Fonts:$HOME/Library/Fonts";
     };
+
+    envExtra = ''
+      # Prevent Git Credential Manager from hanging in non-interactive shells (e.g., Claude Code)
+      if [[ ! -o interactive ]]; then
+        export GIT_TERMINAL_PROMPT=0
+      fi
+    '';
     };
 
     fzf = {

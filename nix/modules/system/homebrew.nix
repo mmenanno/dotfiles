@@ -51,7 +51,9 @@ let
 
   workOnlyCasks = [
     "gather"
+    "grammarly-desktop"
     "meetingbar"
+    "wispr-flow"
   ];
 
   personalOnlyCasks = [

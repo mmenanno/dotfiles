@@ -284,6 +284,57 @@ let
     "update-page"
     "update-view"
   ];
+  # --- Work-only claude.ai MCP integrations ---
+  # Glean (search/chat — all read)
+  gleanMcp = tool: "mcp__claude_ai_Glean__${tool}";
+  gleanMcpReadTools = map gleanMcp [ "search" "chat" "gmail_search" "user_activity" ];
+  # Gmail
+  gmailMcp = tool: "mcp__claude_ai_Gmail__${tool}";
+  gmailMcpReadTools = map gmailMcp [
+    "gmail_get_profile"
+    "gmail_list_drafts"
+    "gmail_list_labels"
+    "gmail_read_message"
+    "gmail_read_thread"
+    "gmail_search_messages"
+  ];
+  gmailMcpAskTools = map gmailMcp [ "gmail_create_draft" ];
+  # Google Calendar
+  gCalMcp = tool: "mcp__claude_ai_Google_Calendar__${tool}";
+  gCalMcpReadTools = map gCalMcp [
+    "gcal_list_calendars"
+    "gcal_list_events"
+    "gcal_get_event"
+    "gcal_find_meeting_times"
+    "gcal_find_my_free_time"
+  ];
+  gCalMcpAskTools = map gCalMcp [
+    "gcal_create_event"
+    "gcal_update_event"
+    "gcal_delete_event"
+    "gcal_respond_to_event"
+  ];
+  # Slack (claude.ai integration — distinct from slack plugin)
+  slackAiMcp = tool: "mcp__claude_ai_Slack__${tool}";
+  slackAiMcpReadTools = map slackAiMcp [
+    "slack_read_canvas"
+    "slack_read_channel"
+    "slack_read_thread"
+    "slack_read_user_profile"
+    "slack_search_channels"
+    "slack_search_public"
+    "slack_search_public_and_private"
+    "slack_search_users"
+  ];
+  slackAiMcpAskTools = map slackAiMcp [
+    "slack_create_canvas"
+    "slack_schedule_message"
+    "slack_send_message"
+    "slack_send_message_draft"
+    "slack_update_canvas"
+  ];
+  # Snowflake (agentic — always ask)
+  snowflakeAiMcpAskTools = [ "mcp__claude_ai_Snowflake__data-doula-agent" ];
 
   hooksDir = "${homeDirectory}/.claude/hooks";
 in
@@ -444,7 +495,14 @@ in
           ++ playwrightMcpReadTools
           ++ playwrightMcpInteractionTools
           # Notion MCP plugin
-          ++ notionMcpReadTools;
+          ++ notionMcpReadTools
+          # Work-only claude.ai MCPs
+          ++ (lib.optionals isWorkMachine (
+            gleanMcpReadTools
+            ++ gmailMcpReadTools
+            ++ gCalMcpReadTools
+            ++ slackAiMcpReadTools
+          ));
         deny = [];
         ask = toBashPermissions [
           "git push:*"
@@ -461,7 +519,13 @@ in
         ]
         ++ githubMcpAskTools
         ++ playwrightMcpAskTools
-        ++ notionMcpAskTools;
+        ++ notionMcpAskTools
+        ++ (lib.optionals isWorkMachine (
+          gmailMcpAskTools
+          ++ gCalMcpAskTools
+          ++ slackAiMcpAskTools
+          ++ snowflakeAiMcpAskTools
+        ));
         defaultMode = "acceptEdits";
         additionalDirectories = [];
       };
@@ -480,7 +544,6 @@ in
         "playwright@claude-plugins-official" = true;
         "plugin-dev@claude-plugins-official" = false;
         "pr-review-toolkit@claude-plugins-official" = true;
-        "ralph-loop@claude-plugins-official" = true;
         "superpowers@claude-plugins-official" = true;
         "gopls-lsp@claude-plugins-official" = true;
         "csharp-lsp@claude-plugins-official" = true;
@@ -491,13 +554,20 @@ in
         "swift-lsp@claude-plugins-official" = true;
         "kotlin-lsp@claude-plugins-official" = true;
         "lua-lsp@claude-plugins-official" = true;
-        "Notion@claude-plugins-official" = true;
         "ruby-lsp@claude-plugins-official" = true;
-        "slack@claude-plugins-official" = isWorkMachine;
-        "atlassian@claude-plugins-official" = isWorkMachine;
+        "notion-markdown@babylist" = isWorkMachine;
+        "skill-creator@claude-plugins-official" = false;
 
         # Local plugins
         "gwa@local-plugins" = !isWorkMachine;
+      };
+      extraKnownMarketplaces = lib.optionalAttrs isWorkMachine {
+        babylist = {
+          source = {
+            source = "github";
+            repo = "babylist/claude-plugins";
+          };
+        };
       };
       autoUpdates = true;
       teammateMode = "auto";
