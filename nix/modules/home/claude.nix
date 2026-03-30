@@ -418,6 +418,7 @@ in
       respectGitignore = false;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
+      model = "opus[1m]";
       permissions = {
         allow =
           (toBashPermissions devTools)
@@ -569,11 +570,11 @@ in
           };
         };
       };
+      autoDreamEnabled = true;
       autoUpdates = true;
       teammateMode = "auto";
       theme = "dark";
       verbose = false;
-      model = "opus[1m]";
     };
 
     # Use shared MCP servers but exclude GitHub (Claude Code has official GitHub plugin)
