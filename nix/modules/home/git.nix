@@ -1,4 +1,4 @@
-{ dotlib, sharedIdentity, isWorkMachine ? false, lib, ... }:
+{ dotlib, sharedIdentity, isWorkMachine ? false, ... }:
 # Scope: Home (Home Manager). Configures Git identity, signing, and defaults.
 let
   inherit (dotlib) getEnvOrFallback getPersonalEnvOrFallback;
@@ -13,9 +13,6 @@ let
   privateSigningKey = getPersonalEnv "NIX_PRIVATE_SIGNING_KEY" "bootstrap-private-key" "ssh-ed25519 PLACEHOLDER_PRIVATE_SIGNING_KEY_CHANGE_ME";
   privateGitDir = getPersonalEnv "NIX_PRIVATE_GITDIR" "~/dev/bootstrap/" "~/dev/placeholder-private/";
 
-  # Git services
-  forgejoDomain = getPersonalEnv "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
-  levForgejoDomain = getPersonalEnv "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
 in
 {
   programs.git = {
@@ -83,19 +80,6 @@ in
         ssh = {
           program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
           allowedSignersFile = "~/.ssh/allowed_signers";
-        };
-      };
-      credential = {
-        helper = "/usr/local/share/gcm-core/git-credential-manager";
-        "https://dev.azure.com" = {
-          useHttpPath = true;
-        };
-      } // lib.optionalAttrs (!isWorkMachine) {
-        "${forgejoDomain}" = {
-          provider = "generic";
-        };
-        "${levForgejoDomain}" = {
-          provider = "generic";
         };
       };
       init.defaultBranch = "main";

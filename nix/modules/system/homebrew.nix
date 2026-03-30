@@ -32,7 +32,6 @@ let
     "claude-code"
     "db-browser-for-sqlite"
     "docker-desktop"
-    "git-credential-manager"
     "google-chrome"
     "iterm2"
     "itermbrowserplugin"
