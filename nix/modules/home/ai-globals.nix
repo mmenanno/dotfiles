@@ -208,6 +208,10 @@ in
       op plugin run -- gh repo view  # Not just 'gh repo view'
       ```
 
+      ## Shell Commands
+
+      - Never prepend `cd <dir> &&` to commands when already in the correct working directory. Only use `cd` when the command must run in a different directory than the current one.
+
       ## Shell Scripts
 
       Always include:
