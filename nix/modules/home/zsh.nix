@@ -112,7 +112,7 @@ in
       fi
 
       # Auto-list directory contents on cd
-      chpwd() { eza --icons --group-directories-first; }
+      chpwd() { [[ -t 1 ]] && eza --icons --group-directories-first; }
     '';
 
     shellAliases = {
