@@ -29,7 +29,7 @@ let
     "1password-cli"
     "adguard"
     "claude"
-    "claude-code"
+    "claude-code@latest"
     "db-browser-for-sqlite"
     "docker-desktop"
     "google-chrome"
@@ -52,6 +52,7 @@ let
     "gather"
     "grammarly-desktop"
     "meetingbar"
+    "tuple"
     "wispr-flow"
   ];
 
