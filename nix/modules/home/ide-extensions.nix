@@ -69,62 +69,60 @@ in
     DESIRED_HASH="$(printf '%s' '${lib.concatStringsSep "\n" extensions}' | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
     HASH_FILE="$STATE_DIR/extensions.hash"
 
-    if [ -f "$HASH_FILE" ] && [ "$(cat "$HASH_FILE")" = "$DESIRED_HASH" ]; then
-      exit 0
-    fi
+    if ! { [ -f "$HASH_FILE" ] && [ "$(cat "$HASH_FILE")" = "$DESIRED_HASH" ]; }; then
+      install_exts() {
+        local cli="$1"; shift
+        local desired_exts="$1"; shift || true
+        if [ ! -x "$cli" ]; then
+          return 0
+        fi
 
-    install_exts() {
-      local cli="$1"; shift
-      local desired_exts="$1"; shift || true
-      if [ ! -x "$cli" ]; then
-        return 0
+        # Compute set differences efficiently using sorted temp files
+        local tmp_installed tmp_desired
+        tmp_installed="$(mktemp)"
+        tmp_desired="$(mktemp)"
+        # Get installed extensions (unsorted, one per line) directly into temp file
+        $cli --list-extensions 2>/dev/null | tr -d '\r' | sed '/^$/d' | sort -u >"$tmp_installed" || true
+        printf '%s\n' "$desired_exts" | sed '/^$/d' | sort -u >"$tmp_desired"
+
+        # installed \ desired → uninstall
+        local to_uninstall
+        to_uninstall="$(comm -23 "$tmp_installed" "$tmp_desired" || true)"
+        if [ -n "$to_uninstall" ]; then
+          while IFS= read -r ext; do
+            [ -z "''${ext:-}" ] && continue
+            "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
+          done <<<"$to_uninstall"
+        fi
+
+        # desired \ installed → install
+        local to_install
+        to_install="$(comm -13 "$tmp_installed" "$tmp_desired" || true)"
+        if [ -n "$to_install" ]; then
+          while IFS= read -r ext; do
+            [ -z "''${ext:-}" ] && continue
+            "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
+          done <<<"$to_install"
+        fi
+
+        rm -f "$tmp_installed" "$tmp_desired"
+      }
+
+      vscode_exts='${lib.concatStringsSep "\n" extensions}'
+
+      vscode_cli=""
+      if command -v code >/dev/null 2>&1; then
+        vscode_cli="$(command -v code)"
+      elif [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]; then
+        vscode_cli="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
       fi
 
-      # Compute set differences efficiently using sorted temp files
-      local tmp_installed tmp_desired
-      tmp_installed="$(mktemp)"
-      tmp_desired="$(mktemp)"
-      # Get installed extensions (unsorted, one per line) directly into temp file
-      $cli --list-extensions 2>/dev/null | tr -d '\r' | sed '/^$/d' | sort -u >"$tmp_installed" || true
-      printf '%s\n' "$desired_exts" | sed '/^$/d' | sort -u >"$tmp_desired"
-
-      # installed \ desired → uninstall
-      local to_uninstall
-      to_uninstall="$(comm -23 "$tmp_installed" "$tmp_desired" || true)"
-      if [ -n "$to_uninstall" ]; then
-        while IFS= read -r ext; do
-          [ -z "''${ext:-}" ] && continue
-          "$cli" --uninstall-extension "$ext" >/dev/null 2>&1 || true
-        done <<<"$to_uninstall"
+      if [ -n "$vscode_cli" ]; then
+        install_exts "$vscode_cli" "$vscode_exts"
       fi
 
-      # desired \ installed → install
-      local to_install
-      to_install="$(comm -13 "$tmp_installed" "$tmp_desired" || true)"
-      if [ -n "$to_install" ]; then
-        while IFS= read -r ext; do
-          [ -z "''${ext:-}" ] && continue
-          "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
-        done <<<"$to_install"
-      fi
-
-      rm -f "$tmp_installed" "$tmp_desired"
-    }
-
-    vscode_exts='${lib.concatStringsSep "\n" extensions}'
-
-    vscode_cli=""
-    if command -v code >/dev/null 2>&1; then
-      vscode_cli="$(command -v code)"
-    elif [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]; then
-      vscode_cli="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+      # Cache the hash so subsequent runs skip if nothing changed
+      printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
     fi
-
-    if [ -n "$vscode_cli" ]; then
-      install_exts "$vscode_cli" "$vscode_exts"
-    fi
-
-    # Cache the hash so subsequent runs skip if nothing changed
-    printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
   '';
 }

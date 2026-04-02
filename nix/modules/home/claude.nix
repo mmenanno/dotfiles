@@ -348,8 +348,9 @@ in
 
     # Install it2 CLI for Claude Code agent team split panes in iTerm2
     activation.installIt2 = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      ${pkgs.pipx}/bin/pipx install it2 2>/dev/null || \
-        ${pkgs.pipx}/bin/pipx upgrade it2 2>/dev/null || true
+      if ! ${pkgs.pipx}/bin/pipx list --short 2>/dev/null | grep -q '^it2 '; then
+        ${pkgs.pipx}/bin/pipx install it2 >/dev/null 2>&1 || true
+      fi
     '';
 
     file = {
