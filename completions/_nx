@@ -62,7 +62,9 @@ _nx() {
             up|apply|a)
                 _values 'option' \
                     '-hm[Rebuild only Home Manager (faster)]' \
-                    '--home-manager[Rebuild only Home Manager (faster)]'
+                    '--home-manager[Rebuild only Home Manager (faster)]' \
+                    '-fm[Revert managed files before applying]' \
+                    '--force-managed[Revert managed files before applying]'
                 ;;
             pr)
                 _values 'option' \

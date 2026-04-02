@@ -50,6 +50,7 @@ USAGE:
 COMMANDS:
     up, apply, a       Apply configuration (darwin-rebuild switch)
                         -hm, --home-manager  Rebuild only Home Manager (faster)
+                        -fm, --force-managed Revert managed files before applying
     check, c          Check flake for errors
     lint, l           Run code quality checks (statix, deadnix)
     update, u         Update flake dependencies
@@ -66,6 +67,7 @@ COMMANDS:
 EXAMPLES:
     nix up            # Apply configuration
     nix up -hm        # Rebuild Home Manager only (faster for config changes)
+    nix up -fm        # Revert managed files to Nix baseline, then apply
     nix c             # Check flake
     nix l             # Run linting checks
     nix u             # Update dependencies
@@ -154,8 +156,27 @@ update_flake() {
 }
 
 apply_config() {
+    local force=false
+    local passthrough_args=()
+
+    for arg in "$@"; do
+        case "$arg" in
+            --force-managed|--fm|-fm)
+                force=true
+                ;;
+            *)
+                passthrough_args+=("$arg")
+                ;;
+        esac
+    done
+
+    if [[ "$force" == true ]]; then
+        log_info "Reverting managed files to Nix baseline before applying..."
+        managed_revert all
+    fi
+
     log_info "Applying nix-darwin configuration..."
-    if "$SCRIPT_DIR/nixup-with-secrets" "$@"; then
+    if "$SCRIPT_DIR/nixup-with-secrets" ${passthrough_args[@]+"${passthrough_args[@]}"}; then
         # nixup-with-secrets already prints success message
         return 0
     else
@@ -409,6 +430,18 @@ create_pr() {
 }
 
 # --- Mutable file management ---
+
+# Compare two files semantically for JSON, falling back to byte comparison.
+# Returns 0 if equal, 1 if different.
+json_files_equal() {
+    local file_a="$1" file_b="$2"
+    local norm_a norm_b
+    if norm_a=$(jq -S . "$file_a" 2>/dev/null) && norm_b=$(jq -S . "$file_b" 2>/dev/null); then
+        [[ "$norm_a" == "$norm_b" ]]
+    else
+        cmp -s "$file_a" "$file_b"
+    fi
+}
 # Must match mutablePaths in nix/modules/home/mutable-files.nix
 # Ordered list of shorthand names (used for iteration order)
 MANAGED_NAMES=(claude vscode vsmcp)
@@ -483,7 +516,7 @@ managed_status() {
             icon="x" color="$RED" label="missing"
         elif [ ! -f "$baseline" ]; then
             icon="?" color="$YELLOW" label="no baseline"
-        elif cmp -s "$target" "$baseline"; then
+        elif json_files_equal "$target" "$baseline"; then
             icon="✓" color="$GREEN" label="clean"
         else
             icon="!" color="$YELLOW" label="modified by app"
@@ -515,11 +548,21 @@ managed_diff() {
             continue
         fi
 
-        if cmp -s "$target" "$baseline"; then
+        # Normalize JSON files to ignore key ordering differences
+        local norm_baseline norm_target
+        norm_baseline=$(mktemp)
+        norm_target=$(mktemp)
+
+        jq -S . "$baseline" > "$norm_baseline" 2>/dev/null || cp "$baseline" "$norm_baseline"
+        jq -S . "$target" > "$norm_target" 2>/dev/null || cp "$target" "$norm_target"
+
+        if cmp -s "$norm_baseline" "$norm_target"; then
+            rm -f "$norm_baseline" "$norm_target"
             echo -e "  ${GREEN}✓${NC}  ${CYAN}${name}${NC}  ${GREEN}no changes${NC}"
         else
             echo -e "  ${YELLOW}!${NC}  ${CYAN}${name}${NC}  ${YELLOW}modified by app${NC}"
-            code --diff "$baseline" "$target"
+            code --diff "$norm_baseline" "$norm_target"
+            # Don't delete temp files — code --diff is async and needs them
         fi
     done
 }
