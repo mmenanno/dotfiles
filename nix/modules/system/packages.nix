@@ -17,6 +17,7 @@ let
     mkalias
     nodejs
     openssl
+    pkg-config
     pnpm
     rclone
     rsync
