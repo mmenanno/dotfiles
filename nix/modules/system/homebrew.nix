@@ -107,6 +107,7 @@ let
     "vlc"
     "webpquicklook"
     "whatsapp"
+    "whisky"
     "zoom"
   ];
 
