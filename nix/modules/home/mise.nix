@@ -16,6 +16,7 @@
         python = "latest";
         ruby = "latest";
         node = "latest";
+        yarn = "latest";
         pnpm = "latest";
         rust = "latest";
       };

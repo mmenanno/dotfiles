@@ -15,16 +15,13 @@ let
     lazygit
     markdownlint-cli
     mkalias
-    nodejs
     openssl
     pkg-config
-    pnpm
     rclone
     rsync
     shellcheck
     pay-respects
     watchman
-    yarn
     yq
     zellij
     zoxide
