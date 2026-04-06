@@ -87,6 +87,8 @@
 				<string>image/png</string>
 			</dict>
 		</array>
+		<key>migrate_from</key>
+		<array/>
 		<key>name</key>
 		<string>Gmail</string>
 		<key>related_applications</key>
@@ -102,8 +104,6 @@
 		<key>theme_color</key>
 		<string>#FFFFFF</string>
 	</dict>
-	<key>WKManifestIconKind</key>
-	<string>Manifest</string>
 	<key>WKManifestURL</key>
 	<string>https://mail.google.com/mail/u/0/manifest.json</string>
 	<key>WKPushBundleMetadata</key>

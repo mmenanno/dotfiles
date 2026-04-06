@@ -35,6 +35,11 @@ let
   mainGithubKey = getEnvOrFallback "NIX_SSH_MAIN_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_MAIN_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_MAIN_GITHUB_KEY_CHANGE_ME";
   privateGithubKey = getPersonalEnv "NIX_SSH_PRIVATE_GITHUB_KEY" "ssh-ed25519 BOOTSTRAP_PRIVATE_GITHUB_KEY" "ssh-ed25519 PLACEHOLDER_PRIVATE_GITHUB_KEY_CHANGE_ME";
 
+  # Kelsey's Mac from environment
+  kLaptop = getPersonalEnv "NIX_K_LAPTOP" "bootstrap-k-laptop" "placeholder-k-laptop";
+  kHostname = getPersonalEnv "NIX_K_HOSTNAME" "192.168.x.x" "192.168.x.x";
+  kUsername = getPersonalEnv "NIX_K_USERNAME" "bootstrap-k-user" "placeholder-k-user";
+
   # Forgejo domains from environment
   forgejoDomainFull = getPersonalEnv "NIX_FORGEJO_DOMAIN" "https://git.example.com" "https://git.placeholder.com";
   levForgejoDomainFull = getPersonalEnv "NIX_LEV_FORGEJO_DOMAIN" "https://git.lev.example.com" "https://git.lev.placeholder.com";
@@ -110,6 +115,11 @@ in
         };
         "${levForgejoDomain}" = {
           hostname = levForgejoDomain;
+          identityFile = "~/.ssh/${mainGithubKeyFile}";
+        };
+        "${kLaptop}" = {
+          hostname = kHostname;
+          user = kUsername;
           identityFile = "~/.ssh/${mainGithubKeyFile}";
         };
       };
