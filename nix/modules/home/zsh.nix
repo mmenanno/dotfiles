@@ -103,8 +103,8 @@ in
 
       eval "$(pay-respects zsh --alias)"
 
-      # Initialize mise with lazy loading via shims for faster startup
-      eval "$(${pkgs.mise}/bin/mise activate zsh --shims)"
+      # Initialize mise (hooks into cd to set tool versions directly, avoiding shim overhead)
+      eval "$(${pkgs.mise}/bin/mise activate zsh)"
 
       # Initialize zoxide only in interactive shells
       if [[ $- == *i* ]]; then
