@@ -209,6 +209,21 @@ show_diff() {
 }
 
 pull_dotfiles() {
+    local default_branch
+    default_branch=$(get_default_branch)
+    local current_branch
+    current_branch=$(git -C "$DOTFILES_DIR" branch --show-current)
+
+    if [[ "$current_branch" != "$default_branch" ]]; then
+        log_info "Currently on branch '$current_branch', switching to '$default_branch'..."
+        if ! git -C "$DOTFILES_DIR" switch "$default_branch" 2>&1; then
+            log_error "Cannot switch to $default_branch (uncommitted changes would be overwritten)"
+            log_info "Commit or stash your changes first, then retry"
+            return 1
+        fi
+        log_success "Switched to $default_branch"
+    fi
+
     log_info "Pulling latest dotfiles from remote..."
     if git -C "$DOTFILES_DIR" pull; then
         log_success "Dotfiles updated successfully"
