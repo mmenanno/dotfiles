@@ -46,6 +46,7 @@ _nx() {
     local -a managed_names
     managed_names=(
         'claude:.claude/settings.json'
+        'op:.config/op/plugins.sh'
         'vscode:Library/Application Support/Code/User/settings.json'
         'vsmcp:Library/Application Support/Code/User/mcp.json'
         'all:All managed files'
