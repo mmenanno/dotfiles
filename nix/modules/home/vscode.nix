@@ -57,6 +57,7 @@ in
         "editor.formatOnPaste": true,
         "editor.rulers": [120],
         "terminal.integrated.fontFamily": "MesloLGS Nerd Font",
+        "mise.terminal.env": true,
         "git.enabledSmartCommit": true,
         "editor.stickyScroll.enabled": true,
         "[python]": { "editor.formatOnType": true },
