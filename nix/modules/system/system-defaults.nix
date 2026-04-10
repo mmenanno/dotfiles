@@ -231,7 +231,7 @@ in
       end if
     end run
     FONTSCRIPT
-      su ${username} -c "osascript '$FONT_SCRIPT' '$TERMINAL_PLIST'" 2>/dev/null || true
+      su ${username} -c "osascript '$FONT_SCRIPT' '$TERMINAL_PLIST'" >/dev/null 2>&1 || true
       rm -f "$FONT_SCRIPT"
       echo "Terminal.app profile updated: font set to MesloLGS Nerd Font 11pt"
     fi

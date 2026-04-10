@@ -70,6 +70,7 @@
     ./home/claude.nix
     ./home/ide-extensions.nix
     ./home/npmrc.nix
+    ./home/rostrum.nix
     ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix

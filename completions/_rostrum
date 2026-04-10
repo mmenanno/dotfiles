@@ -1,0 +1,50 @@
+#compdef rostrum
+
+# Zsh completion for rostrum (Git worktree manager)
+
+_rostrum() {
+    local -a commands branches
+
+    commands=(
+        'init:Install rostrum by creating symlink in ~/.local/bin'
+        'update:Update rostrum to the latest version from git'
+        'setup:Creates a new Git worktree for the specified branch'
+        'create:Alias for setup'
+        'new:Alias for setup'
+        'add:Alias for setup'
+        'setup-db:Set up isolated database(s) for an existing worktree'
+        'teardown:Removes the Git worktree and cleans up'
+        'cleanup:Alias for teardown'
+        'remove:Alias for teardown'
+        'dev:Runs the webpack development server'
+        'list:List all active rostrum worktrees'
+        'ls:Alias for list'
+        'open:Opens the worktree in your configured editor'
+        'completion:Generate shell completion script'
+        'help:Show help information'
+    )
+
+    _arguments -C \
+        '1: :->command' \
+        '*::arg:->args'
+
+    case $state in
+        command)
+            _describe 'command' commands
+            ;;
+        args)
+            case $words[1] in
+                open|teardown|cleanup|remove|setup-db)
+                    branches=(${(f)"$(rostrum list 2>/dev/null | awk '{print $1}')"})
+                    _describe 'branch' branches
+                    ;;
+                completion)
+                    _values 'shell' 'bash' 'zsh'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_rostrum "$@"
+compdef _rostrum rostrum
