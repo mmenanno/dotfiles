@@ -1,0 +1,133 @@
+#!/usr/bin/env zsh
+# zsh-hist-clean - Apply the zshaddhistory rewrite rules retroactively to
+# ~/.zsh_history so old noisy entries stop surfacing in zsh-autosuggestions.
+#
+# Mirrors the logic in nix/modules/home/zsh.nix. Safe by default:
+# dry-run prints a summary diff; pass --apply to rewrite in place with a
+# timestamped backup.
+#
+# Usage:
+#   zsh-hist-clean            # dry-run, show counts and sample diffs
+#   zsh-hist-clean --apply    # back up and rewrite ~/.zsh_history
+
+emulate -L zsh
+setopt pipefail no_unset
+
+HISTFILE_PATH=${HISTFILE:-$HOME/.zsh_history}
+APPLY=0
+[[ ${1:-} == --apply ]] && APPLY=1
+
+[[ -f $HISTFILE_PATH ]] || { print -u2 "not found: $HISTFILE_PATH"; exit 1; }
+
+# Shared classifier: _zhist_noisy + _zhist_classify. The interactive-shell
+# hook it also registers is a no-op here (sourced from a non-interactive zsh).
+source ${0:A:h}/../zsh/history.zsh
+
+# Split an extended-format line ": ts:dur;cmd" into prefix and cmd.
+# Plain lines get empty prefix.
+_zhist_split() {
+  local raw=$1
+  if [[ $raw == ': '[0-9]*':'[0-9]*';'* ]]; then
+    local prefix=${raw%%;*}';'
+    local cmd=${raw#*;}
+    print -r -- "$prefix"
+    print -r -- "$cmd"
+  else
+    print -r -- ""
+    print -r -- "$raw"
+  fi
+}
+
+tmpfile=$(mktemp "${TMPDIR:-/tmp}/zsh-hist-clean.XXXXXX")
+trap 'rm -f $tmpfile' EXIT
+
+typeset -i total=0 kept=0 rewritten_count=0 dropped=0 skipped_multiline=0
+typeset -a sample_rewrites sample_drops
+
+# Main processing wrapped in a function so `local` declarations are scoped
+# correctly. At script top-level, `local NAME` is `typeset NAME` which PRINTS
+# the current value of NAME — that would leak variable state into the tmpfile.
+_zhist_process() {
+  local acc="" line complete split prefix cmd verdict new
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ -n $acc ]]; then
+      acc+=$'\n'$line
+    else
+      acc=$line
+    fi
+    # continuation if line ends in a single trailing backslash
+    if [[ $line == *\\ && $line != *\\\\ ]]; then
+      continue
+    fi
+    complete=$acc
+    acc=""
+    (( total++ ))
+
+    # Skip (preserve as-is) any multi-line entry.
+    if [[ $complete == *$'\n'* ]]; then
+      (( skipped_multiline++ ))
+      print -r -- "$complete"
+      continue
+    fi
+
+    split=$(_zhist_split "$complete")
+    prefix=${split%%$'\n'*}
+    cmd=${split#*$'\n'}
+
+    _zhist_classify "$cmd"
+    verdict=$REPLY
+    case $verdict in
+      KEEP)
+        (( kept++ ))
+        print -r -- "$complete"
+        ;;
+      DROP)
+        (( dropped++ ))
+        (( ${#sample_drops} < 5 )) && sample_drops+=("$cmd")
+        ;;
+      REWRITE*)
+        new=${verdict#REWRITE	}
+        (( rewritten_count++ ))
+        (( ${#sample_rewrites} < 10 )) && sample_rewrites+=("$cmd  ==>  $new")
+        print -r -- "${prefix}${new}"
+        ;;
+    esac
+  done
+  # Trailing incomplete accumulation (shouldn't happen on a valid histfile)
+  if [[ -n $acc ]]; then
+    (( total++, kept++ ))
+    print -r -- "$acc"
+  fi
+}
+
+_zhist_process < $HISTFILE_PATH > $tmpfile
+
+print "Total entries:       $total"
+print "Kept unchanged:      $kept"
+print "Rewritten:           $rewritten_count"
+print "Dropped (cd):        $dropped"
+print "Multi-line skipped:  $skipped_multiline"
+
+if (( ${#sample_rewrites} > 0 )); then
+  print
+  print "Sample rewrites:"
+  printf '  %s\n' "${sample_rewrites[@]}"
+fi
+if (( ${#sample_drops} > 0 )); then
+  print
+  print "Sample drops:"
+  printf '  %s\n' "${sample_drops[@]}"
+fi
+
+if (( APPLY )); then
+  backup=$HISTFILE_PATH.bak.$(date +%Y%m%d-%H%M%S)
+  cp $HISTFILE_PATH $backup
+  mv $tmpfile $HISTFILE_PATH
+  trap - EXIT
+  print
+  print "Applied. Backup: $backup"
+  print "Close all other zsh sessions and reopen to pick up changes."
+else
+  print
+  print "Dry run. Pass --apply to rewrite $HISTFILE_PATH (backup created automatically)."
+fi
