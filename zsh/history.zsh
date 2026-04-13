@@ -72,6 +72,15 @@ if [[ -o interactive ]]; then
   _zsh_autosuggest_strategy_clean_history() {
     emulate -L zsh
     setopt EXTENDED_GLOB
+
+    # For commands whose args come from a well-defined set (project names,
+    # game names, subcommands), defer to the `completion` strategy later in
+    # the chain — it enumerates all valid options rather than biasing toward
+    # whatever was last used.
+    case "$1" in
+      'dv '*|'ren '*) return ;;
+    esac
+
     # Escape glob metacharacters in the typed prefix so it's matched literally.
     local prefix=${1//(#m)[\\()\[\]|*?~^]/\\$MATCH}
     # ${history[@]} iterates values newest-first. Indexing via numeric keys
@@ -87,8 +96,11 @@ if [[ -o interactive ]]; then
 
   # atuin init (runs later in .zshrc) sets strategy to (atuin). Override on
   # first prompt so our strategy wins. Atuin still owns Ctrl+R.
+  # Strategy chain: filtered history first (fast), then zsh's completion
+  # system as fallback (so e.g. `dv cd dat` suggests `dating_apps` from the
+  # _dv completion even on a fresh command).
   _fix_autosuggest_strategy() {
-    ZSH_AUTOSUGGEST_STRATEGY=(clean_history)
+    ZSH_AUTOSUGGEST_STRATEGY=(clean_history completion)
     add-zsh-hook -d precmd _fix_autosuggest_strategy
   }
   add-zsh-hook precmd _fix_autosuggest_strategy

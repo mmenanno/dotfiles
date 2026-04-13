@@ -17,6 +17,7 @@ _dv() {
         'dotfiles'
         'dev'
         'writing'
+        'tasks'
     )
 
     # Function to get all project names
@@ -27,6 +28,7 @@ _dv() {
             "$HOME/dev"
             "$HOME/dev/git"
             "$HOME/writing"
+            "$HOME/tasks"
         )
 
         # Add special directories
