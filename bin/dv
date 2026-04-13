@@ -480,6 +480,7 @@ typeset -gA SPECIAL_DIRS=(
     dotfiles "$HOME/dotfiles"
     dev "$HOME/dev"
     writing "$HOME/writing"
+    tasks "$HOME/tasks"
 )
 
 # Directories to scan for projects during indexing
@@ -487,6 +488,7 @@ typeset -ga PROJECT_PATHS=(
     "$HOME/dev"
     "$HOME/dev/git"
     "$HOME/writing"
+    "$HOME/tasks"
 )
 
 # Project name -> path mapping (populated by index_projects)

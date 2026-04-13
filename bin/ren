@@ -154,8 +154,10 @@ interactive_game_selection() {
     echo "${game_map[$selection]}"
 }
 
-# Trim whitespace and expand tilde in path
-# Handles user input from prompts that may have leading/trailing whitespace
+# Trim whitespace, unquote shell escapes, and expand tilde in path
+# Handles user input from prompts that may contain shell-escaped paths (e.g.
+# drag-and-drop into the gum input produces "foo\ bar.zip" with literal
+# backslashes, since no shell is running to unescape them).
 # Usage: clean_path=$(trim_and_expand_path "$user_input")
 trim_and_expand_path() {
     local path="$1"
@@ -163,6 +165,8 @@ trim_and_expand_path() {
     path="${path#"${path%%[![:space:]]*}"}"
     # Trim trailing whitespace
     path="${path%"${path##*[![:space:]]}"}"
+    # Shell-dequote: "foo\ bar" → "foo bar", "'foo bar'" → "foo bar"
+    path="${(Q)path}"
     # Expand tilde to $HOME
     path="${path/#\~/$HOME}"
     echo "$path"
@@ -420,10 +424,11 @@ startup_cleanup() {
 }
 
 # Get human-readable size
+# `du -sh` right-pads the size column, so lines like " 13G\t/path" have a
+# leading space. awk with default FS handles the leading whitespace correctly.
 get_size_human() {
     local path="$1"
-    local size_output=$(/usr/bin/du -sh "$path" 2>/dev/null)
-    echo "${size_output%%[[:space:]]*}"
+    /usr/bin/du -sh "$path" 2>/dev/null | /usr/bin/awk '{print $1}'
 }
 
 # Get relative time (e.g., "2 days ago")
@@ -758,6 +763,14 @@ cmd_install() {
     fi
 
     mv "$extracted_dir" "$install_path"
+
+    # Stamp mtime to now so `ren list`'s "installed" column reflects install
+    # time. Without this, Windows builds show the developer's packaging date:
+    # unar carries the zip's internal mtime onto the archive's root dir, and
+    # mv within the same filesystem preserves it. Mac .app bundles aren't
+    # usually affected since they're nested inside the zip's root, but we
+    # touch unconditionally for symmetry.
+    touch "$install_path"
 
     # Remove quarantine flag from Mac apps (macOS Gatekeeper security feature)
     if [[ "$platform" == "mac" ]]; then

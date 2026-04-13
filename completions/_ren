@@ -1,0 +1,86 @@
+#compdef ren
+
+# Zsh completion for ren (Ren'Py game manager)
+
+_ren() {
+    local -a commands
+    commands=(
+        'install:Install a game from archive'
+        'launch:Launch an installed game'
+        'list:List all installed games'
+        'cleanup:Clean up temporary files or games'
+        'mod:Install a mod into an existing game'
+        'help:Show help'
+    )
+
+    # Collect installed game base names (version/extension stripped).
+    # Mirrors the grouping logic in build_game_selection_list.
+    _ren_games() {
+        setopt localoptions null_glob
+        local games_dir="${REN_GAMES_DIR:-$HOME/renpy-games}"
+        [[ -d $games_dir ]] || return 1
+
+        local -a names
+        local item name base
+        for item in "$games_dir"/*; do
+            [[ -d $item ]] || continue
+            name=${item:t}
+            name=${name%.app}
+            base=${name%-[0-9]*}
+            names+=("$base")
+        done
+        names=(${(u)${(o)names}})
+        compadd -a names
+    }
+
+    _ren_cleanup_targets() {
+        local -a targets=(
+            'tmp:Remove temporary extraction directories'
+            'games:Interactive removal of installed games'
+        )
+        _describe 'target' targets
+    }
+
+    _ren_help_topics() {
+        local -a topics=(install launch list cleanup mod)
+        compadd -a topics
+    }
+
+    _ren_archives() {
+        _files -g '*.(zip|7z|rar|tar|tar.gz|tgz|tar.bz2|tbz|tbz2|tar.xz|txz)'
+    }
+
+    if (( CURRENT == 2 )); then
+        _describe 'command' commands
+        return
+    fi
+
+    case "$words[2]" in
+        launch|l|play|p)
+            (( CURRENT == 3 )) && _ren_games
+            ;;
+        mod|m)
+            if (( CURRENT == 3 )); then
+                _ren_games
+            elif (( CURRENT == 4 )); then
+                _ren_archives
+            fi
+            ;;
+        install|i)
+            # ren install [-w|-m|-f] <archive>
+            _arguments \
+                '(-w --windows)'{-w,--windows}'[Windows build]' \
+                '(-m --mac)'{-m,--mac}'[Mac build]' \
+                '(-f --force)'{-f,--force}'[Overwrite existing]' \
+                '*:archive:_ren_archives'
+            ;;
+        cleanup|clean)
+            (( CURRENT == 3 )) && _ren_cleanup_targets
+            ;;
+        help|h)
+            (( CURRENT == 3 )) && _ren_help_topics
+            ;;
+    esac
+}
+
+_ren "$@"

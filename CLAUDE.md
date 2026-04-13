@@ -79,6 +79,7 @@ darwin-rebuild --rollback                 # Undo last change
 ## Gotchas
 
 - **`nix flake check` is slow**: Use `nix eval nix/#darwinConfigurations.X.system --apply 'x: "ok"'` for quick validation
+- **Atuin drives zsh-autosuggestions**: `atuin init zsh` sets `ZSH_AUTOSUGGEST_STRATEGY=(atuin)` (runs after `initContent`). If you want HISTFILE-driven inline suggestions, override via precmd hook — see `_fix_autosuggest_strategy` in `zsh.nix`
 - **Homebrew + Home Manager pattern**: Use `mkHomebrewWrapper` from `mcp-shared.nix` to install via Homebrew but keep Home Manager config (see `claude.nix`, `mise.nix`, `codex.nix`, `gemini.nix`)
 - **deadnix catches unused module args**: Don't add `lib` to module args unless it's actually used in the body — use `if/then/else` over `lib.optionalAttrs` when simpler
 - **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`

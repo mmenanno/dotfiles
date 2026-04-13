@@ -82,14 +82,17 @@ in
       bindkey '^[w' kill-region
 
       # History
-      HISTDUP=erase
       setopt appendhistory
       setopt sharehistory
       setopt hist_ignore_space
       setopt hist_ignore_all_dups
       setopt hist_save_no_dups
-      setopt hist_ignore_dups
       setopt hist_find_no_dups
+
+      # Suggestion filtering: strip one-off args from saved history and keep
+      # zsh-autosuggestions reading from $history (not atuin). See comments in
+      # the sourced file.
+      source ${config.home.homeDirectory}/dotfiles/zsh/history.zsh
 
       # Completion styling
       zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
