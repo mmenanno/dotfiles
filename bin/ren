@@ -241,16 +241,18 @@ extract_version() {
     local basename=$(normalize_basename "$filename")
 
     # Try episodic pattern first (S1-C1-E01-A)
-    if [[ "$basename" =~ -(S[0-9]+-C[0-9]+-E[0-9]+-[A-Z]+)${PLATFORM_SUFFIX_PATTERN} ]]; then
+    # Pattern must be assigned to a variable: zsh's `=~` strips backslashes
+    # from inline patterns (so `\.` becomes `.` = "any char"), but preserves
+    # them when the pattern comes from a parameter expansion.
+    local episodic_re="-(${EPISODIC_PATTERN})${PLATFORM_SUFFIX_PATTERN}"
+    if [[ "$basename" =~ $episodic_re ]]; then
         echo "${match[1]}"
         return 0
     fi
 
     # Try numeric version pattern (v1.0, 1.0.1a, etc.)
-    # The regex matches version numbers with optional 'v' prefix, patch versions, letter suffixes,
-    # and platform-specific extensions (common in adult game distribution)
-    # We wrap the version pattern in a capture group to extract just the numeric version
-    if [[ "$basename" =~ -[vr]?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN} ]]; then
+    local version_re="-[vr]?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN}"
+    if [[ "$basename" =~ $version_re ]]; then
         echo "${match[1]}"
         return 0
     fi
