@@ -292,37 +292,28 @@ normalize_game_name() {
     # Remove .app extension if present
     name="${name%.app}"
 
-    # Remove common game release suffixes (FULL, FINAL, COMPLETE, etc.)
-    # These can appear in the middle (e.g., "Game-0.38-FULL-mac") or at end
-    name=$(echo "$name" | sed -E 's/-(FULL|FINAL|COMPLETE|FIXED|UNCENSORED|DEFINITIVE|ULTIMATE)//gi')
-
-    # Remove episodic version + platform suffix combinations
-    # Handle patterns like: S1-C1-E01-A, S1-C1-E01-A-mac, etc.
-    while [[ "$name" =~ -${EPISODIC_FULL_PATTERN}$ ]]; do
-        name=$(echo "$name" | sed -E "s/-${EPISODIC_FULL_PATTERN}\$//")
-    done
-
-    # Remove numeric version + platform suffix combinations repeatedly
-    # Some game releases have redundant version tags in the filename (e.g., "GameName-0.36.dv-mac-0.36")
-    # This can happen when repackers append version info or when developers duplicate metadata
-    # Loop until no more matches to handle all duplicates
-    while [[ "$name" =~ -${VERSION_FULL_PATTERN}$ ]]; do
-        name=$(echo "$name" | sed -E "s/-${VERSION_FULL_PATTERN}\$//")
-    done
-
-    # Clean up any remaining standalone platform suffixes (in case they weren't part of version pattern)
-    name=$(echo "$name" | sed -E "s/${PLATFORM_SUFFIX_PATTERN}\$//")
-
-    # Clean up any trailing dots or dashes
-    name=$(echo "$name" | sed -E 's/[\.\-]+$//')
+    # Consolidate all regex work into a single sed pipeline — the previous
+    # version forked ~7 sed/echo subshells per call, which was visible when
+    # `ren list` rendered many games. Grouping trailing version suffixes with
+    # `(...)+` handles repeated tags (e.g., "GameName-0.36.dv-mac-0.36") that
+    # the old code needed explicit while-loops to strip.
+    #   1. Strip release tags (FULL, FINAL, ...) anywhere
+    #   2. Strip one or more trailing episodic version+platform suffixes
+    #   3. Strip one or more trailing numeric version+platform suffixes
+    #   4. Strip a leftover standalone platform suffix
+    #   5. Strip trailing dots/dashes
+    #   6. Insert space at camelCase boundaries (lowercase/digit → uppercase)
+    name=$(echo "$name" | sed -E \
+        -e 's/-(FULL|FINAL|COMPLETE|FIXED|UNCENSORED|DEFINITIVE|ULTIMATE)//gi' \
+        -e "s/(-${EPISODIC_FULL_PATTERN})+\$//" \
+        -e "s/(-${VERSION_FULL_PATTERN})+\$//" \
+        -e "s/${PLATFORM_SUFFIX_PATTERN}\$//" \
+        -e 's/[.-]+$//' \
+        -e 's/([a-z0-9])([A-Z])/\1 \2/g')
 
     # Convert dashes/underscores to spaces
     name="${name//-/ }"
     name="${name//_/ }"
-
-    # Convert camelCase to spaces (e.g., "30YearOldVirgin" -> "30 Year Old Virgin")
-    # Insert space before capital letters that follow lowercase or numbers
-    name=$(echo "$name" | sed -E 's/([a-z0-9])([A-Z])/\1 \2/g')
 
     echo "$name"
 }
@@ -438,6 +429,52 @@ get_size_human() {
     /usr/bin/du -sh "$target" 2>/dev/null | /usr/bin/awk '{print $1}'
 }
 
+# Format a KB value as human-readable size (matches `du -sh` style).
+# Pure zsh — avoids forking for each row rendered in cmd_list.
+format_size_kb() {
+    local kb=$1
+    if (( kb < 1024 )); then
+        print -- "${kb}K"
+    elif (( kb < 1048576 )); then
+        printf '%.1fM\n' $(( kb / 1024.0 ))
+    elif (( kb < 1073741824 )); then
+        printf '%.1fG\n' $(( kb / 1048576.0 ))
+    else
+        printf '%.1fT\n' $(( kb / 1073741824.0 ))
+    fi
+}
+
+# Compute `du -sk` sizes for many directories in parallel and populate a
+# caller-named associative array mapping path → size in KB.
+# Serial `du` is the dominant cost anywhere we iterate game dirs; fanning out
+# keeps the slowest traversal as the wall-clock floor instead of the sum.
+# Caller must `local -A <var>` before calling.
+# Usage: compute_sizes_kb <assoc_var_name> <dir...>
+compute_sizes_kb() {
+    local result_var="$1"
+    shift
+    if (( $# == 0 )); then
+        return 0
+    fi
+
+    local -a dirs=("$@")
+    local tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/renpy-sizes.XXXXXX")
+    local idx=1
+    for dir in "${dirs[@]}"; do
+        /usr/bin/du -sk "$dir" 2>/dev/null | /usr/bin/awk '{print $1}' > "$tmpdir/$idx" &
+        ((idx++))
+    done
+    wait
+
+    local -a pairs=()
+    for ((idx=1; idx <= ${#dirs[@]}; idx++)); do
+        pairs+=("${dirs[$idx]}" "$(<$tmpdir/$idx)")
+    done
+    rm -rf "$tmpdir"
+
+    eval "$result_var=(\"\${pairs[@]}\")"
+}
+
 # Get relative time (e.g., "2 days ago")
 get_relative_time() {
     local timestamp="$1"
@@ -496,6 +533,7 @@ build_game_selection_list() {
     local -A game_versions  # base_name -> space-separated list of version directories
     local -A symlink_targets  # symlink name -> target directory basename
     local -a processing_order=()  # For time-based sorting: "mtime:dirname" entries
+    local -a real_dirs=()  # Absolute paths of all real game dirs (for size fan-out)
     local -a local_games=()
     local -A local_map=()
 
@@ -521,6 +559,7 @@ build_game_selection_list() {
             else
                 game_versions[$base_name]="${game_versions[$base_name]} $name"
             fi
+            real_dirs+=("$item")
 
             # For time-based sorting, track modification time
             if [[ "$sort_by_time" == "true" ]]; then
@@ -530,6 +569,13 @@ build_game_selection_list() {
         fi
     done
 
+    # Compute sizes once in parallel when the menu shows them — previously each
+    # row spawned a serial `du` which made the cleanup menu visibly slow.
+    local -A sizes_kb_map=()
+    if [[ "$include_size" == "true" ]]; then
+        compute_sizes_kb sizes_kb_map "${real_dirs[@]}"
+    fi
+
     # Second pass: build display list with normalized names
     if [[ "$sort_by_time" == "true" ]]; then
         # Sort by time (newest first) and create display names
@@ -538,7 +584,7 @@ build_game_selection_list() {
             local display_name=$(format_game_display_name "$dir_name")
 
             if [[ "$include_size" == "true" ]]; then
-                local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                local size=$(format_size_kb ${sizes_kb_map[$GAMES_DIR/$dir_name]:-0})
                 display_name="$display_name ($size)"
             fi
 
@@ -556,7 +602,7 @@ build_game_selection_list() {
                 local display_name=$(format_game_display_name "$dir_name")
 
                 if [[ "$include_size" == "true" ]]; then
-                    local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                    local size=$(format_size_kb ${sizes_kb_map[$GAMES_DIR/$dir_name]:-0})
                     display_name="$display_name ($size)"
                 fi
 
@@ -572,7 +618,7 @@ build_game_selection_list() {
                     local display_name=$(format_game_display_name "$dir_name" "$is_latest")
 
                     if [[ "$include_size" == "true" ]]; then
-                        local size=$(get_size_human "$GAMES_DIR/$dir_name")
+                        local size=$(format_size_kb ${sizes_kb_map[$GAMES_DIR/$dir_name]:-0})
                         display_name="$display_name ($size)"
                     fi
 
@@ -880,32 +926,38 @@ cmd_list() {
         return 0
     fi
 
+    # Collect real game directories (skip symlinks — those point to versioned
+    # dirs already listed).
+    local -a dirs=()
+    for item in "$GAMES_DIR"/*(N); do
+        [[ -L "$item" ]] && continue
+        [[ -d "$item" ]] || continue
+        dirs+=("$item")
+    done
+
+    if [[ ${#dirs[@]} -eq 0 ]]; then
+        log_info "No games installed"
+        return 0
+    fi
+
+    local -A sizes_kb_map=()
+    compute_sizes_kb sizes_kb_map "${dirs[@]}"
+
     echo ""
     printf "${BOLD}%-30s %-13s %-6s %-10s %-15s${NC}\n" "GAME NAME" "VERSION" "TYPE" "SIZE" "INSTALLED"
     printf "${DIM}%s${NC}\n" "$(printf '%.0s─' {1..78})"
 
-    for item in "$GAMES_DIR"/*(N); do
-        # Skip symlinks - they point to real directories which are already listed
-        # Symlinks are used to track "latest" version for Windows builds
-        if [[ -L "$item" ]]; then
-            continue
-        fi
-
-        if [[ ! -d "$item" ]]; then
-            continue
-        fi
-
-        local name=$(basename "$item")
-        local version="unknown"
-        local type="Win"
-        local size=$(get_size_human "$item")
-        local mtime=$(stat -f %m "$item" 2>/dev/null || echo 0)
+    local total_kb=0
+    for dir in "${dirs[@]}"; do
+        local name=$(basename "$dir")
+        local size_kb=${sizes_kb_map[$dir]:-0}
+        total_kb=$((total_kb + size_kb))
+        local size=$(format_size_kb $size_kb)
+        local mtime=$(stat -f %m "$dir" 2>/dev/null || echo 0)
         local installed=$(get_relative_time "$mtime")
+        local version=$(extract_version "$name")
 
-        # Extract version
-        version=$(extract_version "$name")
-
-        # Determine type (plain text, no colors yet)
+        local type="" type_color=""
         if [[ "$name" == *.app ]]; then
             type="Mac"
             type_color="$GREEN"
@@ -914,13 +966,16 @@ cmd_list() {
             type_color="$BLUE"
         fi
 
-        # Normalize the display name
         name=$(normalize_game_name "$name")
 
         printf "%-30s ${CYAN}%-13s${NC} ${type_color}%-6s${NC} %-10s ${DIM}%-15s${NC}\n" \
             "$name" "$version" "$type" "$size" "$installed"
     done
 
+    echo ""
+    echo ""
+    printf "${BOLD}Total library size:${NC} %s across %s\n" \
+        "$(format_size_kb $total_kb)" "$(pluralize ${#dirs[@]} game)"
     echo ""
 }
 
@@ -945,14 +1000,18 @@ cmd_cleanup_tmp() {
         return 0
     fi
 
-    # Calculate total size
-    local total_size=$(du -sh "$TEMP_BASE"/renpy-* 2>/dev/null | awk '{sum+=$1} END {print sum"M"}' || echo "unknown")
+    # Calculate total size. The previous version summed `du -sh` output with
+    # awk, which silently stripped the unit suffix — "4.2G" + "512M" became
+    # 516.2 and the result was always labeled "M" regardless of actual size.
+    local -A tmp_sizes_kb=()
+    compute_sizes_kb tmp_sizes_kb "${temp_dirs[@]}"
+    local total_kb=0
+    for dir in "${temp_dirs[@]}"; do
+        total_kb=$((total_kb + ${tmp_sizes_kb[$dir]:-0}))
+    done
+    local total_size=$(format_size_kb $total_kb)
 
-    if (( ${#temp_dirs[@]} == 1 )); then
-        log_info "Found 1 temporary directory ($total_size)"
-    else
-        log_info "Found ${#temp_dirs[@]} temporary directories ($total_size)"
-    fi
+    log_info "Found $(pluralize ${#temp_dirs[@]} "temporary directory" "temporary directories") ($total_size)"
 
     if ! gum_clean confirm "Remove all temporary directories?"; then
         log_info "Cancelled"
