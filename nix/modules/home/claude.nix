@@ -419,6 +419,7 @@ in
 
     settings = {
       respectGitignore = false;
+      skipAllowlistPrompt = true;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
       model = "opus[1m]";
