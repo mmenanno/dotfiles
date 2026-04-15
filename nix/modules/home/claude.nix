@@ -32,9 +32,11 @@ let
     "bundle:*"
     "bin/bundle:*"
     "ruby --version"
-  ] ++ (map (tool: "bundle exec ${tool}:*") coreRubyTools)
-      ++ (map (tool: "${tool}:*") coreRubyTools)
-      ++ (map (tool: "bin/${tool}:*") coreRubyTools);
+  ] ++ lib.concatMap (tool: [
+    "bundle exec ${tool}:*"
+    "${tool}:*"
+    "bin/${tool}:*"
+  ]) coreRubyTools;
   # --- Git operations (status, diff, log, commit, branch, etc.) ---
   gitOps = [
     "git status"
@@ -417,6 +419,7 @@ in
 
     settings = {
       respectGitignore = false;
+      skipAllowlistPrompt = true;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
       model = "opus[1m]";
@@ -528,7 +531,7 @@ in
           ++ slackAiMcpAskTools
           ++ snowflakeAiMcpAskTools
         ));
-        defaultMode = "acceptEdits";
+        defaultMode = "auto";
         additionalDirectories = [];
       };
       statusLine = {

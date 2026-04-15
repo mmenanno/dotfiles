@@ -112,8 +112,11 @@ in
 
       eval "$(pay-respects zsh --alias)"
 
-      # Initialize mise with shims for fast shell startup
-      eval "$(${pkgs.mise}/bin/mise activate zsh --shims)"
+      # Initialize mise shims once per session (not per subshell)
+      if [[ -z "$MISE_SHIMS_INITIALIZED" ]]; then
+        export MISE_SHIMS_INITIALIZED=1
+        eval "$(${pkgs.mise}/bin/mise activate zsh --shims)"
+      fi
 
       # Initialize zoxide only in interactive shells
       if [[ $- == *i* ]]; then
