@@ -14,6 +14,12 @@ in
     enable = true;
 
     initContent = ''
+      # Fix stale zinit symlinks after Nix store GC or package upgrades
+      if [[ -L "$HOME/.local/share/zinit/plugins/_local---zinit/_zinit" ]] && \
+         ! [[ -e "$HOME/.local/share/zinit/plugins/_local---zinit/_zinit" ]]; then
+        rm -rf "$HOME/.local/share/zinit/plugins/_local---zinit"
+      fi
+
       # Load zinit
       source ${pkgs.zinit}/share/zinit/zinit.zsh
 
