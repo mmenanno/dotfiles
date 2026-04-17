@@ -40,7 +40,7 @@ in
         rm "$target"
         install -m 644 "$store_path" "$target"
         install -m 644 "$store_path" "$baseline"
-        echo "mutable-files: converted symlink to writable copy: $rel_path"
+        echo -e "\033[0;32m✓\033[0m Converted symlink to writable copy: $rel_path"
         return
       fi
 
@@ -48,7 +48,7 @@ in
       if [ ! -f "$target" ]; then
         install -m 644 "$store_path" "$target"
         install -m 644 "$store_path" "$baseline"
-        echo "mutable-files: created writable copy: $rel_path"
+        echo -e "\033[0;32m✓\033[0m Created writable copy: $rel_path"
         return
       fi
 
@@ -62,7 +62,7 @@ in
       if [ -f "$baseline" ] && cmp -s "$target" "$baseline"; then
         install -m 644 "$store_path" "$target"
         install -m 644 "$store_path" "$baseline"
-        echo "mutable-files: updated writable copy: $rel_path"
+        echo -e "\033[0;32m✓\033[0m Updated writable copy: $rel_path"
         return
       fi
 

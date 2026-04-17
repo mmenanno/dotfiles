@@ -1,7 +1,16 @@
-{ lib, pkgs, ... }:
+{ lib, pkgs, isWorkMachine ? false, ... }:
 
 let
-  extensions = [
+  workOnlyExtensions = [
+    "circleci.circleci"
+    "launchdarklyofficial.launchdarkly"
+    "ms-python.black-formatter"
+    "noku.rails-run-spec-vscode"
+    "soutaro.steep-vscode"
+    "sporto.rails-go-to-spec"
+    "ziyasal.vscode-open-in-github"
+  ];
+  extensions = (lib.optionals isWorkMachine workOnlyExtensions) ++ [
     "alefragnani.project-manager"
     "alexcvzz.vscode-sqlite"
     "aliariff.auto-add-brackets"
@@ -51,6 +60,7 @@ let
     "shopify.ruby-extensions-pack"
     "shopify.ruby-lsp"
     "sorbet.sorbet-vscode-extension"
+    "soutaro.rbs-syntax"
     "stylelint.vscode-stylelint"
     "tamasfe.even-better-toml"
     "tomoki1207.pdf"

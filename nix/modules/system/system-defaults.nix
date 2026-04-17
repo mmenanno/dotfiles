@@ -148,12 +148,12 @@ in
 
   # Create a dock setup script that runs as the user
   system.activationScripts.extraActivation.text = ''
-    echo "Creating dock setup script"
+    echo -e "\033[0;34mℹ\033[0m Creating dock setup script"
 
     # Create the script with the actual paths expanded
     cat > /usr/local/bin/setup-dock << 'SCRIPT_END'
     #!/bin/bash
-    echo "Setting up dock for user $(whoami)"
+    echo -e "\033[0;34mℹ\033[0m Setting up dock for user $(whoami)"
 
     # Optimized dock setup - batch operation
     ${dockSetupCommand}
@@ -184,7 +184,7 @@ in
 
     # Restart Dock to apply changes
     killall Dock 2>/dev/null || true
-    echo "Dock setup complete with all ${username}'s apps!"
+    echo -e "\033[0;32m✓\033[0m Dock setup complete with all ${username}'s apps!"
     SCRIPT_END
 
     # Make script executable
@@ -193,15 +193,15 @@ in
     # Run the script as the user
     su ${username} -c "/usr/local/bin/setup-dock"
 
-    echo "Dock setup script created and executed"
-    echo "You can re-run it anytime with: setup-dock"
+    echo -e "\033[0;32m✓\033[0m Dock setup script created and executed"
+    echo -e "\033[0;34mℹ\033[0m You can re-run it anytime with: setup-dock"
 
     # iTerm2: Set profile defaults
     ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
     if [ -f "$ITERM_PLIST" ]; then
       su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Custom Directory' Recycle\" '$ITERM_PLIST'" 2>/dev/null || true
       su ${username} -c "/usr/libexec/PlistBuddy -c \"Set ':New Bookmarks:0:Normal Font' MesloLGSNFM-Regular\ 11\" '$ITERM_PLIST'" 2>/dev/null || true
-      echo "iTerm2 profile updated: font and directory settings"
+      echo -e "\033[0;32m✓\033[0m iTerm2 profile updated: font and directory settings"
     fi
 
     # Terminal.app: Set font to MesloLGS Nerd Font 11pt
@@ -233,11 +233,11 @@ in
     FONTSCRIPT
       su ${username} -c "osascript '$FONT_SCRIPT' '$TERMINAL_PLIST'" >/dev/null 2>&1 || true
       rm -f "$FONT_SCRIPT"
-      echo "Terminal.app profile updated: font set to MesloLGS Nerd Font 11pt"
+      echo -e "\033[0;32m✓\033[0m Terminal.app profile updated: font set to MesloLGS Nerd Font 11pt"
     fi
 
     # Force reload of preference cache to apply natural scrolling setting
-    echo "Reloading trackpad preferences..."
+    echo -e "\033[0;34mℹ\033[0m Reloading trackpad preferences..."
     killall cfprefsd 2>/dev/null || true
   '';
 }
