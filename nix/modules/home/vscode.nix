@@ -93,6 +93,7 @@ in
         "github.copilot.editor.enableAutoCompletions": true,
         "editor.wordWrap": "on",
         "workbench.activityBar.orientation": "vertical",
+        "workbench.secondarySideBar.defaultVisibility": "hidden",
         "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace, MesloLGS Nerd Font ",
         "rubyLsp.rubyVersionManager": { "identifier": "mise", "path": "${homeDirectory}/.local/bin/mise" },
         "diffEditor.ignoreTrimWhitespace": false,

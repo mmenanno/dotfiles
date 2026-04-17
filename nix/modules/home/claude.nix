@@ -420,6 +420,7 @@ in
     settings = {
       respectGitignore = false;
       skipAllowlistPrompt = true;
+      skipAutoPermissionPrompt = true;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
       model = "opus[1m]";
@@ -531,7 +532,7 @@ in
           ++ slackAiMcpAskTools
           ++ snowflakeAiMcpAskTools
         ));
-        defaultMode = "auto";
+        defaultMode = "acceptEdits";
         additionalDirectories = [];
       };
       statusLine = {
