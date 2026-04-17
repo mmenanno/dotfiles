@@ -591,20 +591,25 @@ managed_revert() {
         return 1
     fi
 
+    local total=${#RESOLVED_NAMES[@]}
+    local reverted=0
+
     for name in "${RESOLVED_NAMES[@]}"; do
         local path="${MANAGED_FILES[$name]}"
         local target="$HOME/$path"
         local baseline="$BASELINE_DIR/$path"
 
         if [ ! -f "$baseline" ]; then
-            log_error "No baseline for $name: $path"
+            log_error "Failed to revert ${name} (${path}): no baseline"
             continue
         fi
 
         cp "$baseline" "$target"
         chmod 644 "$target"
-        log_success "Reverted to Nix version for: ${name} ($path)"
+        reverted=$((reverted + 1))
     done
+
+    log_success "Reverted ${reverted}/${total} managed files to Nix baseline"
 }
 
 managed_apply() {

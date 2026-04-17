@@ -57,6 +57,7 @@ dotfiles/
 - `zsh.nix` - Shell config with zinit plugin management
 - `mutable-files.nix` - Writable copies of app config files with conflict detection
 - `modern-cli-tools.nix` - bat, eza, ripgrep, fd, atuin, etc.
+- `ide-extensions.nix` - VS Code extension list; work-only extensions go in `workOnlyExtensions` (gated by `isWorkMachine`)
 
 ## Adding a New Module
 
@@ -90,3 +91,4 @@ darwin-rebuild --rollback                 # Undo last change
 - **New Nix files must be `git add`ed before eval**: Nix flakes only see git-tracked files — `nix eval` will error on untracked `.nix` files
 - **delta is the git pager**: `git diff --no-index` pipes through delta; use `git -c core.pager= diff` to bypass
 - **deadnix warnings**: Remove unused `let` bindings - deadnix (part of `nx lint`) fails on dead code
+- **Activation-script output style**: User-facing `echo` in activation scripts (`nix/modules/**`) uses inline ANSI — `\033[0;34mℹ\033[0m` info, `\033[0;32m✓\033[0m` success, `\033[1;33m!\033[0m` warning, `\033[0;31m✗\033[0m` error. Can't source `bin/shared` here. See `ruby.nix`, `mutable-files.nix`, `system-defaults.nix` for examples.
