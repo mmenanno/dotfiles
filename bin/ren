@@ -1032,6 +1032,57 @@ cmd_cleanup_tmp() {
 # Command: Cleanup Games
 # ============================================================================
 
+# Remove all installed versions of a single game by name (plus its symlink).
+# Mirrors the lookup behavior of `ren launch <name>` so completions work the
+# same way for both commands.
+cleanup_named_game() {
+    local game_name="$1"
+
+    local -a versions=("${(@f)$(find_game_versions "$game_name")}")
+    local -a dirs=()
+    for entry in "${versions[@]}"; do
+        [[ -n "$entry" ]] && dirs+=("${entry#*:}")
+    done
+
+    # Fall back to a direct match (handles .app bundles, which
+    # find_game_versions skips because they have no -VERSION suffix).
+    if [[ ${#dirs[@]} -eq 0 ]]; then
+        local resolved=$(find_game_dir "$game_name")
+        if [[ -n "$resolved" ]]; then
+            dirs+=("$resolved")
+        fi
+    fi
+
+    if [[ ${#dirs[@]} -eq 0 ]]; then
+        log_error "Game not found: $game_name"
+        return 1
+    fi
+
+    local display_name=$(normalize_game_name "$game_name")
+    log_warning "Game(s) to be removed for '$display_name':"
+    for dir in "${dirs[@]}"; do
+        echo "  - $(basename "$dir")"
+    done
+    echo ""
+
+    if ! gum_clean confirm "Remove $(pluralize ${#dirs[@]} "this version" "these versions")?"; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    for dir in "${dirs[@]}"; do
+        log_verbose "Removing: $dir"
+        rm -rf "$dir"
+    done
+
+    # Remove tracking symlink if present (Windows builds use one).
+    if [[ -L "$GAMES_DIR/$game_name" ]]; then
+        rm "$GAMES_DIR/$game_name"
+    fi
+
+    log_success "Removed $(pluralize ${#dirs[@]} version) of $display_name"
+}
+
 # Interactively remove installed games (all or selected)
 cmd_cleanup_games() {
     if is_games_dir_empty; then
@@ -1290,10 +1341,11 @@ $(print_help_command "launch" "[game-name]" \
 $(print_help_command "list" "" \
     "List all installed games with versions and details")
 
-$(print_help_command "cleanup" "tmp | games" \
+$(print_help_command "cleanup" "tmp | games | game <game-name>" \
     "Clean up temporary files or installed games" \
-    "  tmp      Remove temporary extraction directories" \
-    "  games    Interactive removal of installed games")
+    "  tmp                 Remove temporary extraction directories" \
+    "  games               Interactive removal of installed games" \
+    "  game <game-name>    Remove all versions of a specific game")
 
 $(print_help_command "mod" "[game-name] [mod-path]" \
     "Install mod into game (overwrites conflicts)" \
@@ -1409,8 +1461,9 @@ ${BOLD}COMMAND: ren cleanup${NC}
 Clean up temporary files or installed games.
 
 ${BOLD}USAGE:${NC}
-    ren cleanup tmp          # Remove temp directories
-    ren cleanup games        # Remove installed games (interactive)
+    ren cleanup tmp                 # Remove temp directories
+    ren cleanup games               # Remove installed games (interactive)
+    ren cleanup game <game-name>    # Remove all versions of a specific game
 
 ${BOLD}CLEANUP MODES:${NC}
 
@@ -1421,9 +1474,13 @@ ${BOLD}CLEANUP MODES:${NC}
           1. Remove all games (with confirmation)
           2. Select specific games to remove (multi-select)
 
+    ${CYAN}game <game-name>${NC} - Remove all installed versions of the named game
+          (matches the same way as 'ren launch <game-name>')
+
 ${BOLD}EXAMPLES:${NC}
     ${GREEN}ren cleanup tmp${NC}
     ${GREEN}ren cleanup games${NC}
+    ${GREEN}ren cleanup game MyGame${NC}
 
 EOF
             ;;
@@ -1497,7 +1554,18 @@ main() {
                     cmd_cleanup_tmp "$@"
                     ;;
                 games|g)
+                    if [[ -n "${1:-}" && "$1" != "-h" && "$1" != "--help" ]]; then
+                        log_error "Use 'ren cleanup game <game-name>' (singular) to remove a specific game"
+                        return 1
+                    fi
                     cmd_cleanup_games "$@"
+                    ;;
+                game)
+                    if [[ -z "${1:-}" || "$1" == "-h" || "$1" == "--help" ]]; then
+                        show_command_help "cleanup"
+                        return 0
+                    fi
+                    cleanup_named_game "$1"
                     ;;
                 *)
                     log_error "Unknown cleanup target: $subcommand"

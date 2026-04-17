@@ -37,6 +37,7 @@ _ren() {
         local -a targets=(
             'tmp:Remove temporary extraction directories'
             'games:Interactive removal of installed games'
+            'game:Remove all versions of a specific game'
         )
         _describe 'target' targets
     }
@@ -75,7 +76,13 @@ _ren() {
                 '*:archive:_ren_archives'
             ;;
         cleanup|clean)
-            (( CURRENT == 3 )) && _ren_cleanup_targets
+            if (( CURRENT == 3 )); then
+                _ren_cleanup_targets
+            elif (( CURRENT == 4 )); then
+                case "$words[3]" in
+                    game) _ren_games ;;
+                esac
+            fi
             ;;
         help|h)
             (( CURRENT == 3 )) && _ren_help_topics
