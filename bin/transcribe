@@ -218,7 +218,7 @@ if [[ "$QUIET" == false ]]; then
     if [[ -n "$OUTPUT_DIR" ]]; then
         printf "  ${BOLD}Output:${NC}   ${CYAN}%s${NC}\n" "$OUTPUT_DIR"
     else
-        printf "  ${BOLD}Output:${NC}   ${DIM}next to each input${NC}\n"
+        printf "  ${BOLD}Output:${NC}   ${DIM}%s${NC}\n" "next to each input"
     fi
     printf "  ${BOLD}Files:${NC}    %d  ${DIM}(total %s)${NC}\n" "${#FILES[@]}" "$(format_duration "$TOTAL_SECS_INT")"
     echo ""
