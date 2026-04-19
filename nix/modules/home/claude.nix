@@ -532,7 +532,7 @@ in
           ++ slackAiMcpAskTools
           ++ snowflakeAiMcpAskTools
         ));
-        defaultMode = "acceptEdits";
+        defaultMode = "auto";
         additionalDirectories = [];
       };
       statusLine = {
