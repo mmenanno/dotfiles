@@ -1,0 +1,372 @@
+#!/bin/bash
+# transcribe - Transcribe audio/video files using OpenAI Whisper
+# Usage: transcribe [options] <file|dir> [file|dir ...]
+
+set -euo pipefail
+shopt -s nullglob
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+
+USE_ICON_STYLE=true
+
+# Defaults
+MODEL="turbo"
+LANGUAGE="en"
+FORMAT="all"
+OUTPUT_DIR=""
+FORCE=false
+ASSUME_YES=false
+VERBOSE=false
+QUIET=false
+TARGETS=()
+
+# Extensions whisper/ffmpeg can handle (audio + video with audio tracks)
+AUDIO_EXTENSIONS=(ogg oga m4a mp3 mp4 wav flac aac opus wma webm mkv mov mpg mpeg mpga)
+
+gum_clean() {
+    env -u BOLD -u DIM gum "$@"
+}
+
+show_help() {
+    cat << EOF
+${BOLD}transcribe${NC} - Transcribe audio/video files using OpenAI Whisper
+
+${BOLD}USAGE:${NC}
+    transcribe [OPTIONS] <FILE|DIRECTORY>...
+
+${BOLD}OPTIONS:${NC}
+    -m, --model MODEL       Whisper model: tiny, base, small, medium,
+                            large-v3, turbo (default: ${CYAN}turbo${NC})
+    -l, --language LANG     Language code, e.g. en, fr, es
+                            (default: ${CYAN}en${NC}; use 'auto' for detect)
+    -o, --output DIR        Output directory (default: next to each input)
+    -f, --format FMT        Output format: txt, srt, vtt, tsv, json, all
+                            (default: ${CYAN}all${NC})
+    -F, --force             Overwrite existing transcript files
+    -y, --yes               Skip confirmation prompt
+    -q, --quiet             Suppress non-error output
+    -v, --verbose           Show verbose whisper output
+    -h, --help              Show this help
+
+${BOLD}SUPPORTED FORMATS:${NC}
+    Audio: ogg, m4a, mp3, wav, flac, aac, opus, wma
+    Video: mp4, mkv, webm, mov, mpg (audio track extracted)
+
+${BOLD}MODELS (speed vs accuracy):${NC}
+    tiny < base < small < medium < turbo < large-v3
+    ${DIM}turbo is a distilled large-v2: near-best accuracy, ~6x faster${NC}
+
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}transcribe voice-message.ogg${NC}
+    ${GREEN}transcribe -m large-v3 interview.m4a${NC}
+    ${GREEN}transcribe -o ~/transcripts ~/Downloads/recordings/${NC}
+    ${GREEN}transcribe -y -f txt *.mp3${NC}
+EOF
+}
+
+# Parse args
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) show_help; exit 0 ;;
+        -m|--model) require_argument "$1" "${2:-}"; MODEL="$2"; shift 2 ;;
+        -l|--language) require_argument "$1" "${2:-}"; LANGUAGE="$2"; shift 2 ;;
+        -o|--output) require_argument "$1" "${2:-}"; OUTPUT_DIR="$2"; shift 2 ;;
+        -f|--format) require_argument "$1" "${2:-}"; FORMAT="$2"; shift 2 ;;
+        -F|--force) FORCE=true; shift ;;
+        -y|--yes) ASSUME_YES=true; shift ;;
+        -q|--quiet) QUIET=true; shift ;;
+        -v|--verbose) VERBOSE=true; shift ;;
+        --) shift; TARGETS+=("$@"); break ;;
+        -*) log_error "Unknown option: $1"; exit 2 ;;
+        *) TARGETS+=("$1"); shift ;;
+    esac
+done
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    log_error "No input file or directory provided"
+    echo "" >&2
+    show_help >&2
+    exit 2
+fi
+
+# Validate format
+case "$FORMAT" in
+    txt|srt|vtt|tsv|json|all) ;;
+    *) log_error "Invalid format: $FORMAT (expected: txt, srt, vtt, tsv, json, all)"; exit 2 ;;
+esac
+
+# Dependency checks
+check_command whisper "Install via: pip install -U openai-whisper (or 'mise use -g python@3.13 && pip install openai-whisper')"
+check_command ffprobe "Install ffmpeg: brew install ffmpeg"
+
+# Check if a path is an audio/video file we recognize (case-insensitive ext)
+is_audio_file() {
+    local ext="${1##*.}"
+    ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+    for a in "${AUDIO_EXTENSIONS[@]}"; do
+        [[ "$ext" == "$a" ]] && return 0
+    done
+    return 1
+}
+
+# Expand targets (files + directories) into FILES array
+FILES=()
+for target in "${TARGETS[@]}"; do
+    if [[ -d "$target" ]]; then
+        found_any=false
+        # Walk directory entries; match extensions case-insensitively
+        while IFS= read -r -d '' f; do
+            if is_audio_file "$f"; then
+                FILES+=("$f")
+                found_any=true
+            fi
+        done < <(find "$target" -maxdepth 1 -type f -print0 2>/dev/null)
+        if ! $found_any; then
+            log_warning "No audio/video files found in: $target"
+        fi
+    elif [[ -f "$target" ]]; then
+        if is_audio_file "$target"; then
+            FILES+=("$target")
+        else
+            log_warning "Skipping (unrecognized extension): $target"
+        fi
+    else
+        log_error "Not found: $target"
+        exit 1
+    fi
+done
+
+# Deduplicate FILES (bash 3-compatible; macOS /bin/bash has no mapfile)
+if [[ ${#FILES[@]} -gt 0 ]]; then
+    declare -a _DEDUP
+    while IFS= read -r line; do
+        _DEDUP+=("$line")
+    done < <(printf '%s\n' "${FILES[@]}" | awk '!seen[$0]++')
+    FILES=("${_DEDUP[@]}")
+    unset _DEDUP
+fi
+
+if [[ ${#FILES[@]} -eq 0 ]]; then
+    log_error "No audio files to transcribe"
+    exit 1
+fi
+
+# Compute duration + size for each file
+format_duration() {
+    local secs="$1"
+    secs=${secs%.*}  # strip decimal
+    if [[ -z "$secs" || "$secs" == "N/A" ]]; then
+        printf "?"
+        return
+    fi
+    local h=$(( secs / 3600 ))
+    local m=$(( (secs % 3600) / 60 ))
+    local s=$(( secs % 60 ))
+    if (( h > 0 )); then
+        printf "%d:%02d:%02d" "$h" "$m" "$s"
+    else
+        printf "%d:%02d" "$m" "$s"
+    fi
+}
+
+format_size() {
+    local bytes="$1"
+    if (( bytes >= 1073741824 )); then
+        awk -v b="$bytes" 'BEGIN { printf "%.1f GB", b/1073741824 }'
+    elif (( bytes >= 1048576 )); then
+        awk -v b="$bytes" 'BEGIN { printf "%.1f MB", b/1048576 }'
+    elif (( bytes >= 1024 )); then
+        awk -v b="$bytes" 'BEGIN { printf "%.1f KB", b/1024 }'
+    else
+        printf "%d B" "$bytes"
+    fi
+}
+
+TOTAL_SECS=0
+declare -a DURATIONS
+declare -a SIZES
+for f in "${FILES[@]}"; do
+    dur=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$f" 2>/dev/null || echo "")
+    size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
+    DURATIONS+=("$dur")
+    SIZES+=("$size")
+    if [[ -n "$dur" && "$dur" != "N/A" ]]; then
+        TOTAL_SECS=$(awk -v a="$TOTAL_SECS" -v b="$dur" 'BEGIN { print a + b }')
+    fi
+done
+TOTAL_SECS_INT="${TOTAL_SECS%.*}"
+
+# Print header banner
+if [[ "$QUIET" == false ]]; then
+    echo ""
+    if command -v gum &>/dev/null; then
+        gum_clean style \
+            --border rounded \
+            --border-foreground 212 \
+            --padding "0 2" \
+            --margin "0 0" \
+            --bold \
+            "🎙  Transcribe"
+    else
+        echo -e "${BOLD}${CYAN}🎙  Transcribe${NC}"
+    fi
+    echo ""
+    printf "  ${BOLD}Model:${NC}    ${CYAN}%s${NC}\n" "$MODEL"
+    printf "  ${BOLD}Language:${NC} ${CYAN}%s${NC}\n" "$LANGUAGE"
+    printf "  ${BOLD}Format:${NC}   ${CYAN}%s${NC}\n" "$FORMAT"
+    if [[ -n "$OUTPUT_DIR" ]]; then
+        printf "  ${BOLD}Output:${NC}   ${CYAN}%s${NC}\n" "$OUTPUT_DIR"
+    else
+        printf "  ${BOLD}Output:${NC}   ${DIM}%s${NC}\n" "next to each input"
+    fi
+    printf "  ${BOLD}Files:${NC}    %d  ${DIM}(total %s)${NC}\n" "${#FILES[@]}" "$(format_duration "$TOTAL_SECS_INT")"
+    echo ""
+
+    # Show file list
+    for i in "${!FILES[@]}"; do
+        local_dur=$(format_duration "${DURATIONS[$i]%.*}")
+        local_size=$(format_size "${SIZES[$i]}")
+        printf "  ${DIM}%2d.${NC} %s\n" $((i+1)) "$(basename "${FILES[$i]}")"
+        printf "      ${DIM}%s  •  %s${NC}\n" "$local_dur" "$local_size"
+    done
+    echo ""
+fi
+
+# Confirmation
+if [[ "$ASSUME_YES" == false && "$QUIET" == false ]]; then
+    if [[ -t 0 ]] && command -v gum &>/dev/null; then
+        if ! gum_clean confirm "Proceed with transcription?" --default=true; then
+            log_info "Cancelled"
+            exit 0
+        fi
+    else
+        read -r -p "Proceed? [Y/n] " reply
+        if [[ "$reply" =~ ^[Nn] ]]; then
+            log_info "Cancelled"
+            exit 0
+        fi
+    fi
+    echo ""
+fi
+
+# Build whisper args
+WHISPER_ARGS=(
+    --model "$MODEL"
+    --output_format "$FORMAT"
+    --fp16 False
+)
+
+if [[ "$LANGUAGE" != "auto" ]]; then
+    WHISPER_ARGS+=(--language "$LANGUAGE")
+fi
+
+if [[ "$VERBOSE" == true ]]; then
+    WHISPER_ARGS+=(--verbose True)
+else
+    WHISPER_ARGS+=(--verbose False)
+fi
+
+# Process files one at a time so we can:
+# - Place output next to each source (unless -o given)
+# - Skip files that already have transcripts (unless --force)
+# - Show per-file status
+SUCCEEDED=0
+SKIPPED=0
+FAILED=0
+declare -a OUTPUT_FILES
+START_TIME=$SECONDS
+
+for i in "${!FILES[@]}"; do
+    f="${FILES[$i]}"
+    filename="$(basename "$f")"
+    stem="${filename%.*}"
+
+    if [[ -n "$OUTPUT_DIR" ]]; then
+        out_dir="$OUTPUT_DIR"
+    else
+        out_dir="$(dirname "$f")"
+    fi
+
+    mkdir -p "$out_dir"
+
+    # Determine which file to check for existing
+    case "$FORMAT" in
+        all) check_ext="txt" ;;
+        *) check_ext="$FORMAT" ;;
+    esac
+    existing="$out_dir/$stem.$check_ext"
+
+    if [[ -f "$existing" && "$FORCE" == false ]]; then
+        log_warning "Skipping (exists, use -F to overwrite): $filename"
+        SKIPPED=$((SKIPPED + 1))
+        continue
+    fi
+
+    if [[ "$QUIET" == false ]]; then
+        echo ""
+        printf "${BOLD}${BLUE}▶${NC} ${BOLD}[%d/%d]${NC} %s ${DIM}(%s)${NC}\n" \
+            "$((i + 1))" "${#FILES[@]}" "$filename" \
+            "$(format_duration "${DURATIONS[$i]%.*}")"
+    fi
+
+    file_start=$SECONDS
+    if whisper "${WHISPER_ARGS[@]}" --output_dir "$out_dir" "$f"; then
+        elapsed=$((SECONDS - file_start))
+        SUCCEEDED=$((SUCCEEDED + 1))
+
+        # Collect the outputs that were actually produced
+        produced=()
+        for ext in txt srt vtt tsv json; do
+            [[ -f "$out_dir/$stem.$ext" ]] && produced+=("$stem.$ext")
+        done
+        OUTPUT_FILES+=("${produced[@]}")
+
+        if [[ "$QUIET" == false ]]; then
+            word_count=""
+            if [[ -f "$out_dir/$stem.txt" ]]; then
+                word_count=" • $(wc -w < "$out_dir/$stem.txt" | tr -d ' ') words"
+            fi
+            printf "  ${GREEN}✓${NC} done in %s${word_count}\n" "$(format_duration "$elapsed")"
+            for p in "${produced[@]}"; do
+                printf "    ${DIM}→${NC} ${CYAN}%s${NC}\n" "$out_dir/$p"
+            done
+        fi
+    else
+        FAILED=$((FAILED + 1))
+        log_error "Failed to transcribe: $filename"
+    fi
+done
+
+TOTAL_ELAPSED=$((SECONDS - START_TIME))
+
+# Final summary
+if [[ "$QUIET" == false ]]; then
+    echo ""
+    if command -v gum &>/dev/null; then
+        summary="Complete • ${SUCCEEDED} ok"
+        [[ $SKIPPED -gt 0 ]] && summary+=" • ${SKIPPED} skipped"
+        [[ $FAILED -gt 0 ]] && summary+=" • ${FAILED} failed"
+        summary+=" • $(format_duration "$TOTAL_ELAPSED")"
+        if (( FAILED > 0 )); then
+            color=196
+        elif (( SKIPPED > 0 && SUCCEEDED == 0 )); then
+            color=214
+        else
+            color=46
+        fi
+        gum_clean style \
+            --border rounded \
+            --border-foreground "$color" \
+            --padding "0 2" \
+            --bold \
+            "$summary"
+    else
+        echo -e "${BOLD}Complete:${NC} ${GREEN}${SUCCEEDED} ok${NC}, ${YELLOW}${SKIPPED} skipped${NC}, ${RED}${FAILED} failed${NC} in $(format_duration "$TOTAL_ELAPSED")"
+    fi
+    echo ""
+fi
+
+if (( FAILED > 0 )); then
+    exit 1
+fi
