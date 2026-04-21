@@ -54,7 +54,7 @@ let
       "Use #!/bin/bash shebang"
       "Include 'set -euo pipefail' for safety"
       "Must pass shellcheck validation"
-      "**1Password Plugin Pattern**: When using CLI tools with 1Password plugin support (like 'gh') in non-interactive subshells, wrap commands with 'op plugin run --' to ensure proper authentication. Example: op plugin run -- gh repo view"
+      "**1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells where the shell alias isn't visible, wrap commands with 'op plugin run --'. Not needed for 'gh': its token is persisted at ~/.config/gh/hosts.yml by gh.nix, so 'gh' works directly from any context."
     ];
   };
 
@@ -203,10 +203,7 @@ in
 
       ## 1Password CLI
 
-      In scripts/subshells, aliases don't work. Use:
-      ```bash
-      op plugin run -- gh repo view  # Not just 'gh repo view'
-      ```
+      Shell aliases don't inherit into non-interactive subshells. For 1Password-plugin-backed tools whose alias exists only in zsh, wrap with `op plugin run --`. Exception: `gh` has its token persisted in `~/.config/gh/hosts.yml` (see `gh.nix`) and works directly in any context — no `op plugin run --` needed.
 
       ## Shell Commands
 
