@@ -2,10 +2,11 @@
 
 {
   home.file = {
-    # 1Password CLI configuration
+    # 1Password CLI plugin aliases (sourced by zsh for interactive shells).
+    # Note: `gh` no longer aliased here — its token is persisted in ~/.config/gh/hosts.yml
+    # by gh.nix, so `gh` works directly in any context (GUI apps, subshells, CI).
     ".config/op/plugins.sh".text = ''
       export OP_PLUGIN_ALIASES_SOURCED=1
-      alias gh="op plugin run -- gh"
     '';
 
     # Expose a canonical socket path location for reuse by other modules

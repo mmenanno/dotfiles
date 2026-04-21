@@ -14,11 +14,10 @@
   ];
 
   # Home (Home Manager) modules: user programs, shells, editors, dotfiles
-  # NOTE: mcp-shared.nix must precede claude.nix, codex.nix, gemini.nix, mise.nix
+  # NOTE: mcp-shared.nix must precede gh.nix, claude.nix, codex.nix, gemini.nix, mise.nix
   #       (provides mkHomebrewWrapper, mcpServers, githubMcpToken via _module.args)
   # NOTE: ai-globals.nix should be last (generates files referencing other module outputs)
   homeModules = [
-    ./home/gh.nix
     ./home/git.nix
     ./home/ruby.nix
     ./home/ssh.nix
@@ -30,6 +29,7 @@
     ./home/modern-cli-tools.nix
     ./home/onepassword.nix
     ./home/mcp-shared.nix
+    ./home/gh.nix
     ./home/claude.nix
     ./home/claude-skills.nix
     ./home/codex.nix
@@ -52,10 +52,9 @@
   ];
 
   # Work machine home modules
-  # NOTE: mcp-shared.nix must precede claude.nix, mise.nix
+  # NOTE: mcp-shared.nix must precede gh.nix, claude.nix, mise.nix
   # NOTE: ai-globals.nix should be last
   workHomeModules = [
-    ./home/gh.nix
     ./home/git.nix
     ./home/ruby.nix
     ./home/ssh.nix
@@ -67,6 +66,7 @@
     ./home/modern-cli-tools.nix
     ./home/onepassword.nix
     ./home/mcp-shared.nix
+    ./home/gh.nix
     ./home/claude.nix
     ./home/ide-extensions.nix
     ./home/npmrc.nix

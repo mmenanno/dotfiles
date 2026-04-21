@@ -49,7 +49,7 @@ markdownlint **/*.md
 - Include `set -euo pipefail` for safety
 - Must pass `shellcheck` validation
 - Use lowercase, short names (e.g., `nx`, `gbclean`)
-- **1Password Plugin Pattern**: When using CLI tools (like `gh`) that have 1Password plugin support in non-interactive subshells, wrap commands with `op plugin run --` to ensure proper authentication. Example: `op plugin run -- gh repo view`
+- **1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells (where zsh aliases aren't visible), wrap commands with `op plugin run --`. Exception: `gh` — its token is persisted to `~/.config/gh/hosts.yml` by `nix/modules/home/gh.nix`, so `gh` works directly in any context without wrapping.
 
 ### Markdown Documentation
 
@@ -100,19 +100,11 @@ AI agents MAY execute these safe, idempotent operations:
 
 This repository uses 1Password CLI plugins for secure credential management. When writing shell scripts:
 
-1. **Aliases don't work in subshells**: Shell aliases (like `alias gh="op plugin run -- gh"`) don't inherit into non-interactive subshells used by scripts
-2. **Explicit wrapping required**: In scripts that spawn subshells, explicitly wrap plugin-enabled commands:
-
-   ```bash
-   # ✅ CORRECT - Works in scripts and subshells
-   gh_output=$(op plugin run -- gh repo view --json ...)
-
-   # ❌ WRONG - Alias won't work in subshell
-   gh_output=$(gh repo view --json ...)
-   ```
-
-3. **Plugin initialization**: Before using plugins, run `op plugin init <tool>` (e.g., `op plugin init gh`)
-4. **Configuration location**: Plugin aliases are defined in `nix/modules/home/onepassword.nix`
+1. **Aliases don't work in subshells**: Shell aliases set in `~/.config/op/plugins.sh` don't inherit into non-interactive subshells used by scripts.
+2. **Explicit wrapping when a plugin is in play**: When relying on a zsh-only 1Password alias, wrap the command: `result=$(op plugin run -- <tool> ...)`.
+3. **`gh` is the exception**: Its token is persisted declaratively to `~/.config/gh/hosts.yml` by `nix/modules/home/gh.nix` (sourced from `op://Nix/Github/dev_token` at `nx up` time), so `gh` authenticates in any context — Dock-launched GUI apps, non-interactive scripts, CI subprocesses — without `op plugin run --`.
+4. **Plugin initialization**: Before using a new plugin, run `op plugin init <tool>`.
+5. **Configuration location**: Plugin alias declarations live in `nix/modules/home/onepassword.nix`.
 
 For more details, see: <https://developer.1password.com/docs/cli/shell-plugins/troubleshooting/#if-your-script-doesnt-inherit-shell-plugin-aliases>
 
