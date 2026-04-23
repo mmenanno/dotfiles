@@ -1,12 +1,13 @@
-{ config, lib, homeDirectory, ... }:
+{ config, lib, homeDirectory, isWorkMachine ? false, ... }:
 
 let
   mutablePaths = [
     ".claude/settings.json"
     ".config/op/plugins.sh"
-    ".npmrc"
     "Library/Application Support/Code/User/settings.json"
     "Library/Application Support/Code/User/mcp.json"
+  ] ++ lib.optionals isWorkMachine [
+    ".npmrc"
   ];
 
   mutableFiles = map (path: {
