@@ -457,13 +457,14 @@ json_files_equal() {
 }
 # Must match mutablePaths in nix/modules/home/mutable-files.nix
 # Ordered list of shorthand names (used for iteration order)
-MANAGED_NAMES=(claude op vscode vsmcp)
+MANAGED_NAMES=(claude op npmrc vscode vsmcp)
 BASELINE_DIR="$HOME/.local/share/nix-managed-baselines"
 
 # Shorthand -> full path mapping
 declare -A MANAGED_FILES=(
     [claude]=".claude/settings.json"
     [op]=".config/op/plugins.sh"
+    [npmrc]=".npmrc"
     [vscode]="Library/Application Support/Code/User/settings.json"
     [vsmcp]="Library/Application Support/Code/User/mcp.json"
 )
@@ -472,6 +473,7 @@ declare -A MANAGED_FILES=(
 declare -A MANAGED_NIX_SOURCES=(
     [claude]="nix/modules/home/claude.nix"
     [op]="nix/modules/home/onepassword.nix"
+    [npmrc]="nix/modules/home/npmrc.nix"
     [vscode]="nix/modules/home/vscode.nix"
     [vsmcp]="nix/modules/home/vscode.nix"
 )

@@ -4,6 +4,7 @@ let
   mutablePaths = [
     ".claude/settings.json"
     ".config/op/plugins.sh"
+    ".npmrc"
     "Library/Application Support/Code/User/settings.json"
     "Library/Application Support/Code/User/mcp.json"
   ];
