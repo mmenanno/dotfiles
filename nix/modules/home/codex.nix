@@ -16,7 +16,7 @@
       mcp_servers = mcpServers;
     };
 
-    custom-instructions = ''
+    context = ''
       # User Configuration
       - Prefer object-oriented programming patterns where applicable
       - Use descriptive variable names and clear code structure

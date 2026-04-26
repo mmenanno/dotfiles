@@ -1,4 +1,4 @@
-{ config, lib, homeDirectory, isWorkMachine ? false, ... }:
+{ config, lib, pkgs, homeDirectory, isWorkMachine ? false, ... }:
 
 let
   mutablePaths = [
@@ -27,6 +27,24 @@ in
 
   # Deploy writable copies with conflict detection
   home.activation.deployMutableFiles = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    # JSON-aware equality: matches `nx m d` so byte-different but semantically
+    # identical JSON (key reorder, whitespace, trailing newline) isn't flagged
+    # as a conflict.
+    files_equal() {
+      local a="$1" b="$2"
+      case "$a" in
+        *.json)
+          local na nb
+          if na=$(${pkgs.jq}/bin/jq -S . "$a" 2>/dev/null) \
+            && nb=$(${pkgs.jq}/bin/jq -S . "$b" 2>/dev/null); then
+            [ "$na" = "$nb" ]
+            return
+          fi
+          ;;
+      esac
+      cmp -s "$a" "$b"
+    }
+
     deploy_mutable_file() {
       local rel_path="$1"
       local store_path="$2"
@@ -55,13 +73,13 @@ in
       fi
 
       # Case 3: Target content matches Nix content — no conflict, update baseline
-      if cmp -s "$target" "$store_path"; then
+      if files_equal "$target" "$store_path"; then
         install -m 644 "$store_path" "$baseline"
         return
       fi
 
       # Case 4: Target matches baseline — app didn't change, safe to overwrite
-      if [ -f "$baseline" ] && cmp -s "$target" "$baseline"; then
+      if [ -f "$baseline" ] && files_equal "$target" "$baseline"; then
         install -m 644 "$store_path" "$target"
         install -m 644 "$store_path" "$baseline"
         echo -e "\033[0;32m✓\033[0m Updated writable copy: $rel_path"
