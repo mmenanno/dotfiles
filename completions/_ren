@@ -3,6 +3,18 @@
 # Zsh completion for ren (Ren'Py game manager)
 
 _ren() {
+    # Case-insensitive matching for ren completions: `ren launch g` should
+    # offer `GameName`. Falls back through progressively looser matchers:
+    #   1. exact prefix
+    #   2. case-insensitive (typed `g` ↔ candidate `G`, both directions)
+    #   3. partial-word at separators (`-` `_` `.`)
+    #   4. substring anywhere
+    zstyle ':completion:*:*:ren:*' matcher-list \
+        '' \
+        'm:{a-zA-Z}={A-Za-z}' \
+        'r:|[._-]=* r:|=*' \
+        'l:|=* r:|=*'
+
     local -a commands
     commands=(
         'install:Install a game from archive'
