@@ -3,17 +3,15 @@
 # Zsh completion for ren (Ren'Py game manager)
 
 _ren() {
-    # Case-insensitive matching for ren completions: `ren launch g` should
-    # offer `GameName`. Falls back through progressively looser matchers:
-    #   1. exact prefix
-    #   2. case-insensitive (typed `g` ↔ candidate `G`, both directions)
-    #   3. partial-word at separators (`-` `_` `.`)
-    #   4. substring anywhere
-    zstyle ':completion:*:*:ren:*' matcher-list \
-        '' \
-        'm:{a-zA-Z}={A-Za-z}' \
-        'r:|[._-]=* r:|=*' \
-        'l:|=* r:|=*'
+    # Case-insensitive matching baked into every compadd via the `-M` match
+    # spec. Doing this at the compadd layer avoids having to reason about
+    # zstyle contexts or fzf-tab interception — these specs always apply.
+    #   m:{a-zA-Z}={A-Za-z}   — case-insensitive, both directions
+    #   r:|[._-]=* r:|=*      — partial-word at `._-` separators
+    #   l:|=* r:|=*           — substring anywhere
+    local -a ren_match_specs=(
+        -M 'm:{a-zA-Z}={A-Za-z} r:|[._-]=* r:|=* l:|=* r:|=*'
+    )
 
     local -a commands
     commands=(
@@ -42,7 +40,7 @@ _ren() {
             names+=("$base")
         done
         names=(${(u)${(o)names}})
-        compadd -a names
+        compadd "${ren_match_specs[@]}" -a names
     }
 
     _ren_cleanup_targets() {
@@ -56,7 +54,7 @@ _ren() {
 
     _ren_help_topics() {
         local -a topics=(install launch list cleanup mod)
-        compadd -a topics
+        compadd "${ren_match_specs[@]}" -a topics
     }
 
     _ren_archives() {
