@@ -4,13 +4,15 @@
 
 _ren() {
     # Case-insensitive matching baked into every compadd via the `-M` match
-    # spec. Doing this at the compadd layer avoids having to reason about
-    # zstyle contexts or fzf-tab interception — these specs always apply.
+    # spec — applies regardless of zstyle context or fzf-tab interception.
     #   m:{a-zA-Z}={A-Za-z}   — case-insensitive, both directions
-    #   r:|[._-]=* r:|=*      — partial-word at `._-` separators
-    #   l:|=* r:|=*           — substring anywhere
+    #   r:|[._-]=*            — let typed string match starting at any
+    #                            `._-` separator (so `sun` → `Chasing-Sunsets`)
+    # Deliberately NOT including `l:|=*` / `r:|=*` (substring-anywhere):
+    # those let a single character match mid-word in multiple candidates,
+    # which confuses zsh's common-prefix calculation (e.g. `d` → `ad`).
     local -a ren_match_specs=(
-        -M 'm:{a-zA-Z}={A-Za-z} r:|[._-]=* r:|=* l:|=* r:|=*'
+        -M 'm:{a-zA-Z}={A-Za-z} r:|[._-]=*'
     )
 
     local -a commands
