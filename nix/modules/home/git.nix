@@ -64,6 +64,7 @@ in
 
       # AI tool settings
       "**/.claude/settings.local.json"
+      "**/.claude/worktrees/"
     ];
 
     settings = {
