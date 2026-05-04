@@ -51,7 +51,7 @@ let
   workOnlyCasks = [
     "gather"
     "grammarly-desktop"
-    "linear-linear"
+    "linear"
     "meetingbar"
     "tuple"
     "wispr-flow"
