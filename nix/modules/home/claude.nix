@@ -562,6 +562,7 @@ in
         "lua-lsp@claude-plugins-official" = true;
         "ruby-lsp@claude-plugins-official" = true;
         "notion-markdown@babylist" = isWorkMachine;
+        "branch-context@babylist" = isWorkMachine;
         "skill-creator@claude-plugins-official" = false;
 
         # Local plugins
