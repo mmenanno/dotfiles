@@ -6,7 +6,7 @@ let
 in
 {
   system.activationScripts.postActivation.text = ''
-    echo -e "\033[0;34mChecking and linking PWA apps...\033[0m"
+    echo -e "\033[0;34mℹ\033[0m Checking and linking PWA apps..."
 
     # Loop through all .app directories in the source directory
     for app in ${pwaAppsSourceDir}/*.app; do
@@ -14,13 +14,13 @@ in
       targetPath="${appsDir}/$appName"
 
       if [ ! -e "$targetPath" ]; then
-        echo -e "\033[0;34mLinking $appName...\033[0m"
+        echo -e "\033[0;34mℹ\033[0m Linking $appName..."
         ${pkgs.coreutils}/bin/ln -sf "$app" "$targetPath"
       else
-        echo -e "\033[0;32m$appName is already linked.\033[0m"
+        echo -e "\033[0;32m✓\033[0m $appName is already linked."
       fi
     done
 
-    echo -e "\033[0;34mPWA apps linking completed.\033[0m"
+    echo -e "\033[0;32m✓\033[0m PWA apps linking completed."
   '';
 }

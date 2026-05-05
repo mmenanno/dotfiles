@@ -22,13 +22,13 @@ let
 in
 {
   system.activationScripts.postActivation.text = ''
-    echo "Checking for AutoClick installation..."
+    echo -e "\033[0;34mℹ\033[0m Checking for AutoClick installation..."
     if [ ! -d "/Applications/Autoclick.app" ]; then
-      echo -e "\033[0;34mAutoClick not found. Installing from Nix store...\033[0m"
+      echo -e "\033[0;34mℹ\033[0m AutoClick not found. Installing from Nix store..."
       cp -r "${autoclick}/Applications/Autoclick.app" /Applications/
-      echo -e "\033[0;32mAutoClick installed successfully.\033[0m"
+      echo -e "\033[0;32m✓\033[0m AutoClick installed successfully."
     else
-      echo -e "\033[0;32mAutoClick is already installed.\033[0m"
+      echo -e "\033[0;32m✓\033[0m AutoClick is already installed."
     fi
   '';
 }
