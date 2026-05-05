@@ -542,7 +542,6 @@ in
       enabledPlugins = {
         "claude-code-setup@claude-plugins-official" = true;
         "claude-md-management@claude-plugins-official" = true;
-        "code-review@claude-plugins-official" = true;
         "code-simplifier@claude-plugins-official" = true;
         "commit-commands@claude-plugins-official" = true;
         "frontend-design@claude-plugins-official" = true;
