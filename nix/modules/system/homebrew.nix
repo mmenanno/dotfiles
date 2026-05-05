@@ -143,8 +143,10 @@ in
       extraEnv = {
         HOMEBREW_NO_ENV_HINTS = "1";
         HOMEBREW_NO_ANALYTICS = "1";
+        HOMEBREW_NO_ANALYTICS_MESSAGE_OUTPUT = "1";
         HOMEBREW_NO_UPDATE_REPORT_NEW = "1";
       };
+      extraFlags = [ "--quiet" ];
     };
   };
 
