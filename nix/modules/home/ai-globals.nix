@@ -51,7 +51,7 @@ let
     ];
 
     shellScripting = [
-      "Use #!/bin/bash shebang"
+      "Use #!/usr/bin/env bash shebang for portability (picks up Homebrew bash on macOS, finds bash via PATH on systems where it isn't at /bin/bash)"
       "Include 'set -euo pipefail' for safety"
       "Must pass shellcheck validation"
       "**1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells where the shell alias isn't visible, wrap commands with 'op plugin run --'. Not needed for 'gh': its token is persisted at ~/.config/gh/hosts.yml by gh.nix, so 'gh' works directly from any context."
@@ -213,7 +213,7 @@ in
 
       Always include:
       ```bash
-      #!/bin/bash
+      #!/usr/bin/env bash
       set -euo pipefail
       ```
     '';
