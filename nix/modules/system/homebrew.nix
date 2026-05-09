@@ -138,7 +138,7 @@ in
     masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
     onActivation = {
       cleanup = "zap";
-      autoUpdate = true;
+      autoUpdate = false; # false due to this issue https://github.com/zhaofengli/nix-homebrew/issues/131
       upgrade = true;
       extraEnv = {
         HOMEBREW_NO_ENV_HINTS = "1";
