@@ -131,19 +131,22 @@ in
         };
       };
 
-      # identityAgent + identitiesOnly inherited from "*"; pinned IdentityFile
-      # selects the agent-held key. user "deploy" matches baby-cli.
+      # identitiesOnly=false so baby/Net::SSH offers agent keys: it can't match
+      # a .pub-only IdentityFile under keys_only (private key lives in 1Password).
+      # IdentityFile still makes OpenSSH try babylist first. user = baby console user.
       bastionBlocks = lib.optionalAttrs bastionConfigured ({
         "${bastionDomain}" = {
           hostname = bastionDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
+          identitiesOnly = false;
         };
       } // lib.optionalAttrs (bastionStageDomain != bastionDomain) {
         "${bastionStageDomain}" = {
           hostname = bastionStageDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
+          identitiesOnly = false;
         };
       });
 
