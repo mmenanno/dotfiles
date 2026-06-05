@@ -131,22 +131,22 @@ in
         };
       };
 
-      # identitiesOnly=false so baby/Net::SSH offers agent keys: it can't match
-      # a .pub-only IdentityFile under keys_only (private key lives in 1Password).
-      # IdentityFile still makes OpenSSH try babylist first. user = baby console user.
+      # extraOptions forces "IdentitiesOnly no": home-manager omits the line when
+      # false, so "*" imposes "yes" and Net::SSH (keys_only) offers 0 keys. These
+      # blocks precede "*", so this wins and the agent-held key gets offered.
       bastionBlocks = lib.optionalAttrs bastionConfigured ({
         "${bastionDomain}" = {
           hostname = bastionDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
-          identitiesOnly = false;
+          extraOptions = { IdentitiesOnly = "no"; };
         };
       } // lib.optionalAttrs (bastionStageDomain != bastionDomain) {
         "${bastionStageDomain}" = {
           hostname = bastionStageDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
-          identitiesOnly = false;
+          extraOptions = { IdentitiesOnly = "no"; };
         };
       });
 
