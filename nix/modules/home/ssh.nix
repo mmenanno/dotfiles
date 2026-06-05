@@ -131,19 +131,22 @@ in
         };
       };
 
-      # identityAgent + identitiesOnly inherited from "*"; pinned IdentityFile
-      # selects the agent-held key. user "deploy" matches baby-cli.
+      # extraOptions forces "IdentitiesOnly no": home-manager omits the line when
+      # false, so "*" imposes "yes" and Net::SSH (keys_only) offers 0 keys. These
+      # blocks precede "*", so this wins and the agent-held key gets offered.
       bastionBlocks = lib.optionalAttrs bastionConfigured ({
         "${bastionDomain}" = {
           hostname = bastionDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
+          extraOptions = { IdentitiesOnly = "no"; };
         };
       } // lib.optionalAttrs (bastionStageDomain != bastionDomain) {
         "${bastionStageDomain}" = {
           hostname = bastionStageDomain;
           user = "deploy";
           identityFile = "~/.ssh/${bastionKeyFile}";
+          extraOptions = { IdentitiesOnly = "no"; };
         };
       });
 
