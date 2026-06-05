@@ -145,6 +145,10 @@ in
     sessionVariables = {
       EDITOR = "code --wait";
 
+      # Point at the 1Password agent so tools reading SSH_AUTH_SOCK directly
+      # (e.g. baby-cli / Net::SSH, which ignore ssh_config IdentityAgent) work.
+      SSH_AUTH_SOCK = "${config.home.homeDirectory}/.ssh/1password-agent.sock";
+
       # Claude Code configuration
       DISABLE_TELEMETRY = "false";
       DISABLE_ERROR_REPORTING = "false";

@@ -64,6 +64,13 @@ let
   # quoting/subshell issues in ssh config
   onePasswordAgentSymlink = "${config.home.homeDirectory}/.ssh/1password-agent.sock";
 
+  # Domain + key sourced from 1Password (Nix/Work); staging derived from prod.
+  bastionDomain = getEnvOrFallback "NIX_BASTION_DOMAIN" "bastion.bootstrap.invalid" "bastion.placeholder.invalid";
+  bastionKey = getEnvOrFallback "NIX_SSH_BABYLIST_BASTION_KEY" "ssh-ed25519 BOOTSTRAP_BASTION_KEY" "ssh-ed25519 PLACEHOLDER_BASTION_KEY_CHANGE_ME";
+  bastionKeyFile = "babylist";
+  bastionStageDomain = builtins.replaceStrings [ "-prod." ] [ "-stage." ] bastionDomain;
+  bastionConfigured = bastionDomain != "bastion.placeholder.invalid" && bastionDomain != "bastion.bootstrap.invalid";
+
 in
 {
   programs.ssh =
@@ -124,6 +131,22 @@ in
         };
       };
 
+      # identityAgent + identitiesOnly inherited from "*"; pinned IdentityFile
+      # selects the agent-held key. user "deploy" matches baby-cli.
+      bastionBlocks = lib.optionalAttrs bastionConfigured ({
+        "${bastionDomain}" = {
+          hostname = bastionDomain;
+          user = "deploy";
+          identityFile = "~/.ssh/${bastionKeyFile}";
+        };
+      } // lib.optionalAttrs (bastionStageDomain != bastionDomain) {
+        "${bastionStageDomain}" = {
+          hostname = bastionStageDomain;
+          user = "deploy";
+          identityFile = "~/.ssh/${bastionKeyFile}";
+        };
+      });
+
     in {
       enable = true;
       enableDefaultConfig = false;
@@ -136,11 +159,13 @@ in
           hostname = "github.com";
           identityFile = "~/.ssh/${mainGithubKeyFile}";
         };
-      } // lib.optionalAttrs (!isWorkMachine) personalBlocks;
+      } // bastionBlocks // lib.optionalAttrs (!isWorkMachine) personalBlocks;
     };
 
   home.file = {
     "${sshDir}/${mainGithubKeyFile}.pub".text = "${mainGithubKey} ${personalEmail}";
+  } // lib.optionalAttrs bastionConfigured {
+    "${sshDir}/${bastionKeyFile}.pub".text = bastionKey;
   } // lib.optionalAttrs (!isWorkMachine) {
     "${sshDir}/${mainServerKeyFile}.pub".text = "${mainServerKey} ${macbook_hostname}";
     "${sshDir}/${nvmServerKeyFile}.pub".text = "${nvmServerKey} ${macbook_hostname}";
