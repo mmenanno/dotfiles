@@ -22,6 +22,9 @@ let
   personalOnlyBrews = [
     "gemini-cli"
     "pandoc"
+    "pgvector"
+    "postgresql@17"
+    "syncthing"
   ];
 
   commonCasks = [

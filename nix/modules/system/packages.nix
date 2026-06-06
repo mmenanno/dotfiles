@@ -41,6 +41,7 @@ let
     audacity
     automake
     autoconf
+    biome
     cargo
     exiftool
     gmp
@@ -58,12 +59,14 @@ let
     python3
     readline
     ruff
+    rumdl
     rustc
     scc
     speedtest-cli
     terminal-notifier
     typescript
     undmg
+    vips
     wget
     wireguard-go
     wireguard-tools

@@ -11,6 +11,11 @@ source "${BASH_SOURCE[0]%/*}/shared"
 DRY_RUN=false
 FORCE=false
 KEEP_CURRENT=false
+CLEAN_WORKTREES=true
+
+# Counters (populated during cleanup)
+WORKTREES_REMOVED=0
+WORKTREES_SKIPPED=0
 
 # Print usage information
 show_help() {
@@ -26,18 +31,22 @@ OPTIONS:
     -f, --force             Force delete branches (use -D instead of -d)
     -kc, --keep-current     Keep current branch even if it would be deleted
     -nkc, --no-keep-current Allow deletion of current branch (default)
+    -nw, --no-worktrees     Skip cleanup of stale .claude/worktrees worktrees
 
 DESCRIPTION:
     This script performs the following cleanup operations:
     1. Switch to the default branch (main or master)
     2. Pull latest changes from remote
     3. Prune remote branch references
-    4. Delete merged local branches (except protected ones)
+    4. Remove stale worktrees under .claude/worktrees (gone, merged, or
+       orphaned). Dirty worktrees are skipped unless --force is given.
+    5. Delete merged local branches (except protected ones)
 
 EXAMPLES:
     gbclean                        # Standard cleanup
     gbclean -d                     # Preview what would be deleted
-    gbclean --force                # Force delete unmerged branches
+    gbclean --force                # Force delete unmerged + dirty worktrees
+    gbclean --no-worktrees         # Skip worktree cleanup
 
 EOF
 }
@@ -97,6 +106,169 @@ get_branches_to_delete() {
     fi
 }
 
+# Resolve the main worktree root (works even when run from a linked worktree)
+get_main_worktree_root() {
+    local common_dir
+    common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+        || common_dir=$(git rev-parse --git-common-dir 2>/dev/null) \
+        || return 1
+
+    # If we couldn't get an absolute path, fall back to the current toplevel
+    if [[ "$common_dir" != /* ]]; then
+        git rev-parse --show-toplevel 2>/dev/null
+        return
+    fi
+
+    # common_dir points at the main repo's .git directory; its parent is the root
+    dirname "$common_dir"
+}
+
+# True if the branch's upstream tracking branch is gone (remote deleted)
+branch_is_gone() {
+    local branch="$1" track
+    track=$(git for-each-ref --format='%(upstream:track)' "refs/heads/$branch" 2>/dev/null)
+    [[ "$track" == "[gone]" ]]
+}
+
+# True if the branch is merged into the default branch
+branch_is_merged() {
+    local branch="$1" default_branch="$2"
+    git branch --merged "$default_branch" --format='%(refname:short)' 2>/dev/null \
+        | grep -qx "$branch"
+}
+
+# Evaluate a single worktree and remove it if stale
+process_worktree() {
+    local wt_path="$1" wt_branch="$2" wt_detached="$3" worktrees_dir="$4" default_branch="$5"
+
+    # Ignore empty trailing blocks and worktrees outside .claude/worktrees
+    [[ -z "$wt_path" ]] && return 0
+    [[ "$wt_path" == "$worktrees_dir"/* ]] || return 0
+
+    # Classify staleness; an active worktree (remote present, not merged) is left alone
+    local reason=""
+    if [[ "$wt_detached" == true || -z "$wt_branch" ]]; then
+        reason="orphaned (detached HEAD)"
+    elif branch_is_gone "$wt_branch"; then
+        reason="gone (remote branch deleted)"
+    elif branch_is_merged "$wt_branch" "$default_branch"; then
+        reason="merged into $default_branch"
+    else
+        return 0
+    fi
+
+    # Protect uncommitted work unless forced
+    local dirty=false
+    if [[ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]]; then
+        dirty=true
+    fi
+
+    if [[ "$dirty" == true && "$FORCE" == false ]]; then
+        log_warning "Skipping dirty worktree: $wt_path ($reason, uncommitted changes — use --force)"
+        WORKTREES_SKIPPED=$((WORKTREES_SKIPPED + 1))
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        log_warning "DRY RUN: would remove worktree $wt_path ($reason)"
+        WORKTREES_REMOVED=$((WORKTREES_REMOVED + 1))
+        return 0
+    fi
+
+    # Detached/dirty/forced removals need --force
+    local remove_flag=""
+    if [[ "$FORCE" == true || "$dirty" == true || "$wt_detached" == true ]]; then
+        remove_flag="--force"
+    fi
+
+    if git worktree remove $remove_flag "$wt_path" 2>/dev/null; then
+        log_success "Removed worktree: $wt_path ($reason)"
+        WORKTREES_REMOVED=$((WORKTREES_REMOVED + 1))
+
+        # A gone-but-unmerged branch (e.g. squash-merged then deleted on remote) is
+        # safe to force-delete now that its worktree is gone. Merged branches are
+        # left for the normal branch-deletion phase below.
+        if [[ "$reason" == gone* ]] && ! branch_is_merged "$wt_branch" "$default_branch"; then
+            if git branch -D "$wt_branch" 2>/dev/null; then
+                log_success "Deleted gone branch: $wt_branch"
+            fi
+        fi
+
+        # Tidy up an empty leftover directory
+        if [[ -d "$wt_path" && -z "$(ls -A "$wt_path" 2>/dev/null)" ]]; then
+            rmdir "$wt_path" 2>/dev/null || true
+        fi
+    else
+        log_error "Failed to remove worktree: $wt_path"
+        WORKTREES_SKIPPED=$((WORKTREES_SKIPPED + 1))
+    fi
+}
+
+# Remove stale worktrees living under <main-root>/.claude/worktrees
+cleanup_worktrees() {
+    local default_branch="$1"
+    local main_root worktrees_dir
+    main_root=$(get_main_worktree_root) || return 0
+    worktrees_dir="$main_root/.claude/worktrees"
+
+    [[ -d "$worktrees_dir" ]] || return 0
+
+    log_info "Checking for stale worktrees in .claude/worktrees..."
+
+    # Drop admin entries for worktree directories that were already deleted
+    if [[ "$DRY_RUN" == false ]]; then
+        git worktree prune
+    fi
+
+    # Parse `git worktree list --porcelain` block by block
+    local wt_path="" wt_branch="" wt_detached=false
+    while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)
+                wt_path="${line#worktree }"
+                wt_branch=""
+                wt_detached=false
+                ;;
+            "branch refs/heads/"*)
+                wt_branch="${line#branch refs/heads/}"
+                ;;
+            "detached")
+                wt_detached=true
+                ;;
+            "")
+                process_worktree "$wt_path" "$wt_branch" "$wt_detached" "$worktrees_dir" "$default_branch"
+                wt_path=""
+                ;;
+        esac
+    done < <(git worktree list --porcelain; printf '\n')
+
+    # Warn about leftover directories that git no longer tracks as worktrees
+    local entry
+    for entry in "$worktrees_dir"/*; do
+        [[ -d "$entry" ]] || continue
+        if ! git worktree list --porcelain | grep -qFx "worktree $entry"; then
+            log_warning "Leftover directory not tracked as a worktree: $entry (remove manually if unneeded)"
+        fi
+    done
+}
+
+# Print a unified summary of branch and worktree cleanup
+print_cleanup_summary() {
+    local deleted="$1" failed="$2"
+    local -a parts=("$deleted branch(es) deleted")
+    [[ "$failed" -gt 0 ]] && parts+=("$failed failed")
+    if [[ "$CLEAN_WORKTREES" == true ]]; then
+        parts+=("$WORKTREES_REMOVED worktree(s) removed")
+        [[ "$WORKTREES_SKIPPED" -gt 0 ]] && parts+=("$WORKTREES_SKIPPED worktree(s) skipped")
+    fi
+
+    local summary="" part
+    for part in "${parts[@]}"; do
+        summary+="${summary:+, }$part"
+    done
+    log_success "Cleanup complete: $summary"
+}
+
 # Perform git operations
 perform_cleanup() {
     local default_branch current_branch
@@ -136,12 +308,19 @@ perform_cleanup() {
         git remote prune origin
     fi
 
+    # Remove stale worktrees before branch deletion so their (now-freed) branches
+    # become deletable below
+    if [[ "$CLEAN_WORKTREES" == true ]]; then
+        cleanup_worktrees "$default_branch"
+    fi
+
     # Get branches to delete
     local branches_to_delete_str
     branches_to_delete_str=$(get_branches_to_delete "$default_branch" "$current_branch")
 
     if [[ -z "$branches_to_delete_str" ]]; then
         log_info "No merged branches found to delete"
+        print_cleanup_summary 0 0
         return 0
     fi
 
@@ -159,6 +338,7 @@ perform_cleanup() {
 
     if [[ "$DRY_RUN" == true ]]; then
         log_warning "DRY RUN: No branches were actually deleted"
+        print_cleanup_summary 0 0
         return 0
     fi
 
@@ -176,15 +356,15 @@ perform_cleanup() {
     for branch in "${branches_to_delete[@]}"; do
         if git branch "$delete_flag" "$branch" 2>/dev/null; then
             log_success "Deleted branch: $branch"
-            ((deleted_count++))
+            deleted_count=$((deleted_count + 1))
         else
             log_error "Failed to delete branch: $branch"
-            ((failed_count++))
+            failed_count=$((failed_count + 1))
         fi
     done
 
     # Summary
-    log_success "Cleanup complete: $deleted_count deleted, $failed_count failed"
+    print_cleanup_summary "$deleted_count" "$failed_count"
 
     if [[ $failed_count -gt 0 ]]; then
         log_warning "Some branches could not be deleted. Use --force to force delete unmerged branches."
@@ -215,6 +395,10 @@ parse_args() {
                 ;;
             -nkc|--no-keep-current)
                 KEEP_CURRENT=false
+                shift
+                ;;
+            -nw|--no-worktrees)
+                CLEAN_WORKTREES=false
                 shift
                 ;;
             -*)
