@@ -261,10 +261,10 @@ let
     "browser_install"
   ];
   playwrightMcpAskTools = map pwMcp [
-    "browser_evaluate"
-    "browser_run_code"
-    "browser_file_upload"
-    "browser_drag"
+    # "browser_evaluate"
+    # "browser_run_code"
+    # "browser_file_upload"
+    # "browser_drag"
   ];
   # --- Notion MCP plugin permissions ---
   notionMcp = tool: "mcp__claude_ai_Notion__notion-${tool}";
@@ -423,7 +423,7 @@ in
       skipAutoPermissionPrompt = true;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
-      model = "opus[1m]";
+      model = "opus";
       permissions = {
         allow =
           (toBashPermissions devTools)
@@ -511,17 +511,17 @@ in
           ));
         deny = [];
         ask = toBashPermissions [
-          "git push:*"
-          "git rebase:*"
+          # "git push:*"
+          # "git rebase:*"
           "git merge:*"
           "rm:*"
           "sudo:*"
           "chmod:*"
-          "brew install:*"
+          # "brew install:*"
           "brew upgrade:*"
           # gh CLI operations requiring confirmation
           "gh pr merge:*"
-          "gh api:*"
+          # "gh api:*"
         ]
         ++ githubMcpAskTools
         ++ playwrightMcpAskTools
@@ -580,6 +580,8 @@ in
       teammateMode = "auto";
       theme = "dark";
       verbose = false;
+      agentPushNotifEnabled = true;
+      inputNeededNotifEnabled = true;
     };
 
     # Use shared MCP servers but exclude GitHub (Claude Code has official GitHub plugin)
