@@ -1,8 +1,12 @@
 { mcpServers, mkHomebrewWrapper, ... }:
 
 {
-  programs.gemini-cli = {
+  programs.antigravity-cli = {
     enable = true;
+    # home-manager renamed programs.gemini-cli -> programs.antigravity-cli.
+    # We run the real gemini-cli (via Homebrew), so keep writing the legacy
+    # ~/.gemini/settings.json layout instead of the antigravity-cli one.
+    useLegacyGeminiConfig = true;
     # Use Homebrew-installed gemini-cli for faster updates
     package = mkHomebrewWrapper {
       name = "gemini-cli";

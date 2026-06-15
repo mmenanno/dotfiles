@@ -52,7 +52,8 @@ let
   common = {
     private = {
       user = privateUser;
-      extraOptions = {
+      # OpenSSH directives shared by interactive private-host blocks
+      sessionDirectives = {
         RequestTTY = "force";
       };
     };
@@ -79,28 +80,26 @@ in
       # Helper for NVM server with remote commands
       mkNvmBlock = suffix: remoteCmd: {
         "${nvmServerName}${suffix}" = {
-          hostname = ips.nvm_server;
-          inherit (common.private) user;
-          identityFile = "~/.ssh/${nvmServerKeyFile}";
-          extraOptions = common.private.extraOptions // {
-            RemoteCommand = "${remoteCmd} ${with_bash_login_command}";
-          };
-        };
+          HostName = ips.nvm_server;
+          User = common.private.user;
+          IdentityFile = "~/.ssh/${nvmServerKeyFile}";
+          RemoteCommand = "${remoteCmd} ${with_bash_login_command}";
+        } // common.private.sessionDirectives;
       };
 
       # Base server blocks
       baseBlocks = {
         "${mainServerName}" = {
-          hostname = ips.main_server;
-          user = "root";
-          port = 8822;
-          identityFile = "~/.ssh/${mainServerKeyFile}";
+          HostName = ips.main_server;
+          User = "root";
+          Port = 8822;
+          IdentityFile = "~/.ssh/${mainServerKeyFile}";
         };
       } // (if mainServerName != nvmServerName then {
         "${nvmServerName}" = {
-          hostname = ips.nvm_server;
-          inherit (common.private) user;
-          identityFile = "~/.ssh/${nvmServerKeyFile}";
+          HostName = ips.nvm_server;
+          User = common.private.user;
+          IdentityFile = "~/.ssh/${nvmServerKeyFile}";
         };
       } else {});
 
@@ -113,54 +112,55 @@ in
       # Personal-only SSH hosts (servers, private GitHub, Forgejo)
       personalBlocks = baseBlocks // nvmBlocks // {
         "github.${privateUserShort}" = {
-          hostname = "github.com";
-          identityFile = "~/.ssh/${privateGithubKeyFile}";
+          HostName = "github.com";
+          IdentityFile = "~/.ssh/${privateGithubKeyFile}";
         };
         "${forgejoDomain}" = {
-          hostname = forgejoDomain;
-          identityFile = "~/.ssh/${mainGithubKeyFile}";
+          HostName = forgejoDomain;
+          IdentityFile = "~/.ssh/${mainGithubKeyFile}";
         };
         "${levForgejoDomain}" = {
-          hostname = levForgejoDomain;
-          identityFile = "~/.ssh/${mainGithubKeyFile}";
+          HostName = levForgejoDomain;
+          IdentityFile = "~/.ssh/${mainGithubKeyFile}";
         };
         "${kLaptop}" = {
-          hostname = kHostname;
-          user = kUsername;
-          identityFile = "~/.ssh/${mainGithubKeyFile}";
+          HostName = kHostname;
+          User = kUsername;
+          IdentityFile = "~/.ssh/${mainGithubKeyFile}";
         };
       };
 
-      # extraOptions forces "IdentitiesOnly no": home-manager omits the line when
-      # false, so "*" imposes "yes" and Net::SSH (keys_only) offers 0 keys. These
-      # blocks precede "*", so this wins and the agent-held key gets offered.
+      # Bastion sets "IdentitiesOnly no" so the agent-held key is offered (the
+      # global "*" block below imposes "yes", which makes Net::SSH keys_only
+      # offer 0 keys). These blocks precede "*" in the rendered config, so
+      # SSH's first-match-wins selects "no" for the bastion hosts.
       bastionBlocks = lib.optionalAttrs bastionConfigured ({
         "${bastionDomain}" = {
-          hostname = bastionDomain;
-          user = "deploy";
-          identityFile = "~/.ssh/${bastionKeyFile}";
-          extraOptions = { IdentitiesOnly = "no"; };
+          HostName = bastionDomain;
+          User = "deploy";
+          IdentityFile = "~/.ssh/${bastionKeyFile}";
+          IdentitiesOnly = "no";
         };
       } // lib.optionalAttrs (bastionStageDomain != bastionDomain) {
         "${bastionStageDomain}" = {
-          hostname = bastionStageDomain;
-          user = "deploy";
-          identityFile = "~/.ssh/${bastionKeyFile}";
-          extraOptions = { IdentitiesOnly = "no"; };
+          HostName = bastionStageDomain;
+          User = "deploy";
+          IdentityFile = "~/.ssh/${bastionKeyFile}";
+          IdentitiesOnly = "no";
         };
       });
 
     in {
       enable = true;
       enableDefaultConfig = false;
-      matchBlocks = {
+      settings = {
         "*" = {
-          identityAgent = onePasswordAgentSymlink;
-          identitiesOnly = true;
+          IdentityAgent = onePasswordAgentSymlink;
+          IdentitiesOnly = true;
         };
         "github.com" = {
-          hostname = "github.com";
-          identityFile = "~/.ssh/${mainGithubKeyFile}";
+          HostName = "github.com";
+          IdentityFile = "~/.ssh/${mainGithubKeyFile}";
         };
       } // bastionBlocks // lib.optionalAttrs (!isWorkMachine) personalBlocks;
     };

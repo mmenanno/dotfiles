@@ -550,6 +550,7 @@ in
         "plugin-dev@claude-plugins-official" = false;
         "pr-review-toolkit@claude-plugins-official" = true;
         "superpowers@claude-plugins-official" = true;
+        "security-guidance@claude-plugins-official" = true;
         "gopls-lsp@claude-plugins-official" = true;
         "csharp-lsp@claude-plugins-official" = true;
         "rust-analyzer-lsp@claude-plugins-official" = true;
@@ -560,6 +561,7 @@ in
         "kotlin-lsp@claude-plugins-official" = true;
         "lua-lsp@claude-plugins-official" = true;
         "ruby-lsp@claude-plugins-official" = true;
+        "typescript-lsp@claude-plugins-official" = true;
         "notion-markdown@babylist" = isWorkMachine;
         "datadog-analytics@babylist" = isWorkMachine;
         "skill-creator@claude-plugins-official" = false;
