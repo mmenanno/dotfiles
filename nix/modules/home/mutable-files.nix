@@ -1,29 +1,30 @@
 { config, lib, pkgs, homeDirectory, isWorkMachine ? false, ... }:
 
 let
-  mutablePaths = [
-    ".claude/settings.json"
-    ".config/op/plugins.sh"
-    "Library/Application Support/Code/User/settings.json"
-    "Library/Application Support/Code/User/mcp.json"
+  # Each mutable file: `path` is the deploy location relative to $HOME; `fileKey`
+  # is the attribute name under which its `home.file` entry is registered. Most
+  # modules key by the relative path, but the home-manager claude-code module
+  # keys its settings.json by an absolute path (its `configDir` defaults to an
+  # absolute ~/.claude), so we must disable the symlink and read `.source` from
+  # that absolute key — the relative key has no value and would fail to evaluate.
+  mutableFiles = [
+    { path = ".claude/settings.json"; fileKey = "${homeDirectory}/.claude/settings.json"; }
+    { path = ".config/op/plugins.sh"; fileKey = ".config/op/plugins.sh"; }
+    { path = "Library/Application Support/Code/User/settings.json"; fileKey = "Library/Application Support/Code/User/settings.json"; }
+    { path = "Library/Application Support/Code/User/mcp.json"; fileKey = "Library/Application Support/Code/User/mcp.json"; }
   ] ++ lib.optionals isWorkMachine [
-    ".npmrc"
+    { path = ".npmrc"; fileKey = ".npmrc"; }
   ];
 
-  mutableFiles = map (path: {
-    inherit path;
-    storePath = config.home.file.${path}.source;
-  }) mutablePaths;
-
   deployCommands = lib.concatMapStringsSep "\n" (file:
-    "deploy_mutable_file ${lib.escapeShellArg file.path} ${lib.escapeShellArg (toString file.storePath)}"
+    "deploy_mutable_file ${lib.escapeShellArg file.path} ${lib.escapeShellArg (toString config.home.file.${file.fileKey}.source)}"
   ) mutableFiles;
 in
 {
   # Disable Home Manager symlink creation for these paths — we deploy writable copies instead
-  home.file = lib.mkMerge (map (path:
-    { ${path}.enable = lib.mkForce false; }
-  ) mutablePaths);
+  home.file = lib.mkMerge (map (file:
+    { ${file.fileKey}.enable = lib.mkForce false; }
+  ) mutableFiles);
 
   # Deploy writable copies with conflict detection
   home.activation.deployMutableFiles = lib.hm.dag.entryAfter [ "linkGeneration" ] ''

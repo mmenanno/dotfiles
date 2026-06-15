@@ -1,4 +1,4 @@
-{ username, isWorkMachine ? false, ... }:
+{ config, lib, username, isWorkMachine ? false, ... }:
 let
   commonBrews = [
     "coreutils"
@@ -140,7 +140,15 @@ in
     casks = commonCasks ++ (if isWorkMachine then workOnlyCasks else personalOnlyCasks);
     masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
     onActivation = {
-      cleanup = "zap";
+      # Homebrew 6.0 (June 2026) deprecated the `brew bundle --cleanup` switch in
+      # favour of `--force-cleanup` (with `--zap` for zap-style cleanup). The
+      # pinned nix-darwin still emits the old `--cleanup --zap` for
+      # `cleanup = "zap"` (fix pending in nix-darwin#1789), which prints a
+      # deprecation warning on every activation. Until that PR lands we keep
+      # `cleanup = "none"` so nix-darwin emits no cleanup flag, and pass the new
+      # flags via extraFlags below — equivalent zap cleanup, no warning. Revert to
+      # `cleanup = "zap"` (and drop the flags) once #1789 is merged.
+      cleanup = "none";
       autoUpdate = false; # false due to this issue https://github.com/zhaofengli/nix-homebrew/issues/131
       upgrade = true;
       extraEnv = {
@@ -149,7 +157,7 @@ in
         HOMEBREW_NO_ANALYTICS_MESSAGE_OUTPUT = "1";
         HOMEBREW_NO_UPDATE_REPORT_NEW = "1";
       };
-      extraFlags = [ "--quiet" ];
+      extraFlags = [ "--zap" "--force-cleanup" "--quiet" ];
     };
   };
 
@@ -159,4 +167,20 @@ in
     user = username;
     autoMigrate = true;
   };
+
+  # Homebrew 6.0 (June 2026) requires third-party taps to be explicitly trusted
+  # before `brew bundle` will load their formulae/casks. nix-darwin has no
+  # declarative trust option yet (tracked in nix-darwin#1794, PR nix-darwin#1789
+  # adds `homebrew.brews.*.trusted`), so we trust the dotenvx tap here. This runs
+  # in `preActivation`, which executes before the homebrew bundle step, and
+  # mirrors the bundle's own `sudo --user --set-home` invocation so both resolve
+  # the same trust store (~/.homebrew/trust.json; XDG_CONFIG_HOME is not
+  # preserved through sudo). Idempotent — remove once PR #1789 lands and switch
+  # the dotenvx brew entry to `{ name = "dotenvx/brew/dotenvx"; trusted = true; }`.
+  system.activationScripts.preActivation.text = lib.mkAfter ''
+    if [ -x ${config.homebrew.prefix}/bin/brew ]; then
+      sudo --user=${lib.escapeShellArg username} --set-home \
+        ${config.homebrew.prefix}/bin/brew trust --tap dotenvx/brew >/dev/null 2>&1 || true
+    fi
+  '';
 }

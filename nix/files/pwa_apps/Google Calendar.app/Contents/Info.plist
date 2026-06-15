@@ -58,7 +58,7 @@
 				<key>sizes</key>
 				<string>192x192</string>
 				<key>src</key>
-				<string>https://www.gstatic.com/calendar/images/manifest/logo_2020q4_192.png</string>
+				<string>https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-96dp/logo_calendar_2026_color_2x_web_96dp.png</string>
 				<key>type</key>
 				<string>image/png</string>
 			</dict>
@@ -66,7 +66,7 @@
 				<key>sizes</key>
 				<string>512x512</string>
 				<key>src</key>
-				<string>https://www.gstatic.com/calendar/images/manifest/logo_2020q4_512.png</string>
+				<string>https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-512dp/logo_calendar_2026_color_1x_web_512dp.png</string>
 				<key>type</key>
 				<string>image/png</string>
 			</dict>
@@ -74,7 +74,7 @@
 				<key>sizes</key>
 				<string>32x32</string>
 				<key>src</key>
-				<string>https://www.gstatic.com/calendar/images/manifest/logo_32.png</string>
+				<string>https://www.gstatic.com/images/branding/productlogos/calendar_2026/v2/web-32dp/logo_calendar_2026_color_1x_web_32dp.png</string>
 				<key>type</key>
 				<string>image/png</string>
 			</dict>
@@ -90,8 +90,6 @@
 		<key>theme_color</key>
 		<string>#1B1B1B</string>
 	</dict>
-	<key>WKManifestIconKind</key>
-	<string>Favicon</string>
 	<key>WKManifestURL</key>
 	<string>https://calendar.google.com/calendar/manifest.json</string>
 	<key>WKPushBundleMetadata</key>
