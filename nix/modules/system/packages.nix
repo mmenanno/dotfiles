@@ -54,6 +54,7 @@ let
     mkvtoolnix
     mediainfo
     pipx
+    pmtiles
     pnpm_9
     pylint
     python3
