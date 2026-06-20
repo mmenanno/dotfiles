@@ -374,7 +374,9 @@ in
             if (model) parts.push("\x1b[2m" + model + "\x1b[0m");
             if (remaining != null) {
               const rawUsed = Math.max(0, Math.min(100, 100 - Math.round(remaining)));
-              const used = Math.min(100, Math.round((rawUsed / 80) * 100));
+              // Scale so the bar hits 100% near the auto-compact trigger (~92% of the
+              // real context window), not at full. rawUsed is the true window-used %.
+              const used = Math.min(100, Math.round((rawUsed / 92) * 100));
               const filled = Math.floor(used / 10);
               const bar = "▰".repeat(filled) + "▱".repeat(10 - filled);
               let color;
