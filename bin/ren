@@ -32,10 +32,16 @@ typeset -gr TEMP_CLEANUP_DAYS=7
 # Version and platform regex patterns
 # Numeric versions: v1.0, 0.36.dv-mac, 1.2.3a-pc
 typeset -gr VERSION_PATTERN='[vr]?[0-9]+\.[0-9]+(\.[0-9]+)?'
+# Build/release tag that can immediately trail a numeric version (no separator):
+# a single letter, a multi-letter tag (hotfix, release-candidate, beta...), or a
+# tag with a trailing number. Kept as its own pattern and captured INTO the
+# version so it isn't silently dropped — otherwise two builds that differ only
+# by their tag normalize to the same version and collide on one install path.
+typeset -gr VERSION_TAG_PATTERN='[a-z]+[0-9]*'
 # Episodic versions: S1-C1-E01-A (Season-Chapter-Episode-Version)
 typeset -gr EPISODIC_PATTERN='S[0-9]+-C[0-9]+-E[0-9]+-[A-Z]+'
 typeset -gr PLATFORM_SUFFIX_PATTERN='(\.(dv-mac|dv-win|dv-pc)|(-pc|-mac|-win|-linux))?'
-typeset -gr VERSION_FULL_PATTERN="${VERSION_PATTERN}[a-z]?${PLATFORM_SUFFIX_PATTERN}"
+typeset -gr VERSION_FULL_PATTERN="${VERSION_PATTERN}(${VERSION_TAG_PATTERN})?${PLATFORM_SUFFIX_PATTERN}"
 typeset -gr EPISODIC_FULL_PATTERN="${EPISODIC_PATTERN}${PLATFORM_SUFFIX_PATTERN}"
 
 # Supported archive extensions for mod installation
@@ -251,7 +257,9 @@ extract_version() {
     fi
 
     # Try numeric version pattern (v1.0, 1.0.1a, etc.)
-    local version_re="-[vr]?([0-9]+\.[0-9]+(\.[0-9]+)?)[a-z]?${PLATFORM_SUFFIX_PATTERN}"
+    # The trailing tag is inside the capture group so build tags (e.g. a hotfix
+    # suffix) are preserved in the returned version rather than truncated.
+    local version_re="-[vr]?([0-9]+\.[0-9]+(\.[0-9]+)?(${VERSION_TAG_PATTERN})?)${PLATFORM_SUFFIX_PATTERN}"
     if [[ "$basename" =~ $version_re ]]; then
         echo "${match[1]}"
         return 0
@@ -853,7 +861,11 @@ cmd_install() {
         echo "  Version: ${CYAN}$version${NC}"
     fi
     echo ""
-    echo "To play: ${CYAN}ren launch $game_name${NC}"
+    # Suggest the name that matches the installed directory. $game_name is the
+    # raw, un-normalized name parsed from the archive (a third spelling that
+    # only resolves by luck of find_game_dir's lenient fallback); $base_name is
+    # the normalized, dash-joined form that prefixes the actual install dir.
+    echo "To play: ${CYAN}ren launch $base_name${NC}"
 }
 
 # ============================================================================
