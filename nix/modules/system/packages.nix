@@ -32,8 +32,6 @@ let
     awscli2
     graphviz
     librsvg
-    livekit-cli
-    portaudio
     pre-commit
     shared-mime-info
     xz
