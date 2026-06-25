@@ -10,6 +10,7 @@ let
 
   workOnlyBrews = [
     "just"
+    "livekit-cli"
     "memcached"
     "mysql@8.0"
     "pipenv"

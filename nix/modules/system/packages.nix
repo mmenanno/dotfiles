@@ -21,6 +21,7 @@ let
     rsync
     shellcheck
     pay-respects
+    uv
     watchman
     yq
     zellij
