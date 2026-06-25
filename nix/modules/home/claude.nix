@@ -189,7 +189,6 @@ let
   githubMcpReadTools = map ghMcp [
     "get_me"
     "get_commit"
-    "get_file_contents"
     "get_label"
     "get_latest_release"
     "get_release_by_tag"
@@ -197,7 +196,6 @@ let
     "get_team_members"
     "get_teams"
     "get_copilot_job_status"
-    "issue_read"
     "list_branches"
     "list_commits"
     "list_issues"
@@ -223,6 +221,11 @@ let
     "request_copilot_review"
     "pull_request_review_write"
     "add_comment_to_pending_review"
+  ];
+  # --- GitHub MCP tools to deny — use the gh CLI instead (see ~/.claude/CLAUDE.md) ---
+  githubMcpDenyTools = map ghMcp [
+    "issue_read"
+    "get_file_contents"
     "sub_issue_write"
   ];
   githubMcpAskTools = map ghMcp [
@@ -407,6 +410,19 @@ in
           fi
         '';
       };
+
+      # PreToolUse(Bash) guard: auto-approve `rm` only for temp/project-tmp/
+      # git-tracked targets; everything else falls through to the `ask rm:*` rule.
+      ".claude/hooks/rm-guard.js".source = ./hooks/rm-guard.js;
+      ".claude/hooks/rm-guard.sh" = {
+        executable = true;
+        text = ''
+          #!/bin/bash
+          # Fall through to normal permissions if node is unavailable.
+          command -v node >/dev/null 2>&1 || exit 0
+          exec node "${hooksDir}/rm-guard.js"
+        '';
+      };
     };
   };
 
@@ -468,6 +484,10 @@ in
             "gh pr checkout:*"
             "gh pr view:*"
             "gh pr diff:*"
+            # gh CLI replacements for denied GitHub MCP tools (issue_read, get_file_contents)
+            "gh issue view:*"
+            "gh issue list:*"
+            "gh api:*"
           ])
           ++ (toBashPermissions [
             "brew search:*"
@@ -511,7 +531,7 @@ in
             ++ gCalMcpReadTools
             ++ slackAiMcpReadTools
           ));
-        deny = [];
+        deny = githubMcpDenyTools;
         ask = toBashPermissions [
           # "git push:*"
           # "git rebase:*"
@@ -536,6 +556,16 @@ in
         ));
         defaultMode = "auto";
         additionalDirectories = [];
+      };
+      hooks = {
+        PreToolUse = [
+          {
+            matcher = "Bash";
+            hooks = [
+              { type = "command"; command = "${hooksDir}/rm-guard.sh"; }
+            ];
+          }
+        ];
       };
       statusLine = {
         type = "command";
