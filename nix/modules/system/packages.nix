@@ -21,6 +21,7 @@ let
     rsync
     shellcheck
     pay-respects
+    uv
     watchman
     yq
     zellij
@@ -31,6 +32,8 @@ let
     awscli2
     graphviz
     librsvg
+    livekit-cli
+    portaudio
     pre-commit
     shared-mime-info
     xz
