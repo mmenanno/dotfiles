@@ -190,7 +190,13 @@ in
 
       ### GitHub: MCP plugin over `gh` CLI
 
-      Use the GitHub MCP plugin (`mcp__plugin_github_github__*`) for all GitHub operations: reading issues/PRs/commits, creating branches, searching code, etc. Fall back to `gh` CLI only when the MCP plugin lacks the needed capability (e.g., `gh run` for workflow runs, `gh api` for arbitrary API calls, `gh pr checkout` for local checkout).
+      Use the GitHub MCP plugin (`mcp__plugin_github_github__*`) for most GitHub operations: reading PRs/commits, creating branches, searching code, etc. Fall back to `gh` CLI when the MCP plugin lacks the needed capability (e.g., `gh run` for workflow runs, `gh pr checkout` for local checkout).
+
+      A few MCP tools are deliberately denied — use the `gh` CLI instead:
+
+      - Reading issues (`issue_read`) → `gh issue view` / `gh issue list`
+      - Reading file contents (`get_file_contents`) → `gh api`
+      - Writing sub-issues (`sub_issue_write`) → `gh api`
 
       ### Browser: Playwright MCP vs Claude In Chrome
 
