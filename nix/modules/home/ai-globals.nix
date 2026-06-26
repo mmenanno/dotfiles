@@ -45,6 +45,7 @@ let
     workflow = [
       "Test-driven development when appropriate"
       "Small, focused commits with clear messages"
+      "Prefer rebasing over merge commits to keep history linear (use `git rebase`, not `git merge`)"
       "Documentation for complex features"
       "Performance considerations for production code"
       "Security-first approach to all changes"
@@ -210,6 +211,10 @@ in
       ## 1Password CLI
 
       Shell aliases don't inherit into non-interactive subshells. For 1Password-plugin-backed tools whose alias exists only in zsh, wrap with `op plugin run --`. Exception: `gh` has its token persisted in `~/.config/gh/hosts.yml` (see `gh.nix`) and works directly in any context — no `op plugin run --` needed.
+
+      ## Git
+
+      - Favour rebasing over merge commits to keep history linear. Use `git rebase` (or `git pull --rebase`) instead of `git merge`; avoid creating merge commits.
 
       ## Shell Commands
 
