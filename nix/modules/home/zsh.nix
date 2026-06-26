@@ -63,6 +63,22 @@ in
       # Add custom shell scripts to path
       export PATH=${config.home.homeDirectory}/.local/bin:${config.home.homeDirectory}/dotfiles/bin:$PATH
 
+      # Make the stable per-user profile outrank ~/.nix-profile in PATH.
+      # nix-darwin hardcodes ~/.nix-profile/bin ahead of /etc/profiles/per-user,
+      # but `nx up` churns the ~/.nix-profile generation during activation. Tools
+      # that bake an absolute binary path at shell-init time (e.g. starship's
+      # prompt) then keep calling a path that just disappeared and error on every
+      # redraw until the shell is restarted. Reordering pins those baked paths to
+      # the /etc/profiles symlink, which is repointed atomically across rebuilds.
+      # Runs before the starship init below so the bake picks up the new order.
+      () {
+        local hm="/etc/profiles/per-user/${config.home.username}/bin"
+        local np="$HOME/.nix-profile/bin"
+        path=("''${(@)path:#$np}")
+        path[''${path[(i)$hm]}]=("$hm" "$np")
+      }
+      typeset -U path PATH
+
       # Add custom completions to fpath
       fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
 
