@@ -96,7 +96,6 @@ let
     "protonvpn"
     "proxyman"
     "quicklook-video"
-    "quicklook-json"
     "renpy"
     "scummvm-app"
     "session"
