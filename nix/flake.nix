@@ -103,7 +103,7 @@
         packages = [
           pkgs.nixfmt
           pkgs.shellcheck
-          pkgs.nodePackages.markdownlint-cli2
+          pkgs.markdownlint-cli2
         ];
       };
 

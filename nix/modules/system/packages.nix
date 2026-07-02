@@ -56,7 +56,7 @@ let
     mediainfo
     pipx
     pmtiles
-    pnpm_9
+    pnpm_10
     pylint
     python3
     readline
@@ -91,6 +91,17 @@ in
       ln -sf "$f" /usr/local/lib/audacity/
     done
     echo "Audacity FFmpeg symlinks created in /usr/local/lib/audacity/"
+
+    # Expose Nix's libvips to ruby-vips, which dlopens libvips.42.dylib via FFI.
+    # SIP strips DYLD_FALLBACK_LIBRARY_PATH when Ruby's /usr/bin/env shebang execs,
+    # so we symlink into /usr/local/lib (an FFI default search dir, SIP-immune) and
+    # refresh it on every activation so it self-heals across libvips upgrades.
+    echo "Linking Nix libvips into /usr/local/lib for ruby-vips FFI..."
+    mkdir -p /usr/local/lib
+    for f in ${lib.getLib pkgs.vips}/lib/libvips*.dylib; do
+      ln -sf "$f" "/usr/local/lib/$(basename "$f")"
+    done
+    echo "Nix libvips symlinks created in /usr/local/lib/"
   '';
 
   environment.systemPackages = commonPackages ++ (if isWorkMachine then workOnlyPackages else personalOnlyPackages);
