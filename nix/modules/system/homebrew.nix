@@ -68,6 +68,7 @@ let
     "battle-net"
     "chatgpt"
     "codex"
+    "conductor"
     "daisydisk"
     "discord"
     "downie"
