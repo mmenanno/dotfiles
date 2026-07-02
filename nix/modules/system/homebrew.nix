@@ -161,6 +161,15 @@ in
     };
   };
 
+  # postgresql@17 is keg-only, so its client tools (psql, pg_dump) aren't on PATH.
+  # Add its stable Homebrew opt/bin declaratively instead of `brew link --force`
+  # (stateful, and conflicts with a future postgresql@18). Goes through
+  # environment.systemPath -> set-environment -> /etc/zshenv, so it also covers
+  # non-interactive shells. Personal-only: postgresql@17 is a personalOnlyBrews entry.
+  environment.systemPath = lib.optionals (!isWorkMachine) [
+    "/opt/homebrew/opt/postgresql@17/bin"
+  ];
+
   nix-homebrew = {
     enable = true;
     enableRosetta = true;

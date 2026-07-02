@@ -187,6 +187,10 @@ in
     fzf = {
       enable = true;
       enableZshIntegration = true;
+      # Atuin owns Ctrl-R (its integration is sourced after fzf's and reclaims the
+      # binding). Explicitly clear fzf's history widget so Home Manager doesn't warn
+      # about the Ctrl-R collision on every rebuild. Preserves current behaviour.
+      historyWidget.command = "";
     };
 
     zoxide = {
