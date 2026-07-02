@@ -34,6 +34,7 @@ let
     "adguard"
     "claude"
     "claude-code@latest"
+    "conductor"
     "db-browser-for-sqlite"
     "docker-desktop"
     "google-chrome"
