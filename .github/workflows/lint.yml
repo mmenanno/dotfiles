@@ -32,7 +32,7 @@ jobs:
           VALIDATE_GITHUB_ACTIONS: true
 
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@v3.95.6
+        uses: trufflesecurity/trufflehog@v3.95.8
         with:
           extra_args: --results=verified,unknown
 
@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: TODO to Issue
-        uses: alstr/todo-to-issue-action@v5.1.14
+        uses: alstr/todo-to-issue-action@v5.1.15
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
