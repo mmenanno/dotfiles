@@ -137,6 +137,7 @@ in
 {
   homebrew = {
     enable = true;
+    caskArgs.no_quarantine = true;
     brews = commonBrews ++ (if isWorkMachine then workOnlyBrews else personalOnlyBrews);
     casks = commonCasks ++ (if isWorkMachine then workOnlyCasks else personalOnlyCasks);
     masApps = commonMasApps // (if isWorkMachine then {} else personalOnlyMasApps);
