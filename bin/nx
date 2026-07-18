@@ -633,7 +633,12 @@ managed_apply() {
         return 1
     fi
 
-    local applied=0
+    # Collect every file with real (semantic) changes, then feed them all to
+    # claude in a single request. Files that differ only in JSON key ordering
+    # are treated as clean and skipped — Nix re-sorts keys anyway, so there is
+    # nothing to apply. This matches the normalization used by `nx m d`/status.
+    local changed_names=()
+    local prompt_sections=""
     for name in "${RESOLVED_NAMES[@]}"; do
         local path="${MANAGED_FILES[$name]}"
         local target="$HOME/$path"
@@ -648,41 +653,53 @@ managed_apply() {
             log_warning "Target missing for $name — skipping"
             continue
         fi
-        if cmp -s "$target" "$baseline"; then
+        if json_files_equal "$target" "$baseline"; then
             log_info "$name is clean — nothing to apply"
             continue
         fi
 
-        log_info "Applying changes from $name into $nix_source..."
+        log_info "Detected changes in $name ($path)"
 
         local file_diff
         file_diff=$(diff -u "$baseline" "$target" || true)
 
-        local prompt
-        prompt="The managed config file '${path}' has been modified by the application at runtime.
-Here is the diff between the Nix baseline and the current runtime version:
+        changed_names+=("$name")
+        prompt_sections+="
+---
+
+### File: ${path}
+Nix module that generates it: ${nix_source}
+
+Diff between the Nix baseline and the current runtime version:
 
 \`\`\`diff
 ${file_diff}
 \`\`\`
-
-The Nix module that generates this file is at: ${nix_source}
-
-Please update ONLY the relevant section in the Nix module to incorporate these changes.
-Preserve the existing code style and formatting. Do not modify any other parts of the file.
-You may reorder sections to match the preferred order that the application is ordering them in."
-
-        if echo "$prompt" | claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR"; then
-            log_success "Applied changes for: ${name} ($path)"
-            applied=$((applied + 1))
-        else
-            log_error "Failed to apply changes for: ${name}"
-        fi
+"
     done
 
-    if [ $applied -gt 0 ]; then
+    if [ ${#changed_names[@]} -eq 0 ]; then
+        log_info "No changed files to apply."
+        return 0
+    fi
+
+    log_info "Applying changes from ${#changed_names[@]} file(s) in a single request: ${changed_names[*]}"
+
+    local prompt
+    prompt="One or more managed config files have been modified by their applications at runtime.
+For each file listed below, update ONLY the relevant section in its Nix module to incorporate the changes.
+Preserve the existing code style and formatting. Do not modify any unrelated parts of the files.
+You may reorder sections to match the preferred order that the application is ordering them in.
+If a file's changes are purely cosmetic (e.g. key reordering that Nix re-sorts anyway) and the Nix module already produces an equivalent result, leave that module unchanged.
+${prompt_sections}"
+
+    if echo "$prompt" | claude -p --allowedTools "Read,Edit" --add-dir "$DOTFILES_DIR"; then
+        log_success "Applied changes for: ${changed_names[*]}"
         echo ""
         log_info "Run 'nx check' to validate the updated flake."
+    else
+        log_error "Failed to apply changes for: ${changed_names[*]}"
+        return 1
     fi
 }
 

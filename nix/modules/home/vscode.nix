@@ -138,7 +138,15 @@ in
         },
         "claudeCode.preferredLocation": "panel",
         "chat.mcp.gallery.enabled": true,
-        "python.analysis.typeCheckingMode": "standard"
+        "python.analysis.typeCheckingMode": "standard",
+        "yaml.disableSchemaDetection": [
+          "**/.github/workflows/*.yml",
+          "**/.github/workflows/*.yaml",
+          "**/.gitea/workflows/*.yml",
+          "**/.gitea/workflows/*.yaml",
+          "**/.forgejo/workflows/*.yml",
+          "**/.forgejo/workflows/*.yaml"
+        ]
       }
     '';
 
