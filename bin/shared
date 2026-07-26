@@ -155,6 +155,77 @@ validate_numeric() {
 }
 
 # ============================================================================
+# Process, Timeout and Prompt Helpers
+# ============================================================================
+
+# Run a command with a hard timeout
+# Usage: run_with_timeout <seconds> <command> [args...]
+# Returns: the command's exit code, or 124 if it timed out
+# Note: callers control redirection - nothing is silenced here
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+
+    if command -v timeout &>/dev/null; then
+        timeout "${timeout_sec}s" "$@"
+    elif command -v gtimeout &>/dev/null; then
+        gtimeout "${timeout_sec}s" "$@"
+    else
+        # No timeout binary available - run unbounded rather than refuse to run
+        "$@"
+    fi
+}
+
+# Ask for y/N confirmation, defaulting to "no"
+# Usage: confirm <prompt> [timeout_seconds]
+# Returns: 0 if confirmed, 1 if declined, timed out, or not interactive
+# Deliberately a plain read rather than `gum confirm`: a typed y/N keeps the
+# prompt greppable, scriptable and free of a full-screen widget
+confirm() {
+    local prompt="$1"
+    local timeout_sec="${2:-}"
+
+    # Non-interactive callers must pass an explicit --force style flag instead
+    [[ -t 0 ]] || return 1
+
+    local response=""
+    if [[ -n "$timeout_sec" ]]; then
+        log_warning "$prompt (y/N) [${timeout_sec}s timeout]"
+        if ! read -r -t "$timeout_sec" response; then
+            echo ""
+            return 1
+        fi
+    else
+        log_warning "$prompt (y/N)"
+        read -r response
+    fi
+
+    [[ "$response" =~ ^[Yy]$ ]]
+}
+
+# Refresh sudo credentials in the background so long runs never prompt mid-task
+# Sets SUDO_KEEPALIVE_PID; pair with stop_sudo_keepalive in an EXIT trap
+# macOS expires the sudo timestamp after 5 minutes, so refresh well inside that
+start_sudo_keepalive() {
+    # -n keeps the loop from ever stealing the terminal for a password prompt,
+    # and kill -0 makes it die with its parent instead of orphaning
+    while true; do
+        sleep 50
+        kill -0 "$$" 2>/dev/null || break
+        sudo -n -v 2>/dev/null || break
+    done &
+    SUDO_KEEPALIVE_PID=$!
+}
+
+stop_sudo_keepalive() {
+    if [[ -n "${SUDO_KEEPALIVE_PID:-}" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        SUDO_KEEPALIVE_PID=""
+    fi
+}
+
+# ============================================================================
 # Colored Help Formatting Functions
 # ============================================================================
 

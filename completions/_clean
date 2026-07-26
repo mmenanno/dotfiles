@@ -1,0 +1,36 @@
+#compdef clean
+
+# Zsh completion for clean (system cleanup script)
+
+_clean() {
+    local -a tasks
+    tasks=(
+        'nix:Nix garbage collection and store optimization (sudo)'
+        'brew:Homebrew cleanup'
+        'docker:Docker system prune (starts Docker if needed)'
+        'pkg:npm/pnpm/yarn cache cleanup'
+        'ruby:Ruby gem cleanup'
+        'go:Go module cache cleanup'
+        'macos:macOS cache and log cleanup (sudo)'
+        'xcode:Xcode derived data and archives'
+    )
+
+    # --only/--skip take comma separated task lists, so complete each element
+    _clean_tasks() {
+        compset -P '*,'
+        _describe -t tasks 'task' tasks
+    }
+
+    _arguments -s \
+        '(-f --force)'{-f,--force}'[Skip confirmation prompt]' \
+        '(-n --dry-run)'{-n,--dry-run}'[Show what would run without changing anything]' \
+        '(-nd --no-docker)'{-nd,--no-docker}'[Skip Docker entirely]' \
+        '*--only[Run only these tasks]:task:_clean_tasks' \
+        '*--skip[Skip these tasks]:task:_clean_tasks' \
+        '(-q --quiet)'{-q,--quiet}'[Suppress informational output]' \
+        '(-v --verbose)'{-v,--verbose}'[Show extra detail]' \
+        '(-h --help)'{-h,--help}'[Show help message]'
+}
+
+_clean "$@"
+compdef _clean clean
