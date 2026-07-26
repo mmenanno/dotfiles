@@ -45,10 +45,11 @@ markdownlint **/*.md
 
 ### Shell Scripts
 
-- Use `#!/bin/bash` shebang
+- Use `#!/usr/bin/env bash` shebang (finds Homebrew/Nix bash rather than the ancient `/bin/bash` 3.2)
 - Include `set -euo pipefail` for safety
 - Must pass `shellcheck` validation
 - Use lowercase, short names (e.g., `nx`, `gbclean`)
+- Source `bin/shared` for logging (`log_info`/`log_success`/`log_warning`/`log_error`), plus `run_with_timeout`, `confirm` and `start_sudo_keepalive`/`stop_sudo_keepalive`
 - **1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells (where zsh aliases aren't visible), wrap commands with `op plugin run --`. Exception: `gh` — its token is persisted to `~/.config/gh/hosts.yml` by `nix/modules/home/gh.nix`, so `gh` works directly in any context without wrapping.
 
 ### Markdown Documentation
