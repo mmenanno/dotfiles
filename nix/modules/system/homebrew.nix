@@ -1,4 +1,4 @@
-{ config, lib, username, isWorkMachine ? false, ... }:
+{ config, lib, username, inputs, isWorkMachine ? false, ... }:
 let
   commonBrews = [
     "coreutils"
@@ -177,6 +177,18 @@ in
     enableRosetta = true;
     user = username;
     autoMigrate = true;
+
+    # Homebrew serves cask definitions from its live JSON API, but nix pins brew
+    # itself, so a brand-new cask stanza breaks the pinned release. brew 6.0.12
+    # (nix-homebrew's pin) has no `command_wrapper` artifact, which the API now
+    # ships for firefox and vlc, so `brew bundle` aborts with "undefined method
+    # 'command_wrapper'". 6.0.13 adds it. nix-homebrew embeds `version` as
+    # HOMEBREW_VERSION, so it has to match the source it is built from. Drop this
+    # once nix-homebrew bumps brew-src past 6.0.12.
+    package = inputs.brew-src // {
+      name = "brew-6.0.13";
+      version = "6.0.13";
+    };
   };
 
   # Homebrew 6.0 (June 2026) requires third-party taps to be explicitly trusted

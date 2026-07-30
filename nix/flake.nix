@@ -11,6 +11,13 @@
 
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
 
+    # Pinned ahead of nix-homebrew's own brew-src (6.0.12). See the `package`
+    # override in modules/system/homebrew.nix for why.
+    brew-src = {
+      url = "github:Homebrew/brew/6.0.13";
+      flake = false;
+    };
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
