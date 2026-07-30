@@ -572,9 +572,9 @@ in
         command = "${hooksDir}/statusline.sh";
       };
       enabledPlugins = {
-        "claude-code-setup@claude-plugins-official" = true;
+        "claude-code-setup@claude-plugins-official" = false;
         "claude-md-management@claude-plugins-official" = true;
-        "code-simplifier@claude-plugins-official" = true;
+        "code-simplifier@claude-plugins-official" = false;
         "commit-commands@claude-plugins-official" = true;
         "frontend-design@claude-plugins-official" = true;
         "github@claude-plugins-official" = true;
@@ -584,22 +584,19 @@ in
         "superpowers@claude-plugins-official" = true;
         "security-guidance@claude-plugins-official" = true;
         "gopls-lsp@claude-plugins-official" = true;
-        "csharp-lsp@claude-plugins-official" = true;
+        "csharp-lsp@claude-plugins-official" = false;
         "rust-analyzer-lsp@claude-plugins-official" = true;
-        "php-lsp@claude-plugins-official" = true;
-        "jdtls-lsp@claude-plugins-official" = true;
-        "clangd-lsp@claude-plugins-official" = true;
-        "swift-lsp@claude-plugins-official" = true;
-        "kotlin-lsp@claude-plugins-official" = true;
-        "lua-lsp@claude-plugins-official" = true;
+        "php-lsp@claude-plugins-official" = false;
+        "jdtls-lsp@claude-plugins-official" = false;
+        "clangd-lsp@claude-plugins-official" = false;
+        "swift-lsp@claude-plugins-official" = false;
+        "kotlin-lsp@claude-plugins-official" = false;
+        "lua-lsp@claude-plugins-official" = false;
         "ruby-lsp@claude-plugins-official" = true;
         "typescript-lsp@claude-plugins-official" = true;
         "notion-markdown@babylist" = isWorkMachine;
         "datadog-analytics@babylist" = isWorkMachine;
         "skill-creator@claude-plugins-official" = false;
-
-        # Local plugins
-        "gwa@local-plugins" = !isWorkMachine;
       };
       extraKnownMarketplaces = lib.optionalAttrs isWorkMachine {
         babylist = {
