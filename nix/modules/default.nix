@@ -2,6 +2,7 @@
   # System (nix-darwin) modules: OS, apps, services, defaults
   systemModules = [
     ./system/base-configuration.nix
+    ./system/overlays.nix
     ./system/packages.nix
     ./system/homebrew.nix
     ./system/pwa-apps.nix
@@ -43,6 +44,7 @@
   # Work machine system modules (excludes personal apps/services)
   workSystemModules = [
     ./system/base-configuration.nix
+    ./system/overlays.nix
     ./system/packages.nix
     ./system/homebrew.nix
     ./system/system-defaults.nix
