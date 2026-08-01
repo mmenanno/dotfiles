@@ -115,7 +115,6 @@ let
   };
 
   personalOnlyMasApps = {
-    "Brother iPrint&Scan" = 1193539993;
     "Cookie-Editor" = 6446215341;
     "Deliveries" = 290986013;
     "JSON Peep for Safari" = 1458969831;
