@@ -25,6 +25,11 @@
       url = "github:mmenanno/ralph-claude-code";
       flake = false;
     };
+
+    gh-stack = {
+      url = "github:github/gh-stack";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, ... }:
@@ -34,6 +39,12 @@
       inherit (lib) getEnvOrFallback;
 
       moduleIndex = import ./modules/default.nix;
+
+      # Standalone home-manager builds (`nx up -hm`) don't go through the
+      # nix-darwin system pkgs, so they need the same overlays applied directly.
+      overlaidPkgs = nixpkgs.legacyPackages.aarch64-darwin.extend (
+        nixpkgs.lib.composeManyExtensions (import ./overlays.nix)
+      );
 
       # Environment-based username with fallback using consistent pattern
       username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
@@ -108,7 +119,7 @@
       };
 
     homeConfigurations."default" = home-manager.lib.homeManagerConfiguration {
-      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      pkgs = overlaidPkgs;
       extraSpecialArgs = commonConfig // { dotlib = lib; };
       modules = [
         ./home.nix
@@ -117,7 +128,7 @@
     };
 
     homeConfigurations."work" = home-manager.lib.homeManagerConfiguration {
-      pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+      pkgs = overlaidPkgs;
       extraSpecialArgs = commonConfig // { dotlib = lib; isWorkMachine = true; };
       modules = [
         ./home.nix

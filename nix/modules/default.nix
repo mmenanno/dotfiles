@@ -70,6 +70,7 @@
     ./home/mcp-shared.nix
     ./home/gh.nix
     ./home/claude.nix
+    ./home/claude-skills.nix
     ./home/ide-extensions.nix
     ./home/npmrc.nix
     ./home/rostrum.nix

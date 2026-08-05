@@ -1,7 +1,8 @@
-{ inputs, ... }:
+{ inputs, lib, isWorkMachine ? false, ... }:
 
 let
   ralphClaudeCode = inputs.ralph-claude-code;
+  ghStack = inputs.gh-stack;
 
   ralphSkills = {
     ".claude/skills/brief".source = "${ralphClaudeCode}/skill/brief";
@@ -14,6 +15,10 @@ let
     };
   };
 
+  ghStackSkill = {
+    ".claude/skills/gh-stack".source = "${ghStack}/skills/gh-stack";
+  };
+
 in {
-  home.file = ralphSkills // ralphScript;
+  home.file = ghStackSkill // lib.optionalAttrs (!isWorkMachine) (ralphSkills // ralphScript);
 }
