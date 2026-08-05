@@ -19,6 +19,7 @@ in
       git_protocol = "ssh";
       prompt = "enabled";
     };
+    extensions = [ pkgs.gh-stack ];
   };
 
   # Persist gh CLI auth from the 1Password-sourced token into ~/.config/gh/hosts.yml.

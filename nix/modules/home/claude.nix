@@ -596,6 +596,11 @@ in
         "typescript-lsp@claude-plugins-official" = true;
         "notion-markdown@babylist" = isWorkMachine;
         "datadog-analytics@babylist" = isWorkMachine;
+        "avo@babylist" = isWorkMachine;
+        "context-tools@babylist" = isWorkMachine;
+        "datadog@babylist" = isWorkMachine;
+        "fight-me@babylist" = isWorkMachine;
+        "preflight-review@babylist" = isWorkMachine;
         "skill-creator@claude-plugins-official" = false;
       };
       extraKnownMarketplaces = lib.optionalAttrs isWorkMachine {
