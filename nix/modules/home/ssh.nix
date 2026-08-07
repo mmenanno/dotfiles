@@ -94,6 +94,14 @@ in
           User = "root";
           Port = 8822;
           IdentityFile = "~/.ssh/${mainServerKeyFile}";
+          # Multiplexing: later sessions reuse the first connection's handshake.
+          # Persist is kept short so a master left dead by sleep or a LAN/Tailscale
+          # switch expires quickly instead of hanging new sessions;
+          # ServerAliveInterval makes a stale master notice and drop itself.
+          ControlMaster = "auto";
+          ControlPath = "~/.ssh/cm-%C"; # %C = hash — keeps it under the 104-char socket limit
+          ControlPersist = "1m";
+          ServerAliveInterval = 15;
         };
       } // (if mainServerName != nvmServerName then {
         "${nvmServerName}" = {
