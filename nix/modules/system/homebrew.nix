@@ -53,7 +53,6 @@ let
   ];
 
   workOnlyCasks = [
-    "grammarly-desktop"
     "linear"
     "meetingbar"
     "slack"
