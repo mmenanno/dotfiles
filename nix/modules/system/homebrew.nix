@@ -12,7 +12,7 @@ let
     "just"
     "livekit-cli"
     "memcached"
-    "mysql@8.0"
+    "mysql@8.4"
     "pipenv"
     "pre-commit"
     "pyenv"
