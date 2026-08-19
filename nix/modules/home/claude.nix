@@ -340,6 +340,33 @@ let
   ];
   # Snowflake (agentic — always ask)
   snowflakeAiMcpAskTools = [ "mcp__claude_ai_Snowflake__data-doula-agent" ];
+  # --- MCP servers to keep disconnected (context bloat / unused connectors) ---
+  deniedMcpServerNames = [
+    "claude.ai Ahrefs"
+    "claude.ai Airtable"
+    "claude.ai Amplitude"
+    "claude.ai Asana"
+    "claude.ai Atlassian"
+    "claude.ai BrightHire"
+    "claude.ai Canva"
+    "claude.ai Cloudinary"
+    "claude.ai Docusign"
+    "claude.ai Euno"
+    "claude.ai Figma"
+    "claude.ai Fireflies"
+    "claude.ai GeMCP"
+    "claude.ai Hex"
+    "claude.ai Miro"
+    "claude.ai Netsuite DEV"
+    "claude.ai Netsuite PROD"
+    "claude.ai Netsuite UAT"
+    "claude.ai Reclaim.ai"
+    "claude.ai Strella"
+    "claude.ai Vercel"
+    "claude.ai Zapier"
+    "claude.ai monday.com"
+    "plugin:datadog:datadog"
+  ];
 
   hooksDir = "${homeDirectory}/.claude/hooks";
 in
@@ -611,6 +638,9 @@ in
           };
         };
       };
+      deniedMcpServers = lib.optionals isWorkMachine (
+        map (name: { serverName = name; }) deniedMcpServerNames
+      );
       autoDreamEnabled = true;
       autoUpdates = true;
       teammateMode = "auto";
