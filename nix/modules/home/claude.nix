@@ -645,6 +645,7 @@ in
       autoUpdates = true;
       teammateMode = "auto";
       theme = "dark";
+      tui = "fullscreen";
       verbose = false;
       agentPushNotifEnabled = true;
       inputNeededNotifEnabled = true;
