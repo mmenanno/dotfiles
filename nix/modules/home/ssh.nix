@@ -165,6 +165,9 @@ in
         "*" = {
           IdentityAgent = onePasswordAgentSymlink;
           IdentitiesOnly = true;
+          # Fail fast when the agent can't sign, instead of burning MaxAuthTries
+          # on password prompts. Bootstrap: -o PreferredAuthentications=password
+          PreferredAuthentications = "publickey";
         };
         "github.com" = {
           HostName = "github.com";
