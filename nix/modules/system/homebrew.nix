@@ -100,7 +100,7 @@ let
     "textual"
     "torrent-file-editor"
     "transmit"
-    "unraid-usb-creator-next"
+    "unraid-usb-creator"
     "vlc"
     "webpquicklook"
     "whatsapp"
