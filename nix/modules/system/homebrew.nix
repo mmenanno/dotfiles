@@ -63,7 +63,6 @@ let
     "affinity-designer"
     "affinity-photo"
     "affinity-publisher"
-    "battle-net"
     "chatgpt"
     "codex"
     "daisydisk"
