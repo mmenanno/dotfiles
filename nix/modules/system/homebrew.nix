@@ -96,7 +96,6 @@ let
     "syncthing-app"
     "tailscale-app"
     "textual"
-    "torrent-file-editor"
     "transmit"
     "unraid-usb-creator"
     "vlc"
