@@ -122,6 +122,7 @@ let
     "MetaDoctor" = 988250390;
     "Numbers" = 409203825;
     "Pages" = 409201541;
+    "Palworld" = 6503918400;
     "Proton Pass for Safari" = 6502835663;
     "Tampermonkey Classic" = 1482490089;
     "The Camelizer" = 1532579087;
