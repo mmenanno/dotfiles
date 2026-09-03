@@ -39,6 +39,7 @@
     ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix
+    ./home/torrent-file-icon.nix
   ];
 
   # Work machine system modules (excludes personal apps/services)

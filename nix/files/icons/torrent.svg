@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Silhouette measured off /System/Library/CoreServices/CoreTypes.bundle
+       GenericDocumentIcon.icns so this sits correctly beside system document
+       icons: page 720x946 on a 1024 canvas (aspect 0.76) with near-square
+       corners. Paper corners are sharp; rounding them is what makes a document
+       icon read as an app tile instead.
+
+       The dog-ear deliberately departs from Apple's: 270px rather than 330px.
+       At Apple's 46% of page width the flap vanishes into a white page, but on
+       a tinted one it reads as a huge white wedge. -->
+  <defs>
+    <linearGradient id="page" gradientUnits="userSpaceOnUse" x1="152" y1="16" x2="872" y2="962">
+      <stop offset="0" stop-color="#5aa0ff"/>
+      <stop offset="0.55" stop-color="#4a5cf0"/>
+      <stop offset="1" stop-color="#3a1fa8"/>
+    </linearGradient>
+
+    <!-- Light source above left, falling off across the sheet, with a matching
+         vignette opposite it. A single linear ramp reads as flat vinyl. -->
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="300" cy="170" r="640">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" gradientUnits="userSpaceOnUse" cx="800" cy="900" r="600">
+      <stop offset="0" stop-color="#160a4d" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#160a4d" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="curl" gradientUnits="userSpaceOnUse" x1="626" y1="252" x2="800" y2="112">
+      <stop offset="0" stop-color="#a9c0ec"/>
+      <stop offset="0.45" stop-color="#e4ecfd"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <filter id="drop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0a1024" flood-opacity="0.28"/>
+    </filter>
+    <filter id="curlShadow" x="-70%" y="-70%" width="240%" height="240%">
+      <feDropShadow dx="-12" dy="12" stdDeviation="16" flood-color="#0a1024" flood-opacity="0.50"/>
+    </filter>
+    <filter id="glyphShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#0a1024" flood-opacity="0.24"/>
+    </filter>
+
+    <path id="pagePath" d="M 166 16 H 602 L 872 286 V 948 Q 872 962 858 962 H 166 Q 152 962 152 948 V 30 Q 152 16 166 16 Z"/>
+    <clipPath id="pageClip"><use href="#pagePath"/></clipPath>
+  </defs>
+
+  <g filter="url(#drop)"><use href="#pagePath" fill="url(#page)"/></g>
+
+  <g clip-path="url(#pageClip)">
+    <use href="#pagePath" fill="url(#glow)"/>
+    <use href="#pagePath" fill="url(#vignette)"/>
+
+    <!-- Peer swarm as a watermark: carries the theme without competing with the
+         glyph for the centre. Clusters sit clear of the glyph box and the curl,
+         and dissolve harmlessly below 64px. -->
+    <g stroke="#ffffff" fill="#ffffff" opacity="0.13">
+      <g stroke-width="9" fill="none">
+        <path d="M 222 800 L 332 860 L 252 930"/>
+        <path d="M 222 800 L 172 884"/>
+        <path d="M 332 860 L 252 930"/>
+        <path d="M 742 690 L 818 762 L 704 806"/>
+        <path d="M 742 690 L 704 806"/>
+        <path d="M 246 172 L 336 232"/>
+      </g>
+      <circle cx="222" cy="800" r="18"/><circle cx="332" cy="860" r="14"/>
+      <circle cx="252" cy="930" r="12"/><circle cx="172" cy="884" r="11"/>
+      <circle cx="742" cy="690" r="15"/><circle cx="818" cy="762" r="12"/>
+      <circle cx="704" cy="806" r="11"/>
+      <circle cx="246" cy="172" r="13"/><circle cx="336" cy="232" r="10"/>
+    </g>
+
+    <!-- The corner curled forward rather than folded flat: the crease is a
+         quadratic bulging toward the mirrored corner, so the flap tapers to a
+         point at each end the way rolled paper does. -->
+    <g filter="url(#curlShadow)">
+      <path d="M 602 16 Q 602 286 872 286 Z" fill="url(#curl)"/>
+    </g>
+
+    <use href="#pagePath" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="6"/>
+  </g>
+
+  <!-- Chunked transfer in flight: chevrons descending into a tray, fading out
+       the further back they are. Every stroke is separate and open, so no two
+       shapes overlap and seam. Kept to plain chevrons because a peer-swarm
+       glyph, which says "torrent" more literally, turns to mush below 64px. -->
+  <g filter="url(#glyphShadow)" fill="none" stroke="#ffffff"
+     stroke-width="42" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M 412 312 L 512 412 L 612 312" opacity="0.30"/>
+    <path d="M 412 412 L 512 512 L 612 412" opacity="0.60"/>
+    <path d="M 412 512 L 512 612 L 612 512"/>
+    <path d="M 410 680 V 718 H 614 V 680"/>
+  </g>
+</svg>
