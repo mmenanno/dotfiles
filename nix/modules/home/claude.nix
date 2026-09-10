@@ -369,6 +369,25 @@ let
   ];
 
   hooksDir = "${homeDirectory}/.claude/hooks";
+
+  # --- iTerm2 Claude Code status integration (cc-status symlink is installed by iTerm2) ---
+  ccStatusHook = {
+    hooks = [
+      { type = "command"; command = "${homeDirectory}/.config/iterm2/cc-status"; }
+    ];
+  };
+  # PreToolUse is excluded here — it's set explicitly alongside rm-guard
+  ccStatusEvents = [
+    "Notification"
+    "PermissionRequest"
+    "PostToolUse"
+    "SessionEnd"
+    "SessionStart"
+    "Stop"
+    "StopFailure"
+    "SubagentStop"
+    "UserPromptSubmit"
+  ];
 in
 {
   home = {
@@ -584,7 +603,7 @@ in
         defaultMode = "auto";
         additionalDirectories = [];
       };
-      hooks = {
+      hooks = lib.genAttrs ccStatusEvents (_: [ ccStatusHook ]) // {
         PreToolUse = [
           {
             matcher = "Bash";
@@ -592,6 +611,7 @@ in
               { type = "command"; command = "${hooksDir}/rm-guard.sh"; }
             ];
           }
+          ccStatusHook
         ];
       };
       statusLine = {
