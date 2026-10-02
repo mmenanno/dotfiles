@@ -28,6 +28,7 @@ let
     "${appsDir}/1Password.app"
     "${systemAppsDir}/iPhone Mirroring.app"
     "${appsDir}/iTerm.app"
+    "${appsDir}/Conductor.app"
     "${appsDir}/Visual Studio Code.app"
   ];
 
@@ -38,6 +39,7 @@ let
     "${chromeAppsDir}/Calendar.app"
     "${appsDir}/Slack.app"
     "${appsDir}/iTerm.app"
+    "${appsDir}/Conductor.app"
     "${appsDir}/Visual Studio Code.app"
     "${appsDir}/1Password.app"
     "${appsDir}/Self Service.app"

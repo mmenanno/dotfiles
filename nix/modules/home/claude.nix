@@ -485,6 +485,7 @@ in
       respectGitignore = false;
       skipAllowlistPrompt = true;
       skipAutoPermissionPrompt = true;
+      skipWorkflowUsageWarning = true;
       cleanupPeriodDays = 20;
       includeCoAuthoredBy = false;
       model = "opus";

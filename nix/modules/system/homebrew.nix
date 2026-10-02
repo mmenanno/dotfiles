@@ -98,7 +98,6 @@ let
     "transmit"
     "unraid-usb-creator"
     "vlc"
-    "webpquicklook"
     "whatsapp"
     "zoom"
   ];
