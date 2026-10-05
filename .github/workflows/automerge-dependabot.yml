@@ -34,6 +34,7 @@ jobs:
       - name: Comment on major version updates
         if: steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "Hi @${{ github.repository_owner }}! This PR is for a major version update and will not be auto-merged. Please review it manually."
+          gh pr comment "$PR_URL" --body "Hi @${{ github.repository_owner }}! This PR is for a major version update and will not be auto-merged. Please review it manually."
         env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
