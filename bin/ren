@@ -839,6 +839,16 @@ cmd_install() {
             log_verbose "Removing Gatekeeper quarantine from app..."
             xattr -rd com.apple.quarantine "$install_path" 2>/dev/null || true
         fi
+
+        # Archives zipped without Unix permissions leave the bundle's binaries
+        # non-executable, and launchd then refuses to spawn the app
+        # ("Launchd job spawn failed", POSIX error 111).
+        local bundle_exe
+        bundle_exe=$(plutil -extract CFBundleExecutable raw "$install_path/Contents/Info.plist" 2>/dev/null) || bundle_exe=""
+        if [[ -n "$bundle_exe" && -f "$install_path/Contents/MacOS/$bundle_exe" && ! -x "$install_path/Contents/MacOS/$bundle_exe" ]]; then
+            log_verbose "Restoring execute permission on app binaries..."
+            chmod +x "$install_path/Contents/MacOS/"*
+        fi
     fi
 
     # Create/update symlink to track "latest" version (Windows builds only)
