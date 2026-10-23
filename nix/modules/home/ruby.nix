@@ -1,11 +1,8 @@
 { lib, pkgs,... }:
 
 let
-  latestRubyVersion = "4.0.6";
+  latestRubyVersion = "4.0.7";
   rubyVersions = [
-    "3.4.8"
-    "4.0.3"
-    "4.0.5"
     latestRubyVersion
   ];
 in
