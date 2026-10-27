@@ -23,6 +23,9 @@ jobs:
         uses: super-linter/super-linter@v9.0.0
         env:
           VALIDATE_ALL_CODEBASE: false
+          # Nix is covered by statix/deadnix below; super-linter misdetects .nix
+          # files that embed shell snippets (e.g. a bash shebang) as bash scripts
+          FILTER_REGEX_EXCLUDE: '.*\.nix$'
           DEFAULT_BRANCH: main
           ENABLE_GITHUB_PULL_REQUEST_SUMMARY_COMMENT: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
