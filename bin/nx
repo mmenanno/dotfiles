@@ -13,39 +13,12 @@ source "$SCRIPT_DIR/shared"
 DOTFILES_DIR="/Users/michaelmenanno/dotfiles"
 NIX_DIR="$DOTFILES_DIR/nix"
 
-# Build the darwin-rebuild command as an array, falling back to nix run on fresh systems
-get_darwin_rebuild_cmd() {
-    if command -v darwin-rebuild >/dev/null 2>&1; then
-        DARWIN_REBUILD_CMD=(darwin-rebuild)
-    else
-        DARWIN_REBUILD_CMD=(nix --extra-experimental-features "nix-command flakes" run nix-darwin --)
-    fi
-}
-
-# Determine which darwinConfiguration to use based on hostname
-get_config_name() {
-    local work_hostname="${NIX_WORK_HOSTNAME:-}"
-    # If env var not set, try reading from 1Password directly
-    if [[ -z "$work_hostname" ]]; then
-        work_hostname="$(op read "op://Nix/Work/hostname" 2>/dev/null || echo "")"
-    fi
-    if [[ -n "$work_hostname" ]]; then
-        local current_hostname
-        current_hostname="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
-        if [[ "$current_hostname" == "$work_hostname" ]]; then
-            echo "work_macbook"
-            return
-        fi
-    fi
-    echo "macbook_setup"
-}
-
 show_help() {
     cat << EOF
 Nix Dotfiles Management Script
 
 USAGE:
-    nix <command> [options]
+    nx <command> [options]
 
 COMMANDS:
     up, apply, a       Apply configuration (darwin-rebuild switch)
@@ -57,29 +30,29 @@ COMMANDS:
     pull, p           Pull latest dotfiles from remote
     edit, e           Open dotfiles in VS Code
     status, s         Show git status of dotfiles
-    build, b          Build configuration without applying
-    diff, d           Show what would change (dry-run)
-    clean, cl         Clean old generations
+    build, b          Build configuration without applying (-hm: Home Manager only)
+    diff, d           Show what would be built (dry-run)
+    clean, cl         Clean old generations and optimise the store (clean --only nix)
     managed, m        Manage mutable config files (status/diff/revert/apply)
     pr                Create PR from current changes (opts: --merge, --title, --body)
     help, h           Show this help message
 
 EXAMPLES:
-    nix up            # Apply configuration
-    nix up -hm        # Rebuild Home Manager only (faster for config changes)
-    nix up -fm        # Revert managed files to Nix baseline, then apply
-    nix c             # Check flake
-    nix l             # Run linting checks
-    nix u             # Update dependencies
-    nix p             # Pull latest from remote
-    nix e             # Edit in VS Code
-    nix s             # Git status
-    nix cl            # Clean old generations
-    nix m             # Show mutable file status
-    nix m d           # Diff mutable files against baseline
-    nix m r claude    # Revert managed file to Nix version
-    nix m a claude    # Apply app changes back into Nix module
-    nix pr            # Create PR from current changes
+    nx up             # Apply configuration
+    nx up -hm         # Rebuild Home Manager only (faster for config changes)
+    nx up -fm         # Revert managed files to Nix baseline, then apply
+    nx c              # Check flake
+    nx l              # Run linting checks
+    nx u              # Update dependencies
+    nx p              # Pull latest from remote
+    nx e              # Edit in VS Code
+    nx s              # Git status
+    nx cl             # Clean old generations
+    nx m              # Show mutable file status
+    nx m d            # Diff mutable files against baseline
+    nx m r claude     # Revert managed file to Nix version
+    nx m a claude     # Apply app changes back into Nix module
+    nx pr             # Create PR from current changes
 
 EOF
 }
@@ -188,25 +161,12 @@ apply_config() {
 
 build_config() {
     log_info "Building nix-darwin configuration..."
-    get_darwin_rebuild_cmd
-    if "${DARWIN_REBUILD_CMD[@]}" build --flake "$NIX_DIR#$(get_config_name)"; then
-        log_success "Configuration built successfully"
-        # Clean up result symlink automatically
-        if [[ -L "$NIX_DIR/result" ]]; then
-            rm -f "$NIX_DIR/result"
-            log_info "Cleaned up result symlink"
-        fi
-        return 0
-    else
-        log_error "Configuration build failed"
-        return 1
-    fi
+    "$SCRIPT_DIR/nixup-with-secrets" --build "$@"
 }
 
 show_diff() {
-    log_info "Showing configuration diff (dry-run)..."
-    get_darwin_rebuild_cmd
-    "${DARWIN_REBUILD_CMD[@]}" build --flake "$NIX_DIR#$(get_config_name)" --dry-run
+    log_info "Showing what would be built (dry-run)..."
+    "$SCRIPT_DIR/nixup-with-secrets" --build --dry-run "$@"
 }
 
 pull_dotfiles() {
@@ -246,63 +206,7 @@ show_status() {
 }
 
 clean_generations() {
-    log_info "Cleaning old nix-darwin generations..."
-    log_warning "This will remove old system generations. Continue? (y/N)"
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        log_info "Starting garbage collection..."
-
-        # Start background process and show progress
-        local temp_file
-        temp_file=$(mktemp)
-        sudo sh -c "nix-collect-garbage -d > \"$temp_file\" 2>&1" &
-        local gc_pid=$!
-
-        # Show progress while garbage collection runs
-        local dots=0
-        while kill -0 "$gc_pid" 2>/dev/null; do
-            printf "\r%s[INFO]%s Garbage collection in progress" "${BLUE}" "${NC}"
-            for ((i=0; i<dots; i++)); do printf "."; done
-            printf "   "
-            dots=$(( (dots + 1) % 4 ))
-            sleep 0.5
-        done
-
-        # Wait for completion and get exit status
-        wait "$gc_pid"
-        local exit_code=$?
-
-        # Clear the progress line
-        printf "\r\033[K"
-
-        if [[ $exit_code -eq 0 ]]; then
-            local output
-            output=$(cat "$temp_file")
-            echo "$output"
-
-            # Extract and highlight the freed space if available
-            if echo "$output" | grep -q "freed"; then
-                local freed
-                freed=$(echo "$output" | grep -o "[0-9.]*\s*[KMGT]*iB freed" | tail -1)
-                if [[ -n "$freed" ]]; then
-                    log_success "Garbage collection completed - $freed"
-                else
-                    log_success "Garbage collection completed"
-                fi
-            else
-                log_success "Garbage collection completed"
-            fi
-        else
-            log_error "Garbage collection failed"
-            cat "$temp_file"
-            rm -f "$temp_file"
-            return 1
-        fi
-
-        rm -f "$temp_file"
-    else
-        log_info "Cleaning cancelled"
-    fi
+    "$SCRIPT_DIR/clean" --only nix "$@"
 }
 
 # Determine default branch for origin (prefers gh if available)
@@ -334,12 +238,14 @@ create_pr() {
                 shift
                 ;;
             --title)
-                pr_title=${2:-}
-                shift 2 || true
+                require_argument "$1" "${2:-}" || return 1
+                pr_title=$2
+                shift 2
                 ;;
             --body)
-                pr_body=${2:-}
-                shift 2 || true
+                require_argument "$1" "${2:-}" || return 1
+                pr_body=$2
+                shift 2
                 ;;
             *)
                 log_warning "Unknown option to pr: $1"
@@ -728,13 +634,16 @@ case "${1:-help}" in
         show_status
         ;;
     build|b)
-        build_config
+        shift || true
+        build_config "$@"
         ;;
     diff|d)
-        show_diff
+        shift || true
+        show_diff "$@"
         ;;
     clean|cl)
-        clean_generations
+        shift || true
+        clean_generations "$@"
         ;;
     managed|m)
         shift || true

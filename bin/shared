@@ -226,6 +226,46 @@ stop_sudo_keepalive() {
 }
 
 # ============================================================================
+# Nix Dotfiles Helpers (nx, nixup-with-secrets)
+# ============================================================================
+
+# The Nix vault lives in the personal 1Password account. With a second (work)
+# account signed in, an unpinned `op` call resolves against the wrong account
+NIX_OP_ACCOUNT="${NIX_OP_ACCOUNT:-my.1password.com}"
+NIX_OP_TIMEOUT=30
+
+# Build the darwin-rebuild command as an array, falling back to nix run on fresh systems
+# shellcheck disable=SC2034  # DARWIN_REBUILD_CMD is consumed by the caller
+get_darwin_rebuild_cmd() {
+    if command -v darwin-rebuild >/dev/null 2>&1; then
+        DARWIN_REBUILD_CMD=(darwin-rebuild)
+    else
+        DARWIN_REBUILD_CMD=(nix --extra-experimental-features "nix-command flakes" run nix-darwin --)
+    fi
+}
+
+# Print the darwinConfiguration for this machine (work_macbook or macbook_setup)
+# Uses NIX_WORK_HOSTNAME when it is set at all (nixup-with-secrets exports it,
+# possibly empty), otherwise reads it from 1Password
+get_config_name() {
+    local work_hostname
+    if [[ -n "${NIX_WORK_HOSTNAME+set}" ]]; then
+        work_hostname="$NIX_WORK_HOSTNAME"
+    else
+        work_hostname="$(run_with_timeout "$NIX_OP_TIMEOUT" op read --account "$NIX_OP_ACCOUNT" "op://Nix/Work/hostname" 2>/dev/null || true)"
+    fi
+    if [[ -n "$work_hostname" ]]; then
+        local current_hostname
+        current_hostname="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+        if [[ "$current_hostname" == "$work_hostname" ]]; then
+            echo "work_macbook"
+            return
+        fi
+    fi
+    echo "macbook_setup"
+}
+
+# ============================================================================
 # Colored Help Formatting Functions
 # ============================================================================
 
