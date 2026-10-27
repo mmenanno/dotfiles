@@ -385,17 +385,38 @@ find_game_dir() {
 find_game_versions() {
     local game_name="$1"
     local -a versions=()
+    local wanted=$(normalize_game_name "$game_name")
+    local -A seen=()
 
-    # Find all real directories matching game name pattern (skip symlinks to avoid duplicates)
-    for dir in "$GAMES_DIR"/$game_name-*(N); do
-        if [[ -d "$dir" && ! -L "$dir" ]]; then
+    # Installs are named after the normalized name (MyGame -> My-Game-1.0), so
+    # look under both spellings, then keep only directories whose normalized
+    # name matches exactly: a bare Foo-* glob would also catch Foo-Bar-*
+    local prefix dir
+    for prefix in "$game_name" "${wanted// /-}"; do
+        for dir in "$GAMES_DIR"/$prefix-*(N); do
+            # Skip symlinks to avoid duplicates
+            [[ -d "$dir" && ! -L "$dir" && -z "${seen[$dir]:-}" ]] || continue
+            seen[$dir]=1
+            [[ "$(normalize_game_name "$(basename "$dir")")" == "$wanted" ]] || continue
             local version=$(extract_version "$(basename "$dir")")
             versions+=("$version:$dir")
-        fi
+        done
     done
 
     # Sort by version using version-aware sort
     printf '%s\n' "${versions[@]}" | sort -t: -k1,1V
+}
+
+# Remove a game's "latest" tracking symlink (Windows builds), under both the
+# raw archive spelling (older installs) and the normalized one
+remove_tracking_symlinks() {
+    local game_name="$1"
+    local normalized=$(normalize_game_name "$game_name")
+    local link
+    for link in "$GAMES_DIR/$game_name" "$GAMES_DIR/${normalized// /-}"; do
+        [[ -L "$link" ]] && rm "$link"
+    done
+    return 0
 }
 
 # Clean up old temporary directories (7+ days)
@@ -770,6 +791,11 @@ cmd_install() {
 
     log_verbose "Found game at: ${extracted_dir/$WORK_DIR\//}"
 
+    # Installs and their tracking symlink use the normalized name; spaces become
+    # dashes so display can restore the original name
+    local base_name=$(normalize_game_name "$game_name")
+    base_name="${base_name// /-}"
+
     # Check for existing installations
     local existing_versions=($(find_game_versions "$game_name"))
 
@@ -788,19 +814,9 @@ cmd_install() {
                 rm -rf "$ver_dir"
             done
 
-            # Remove symlink if it exists
-            if [[ -L "$GAMES_DIR/$game_name" ]]; then
-                rm "$GAMES_DIR/$game_name"
-            fi
+            remove_tracking_symlinks "$game_name"
         fi
     fi
-
-    # Determine installation path
-    # Use normalized game name to avoid duplicates and messy names
-    local base_name=$(normalize_game_name "$game_name")
-    # Convert spaces to dashes for filesystem compatibility
-    # Dashes preserve word boundaries so display can perfectly restore the original name
-    base_name="${base_name// /-}"
 
     local install_name="$base_name"
     if [[ "$version" != "unknown" ]]; then
@@ -859,12 +875,9 @@ cmd_install() {
     # This allows launching games by base name without knowing the version number
     # Mac .app bundles don't need this since they're version-agnostic single files
     if [[ "$platform" == "windows" ]]; then
-        local symlink_path="$GAMES_DIR/$game_name"
-        if [[ -L "$symlink_path" || -e "$symlink_path" ]]; then
-            rm -rf "$symlink_path"
-        fi
-        ln -s "$install_path" "$symlink_path"
-        log_verbose "Created symlink: $game_name → $install_name"
+        remove_tracking_symlinks "$game_name"
+        ln -s "$install_path" "$GAMES_DIR/$base_name"
+        log_verbose "Created symlink: $base_name → $install_name"
     fi
 
     log_success "Game installed successfully!"
@@ -1100,10 +1113,7 @@ cleanup_named_game() {
         rm -rf "$dir"
     done
 
-    # Remove tracking symlink if present (Windows builds use one).
-    if [[ -L "$GAMES_DIR/$game_name" ]]; then
-        rm "$GAMES_DIR/$game_name"
-    fi
+    remove_tracking_symlinks "$game_name"
 
     log_success "Removed $(pluralize ${#dirs[@]} version) of $display_name"
 }
