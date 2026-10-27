@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 let
   zshPackages = [
@@ -13,7 +13,11 @@ in
     zsh = {
     enable = true;
 
-    initContent = ''
+    # Ordered around completionInit (570): zinit and its plugin declarations
+    # load first, then completionInit runs compinit once, then the rest of
+    # initContent replays the compdefs zinit captured
+    initContent = lib.mkMerge [
+      (lib.mkOrder 550 ''
       # Fix stale zinit symlinks after Nix store GC or package upgrades
       if [[ -L "$HOME/.local/share/zinit/plugins/_local---zinit/_zinit" ]] && \
          ! [[ -e "$HOME/.local/share/zinit/plugins/_local---zinit/_zinit" ]]; then
@@ -56,7 +60,9 @@ in
       zinit snippet OMZP::docker
       zinit snippet OMZP::gh
       zinit snippet OMZP::iterm2
+      '')
 
+      ''
       zinit cdreplay -q
 
 
@@ -78,18 +84,6 @@ in
         path[''${path[(i)$hm]}]=("$hm" "$np")
       }
       typeset -U path PATH
-
-      # Add custom completions to fpath
-      fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
-
-      # Initialize zsh completion system (regenerate dump daily, use cache otherwise)
-      autoload -Uz compinit
-      mkdir -p "$HOME/.cache/zsh"
-      if [[ -f "$HOME/.cache/zsh/compdump" && $(find "$HOME/.cache/zsh/compdump" -mtime -1 2>/dev/null) ]]; then
-        compinit -C -d "$HOME/.cache/zsh/compdump"
-      else
-        compinit -d "$HOME/.cache/zsh/compdump"
-      fi
 
       # Source dv script to enable 'dv cd' functionality
       [[ -f ${config.home.homeDirectory}/dotfiles/bin/dv ]] && source ${config.home.homeDirectory}/dotfiles/bin/dv
@@ -131,7 +125,7 @@ in
       # Initialize mise shims once per session (not per subshell)
       if [[ -z "$MISE_SHIMS_INITIALIZED" ]]; then
         export MISE_SHIMS_INITIALIZED=1
-        eval "$(${pkgs.mise}/bin/mise activate zsh --shims)"
+        eval "$(${config.programs.mise.package}/bin/mise activate zsh --shims)"
       fi
 
       # Initialize zoxide only in interactive shells
@@ -141,6 +135,23 @@ in
 
       # Auto-list directory contents on cd
       chpwd() { [[ -t 1 ]] && eza --icons --group-directories-first; }
+      ''
+    ];
+
+    # Replaces home-manager's default bare `compinit`, which rebuilt the dump
+    # on every shell start before this cached one ran
+    completionInit = ''
+      # Add custom completions to fpath
+      fpath=(${config.home.homeDirectory}/dotfiles/completions $fpath)
+
+      # Initialize zsh completion system (regenerate dump daily, use cache otherwise)
+      autoload -Uz compinit
+      mkdir -p "$HOME/.cache/zsh"
+      if [[ -f "$HOME/.cache/zsh/compdump" && $(find "$HOME/.cache/zsh/compdump" -mtime -1 2>/dev/null) ]]; then
+        compinit -C -d "$HOME/.cache/zsh/compdump"
+      else
+        compinit -d "$HOME/.cache/zsh/compdump"
+      fi
     '';
 
     shellAliases = {
@@ -195,11 +206,9 @@ in
 
     zoxide = {
       enable = true;
-      # Disable automatic integration to prevent errors in non-interactive shells
+      # Initialized manually in initContent (interactive shells only, --cmd cd)
+      # to prevent errors in non-interactive shells
       enableZshIntegration = false;
-      options = [
-        "--cmd cd"
-      ];
     };
   };
 }

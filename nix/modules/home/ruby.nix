@@ -1,4 +1,4 @@
-{ lib, pkgs,... }:
+{ config, lib, pkgs, ... }:
 
 let
   latestRubyVersion = "4.0.7";
@@ -10,7 +10,7 @@ in
   home = {
     activation = {
       installRubyVersions = lib.hm.dag.entryAfter ["writeBoundary"] ''
-        export PATH="${pkgs.mise}/bin:$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        export PATH="${config.programs.mise.package}/bin:$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
         echo -e "\033[0;34mℹ\033[0m Verifying Ruby installations..."
         for version in ${lib.escapeShellArgs rubyVersions}; do
@@ -36,7 +36,7 @@ in
       ".bundle/config".text = ''
         ---
         BUNDLE_IGNORE_FUNDING_REQUESTS: "true"
-        BUNDLE_BUILD__MYSQL2: "--with-opt-dir=${pkgs.openssl}/lib"
+        BUNDLE_BUILD__MYSQL2: "--with-opt-dir=${lib.getDev pkgs.openssl}:${lib.getLib pkgs.openssl}"
       '';
     };
   };

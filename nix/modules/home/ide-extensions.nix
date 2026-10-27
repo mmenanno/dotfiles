@@ -104,7 +104,10 @@ in
         if [ -n "$to_install" ]; then
           while IFS= read -r ext; do
             [ -z "''${ext:-}" ] && continue
-            "$cli" --install-extension "$ext" >/dev/null 2>&1 || true
+            if ! "$cli" --install-extension "$ext" >/dev/null 2>&1; then
+              echo -e "\033[1;33m!\033[0m Failed to install VS Code extension $ext"
+              ext_install_failed=1
+            fi
           done <<<"$to_install"
         fi
 
@@ -120,12 +123,16 @@ in
         vscode_cli="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
       fi
 
+      ext_install_failed=0
       if [ -n "$vscode_cli" ]; then
         install_exts "$vscode_cli" "$vscode_exts"
       fi
 
-      # Cache the hash so subsequent runs skip if nothing changed
-      printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
+      # Cache the hash so subsequent runs skip if nothing changed. Only after a
+      # clean sync, so a missing CLI or failed install is retried next time
+      if [ -n "$vscode_cli" ] && [ "$ext_install_failed" -eq 0 ]; then
+        printf '%s' "$DESIRED_HASH" > "$HASH_FILE"
+      fi
     fi
   '';
 }
