@@ -121,8 +121,9 @@ fi
 
 if (( APPLY )); then
   backup=$HISTFILE_PATH.bak.$(date +%Y%m%d-%H%M%S)
-  cp $HISTFILE_PATH $backup
-  mv $tmpfile $HISTFILE_PATH
+  # No err_exit in this script, so a failed backup must stop the rewrite here
+  cp $HISTFILE_PATH $backup || { print -u2 "backup failed; $HISTFILE_PATH left untouched"; exit 1; }
+  mv $tmpfile $HISTFILE_PATH || { print -u2 "rewrite failed; backup at $backup"; exit 1; }
   trap - EXIT
   print
   print "Applied. Backup: $backup"
