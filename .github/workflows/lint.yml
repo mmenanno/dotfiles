@@ -43,8 +43,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check executable permissions
+        # bin/shared is sourced by the other scripts, not executed
         run: |
-          missing=$(find . -name "*.sh" -type f -not -executable -print)
+          missing=$(find . \( -name "*.sh" -o -path "./bin/*" \) -not -path "./bin/shared" -type f -not -executable -print)
           if [ -n "$missing" ]; then
             while IFS= read -r file; do
               printf 'Missing +x: %s\n' "$file"
@@ -58,7 +59,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   nix-verification:
-    runs-on: ubuntu-latest
+    # Both configurations are aarch64-darwin; on Linux `nix flake check` skips
+    # them entirely, so evaluate them on a matching runner
+    runs-on: macos-latest
     env:
       NIX_CONFIG: |
         experimental-features = nix-command flakes
@@ -80,6 +83,14 @@ jobs:
 
       - name: Check nix flake evaluation
         run: nix flake check ./nix --no-build
+
+      - name: Evaluate darwin configurations
+        run: |
+          for config in macbook_setup work_macbook; do
+            echo "Evaluating $config"
+            nix eval --raw "./nix#darwinConfigurations.$config.system.drvPath"
+            echo
+          done
 
       - name: Static analysis with statix
         run: nix run nixpkgs#statix -- check ./nix
