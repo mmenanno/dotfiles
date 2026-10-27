@@ -25,6 +25,7 @@ export USE_ICON_STYLE=true
 typeset -gr TIMEOUT_DNS=3
 typeset -gr TIMEOUT_PING=5
 typeset -gr TIMEOUT_GENERAL=3
+typeset -gr TIMEOUT_TAILSCALE_CLI=15  # netcheck probes DERP relays, so allow longer
 
 # Network interface to check (Wi-Fi is en0 on most Macs)
 typeset -gr WIFI_INTERFACE="en0"
@@ -114,7 +115,7 @@ typeset -gA SMART_FIX_MAP=(
 # ============================================================================
 
 typeset -gA CMD_HELP_ARGS=(
-    [diagnose]="[--verbose|-v]"
+    [diagnose]=""
     [status]=""
     [fix]="[NAME|LEVEL] [--dry-run|-d]"
     [export]="[filename]"
@@ -124,7 +125,6 @@ typeset -gA CMD_HELP_DESC=(
     [diagnose]="Run comprehensive network diagnostics with timeout protection
 • Checks interface status, DNS, routing, and connectivity
 • All operations timeout quickly to prevent hanging
-• Use -v/--verbose for detailed command output
 • Completes in < 15 seconds even with broken network"
 
     [status]="Quick network health check (< 10 seconds)
@@ -180,26 +180,6 @@ netfix export net.txt   # Export with custom filename"
 # SYSTEM INTERROGATION UTILITIES
 # ============================================================================
 # Low-level functions to query network interface state
-
-# Execute command with timeout
-# Args: timeout_seconds, command, [args...]
-# Returns: command exit code, or 124 if timeout
-run_with_timeout() {
-    local timeout_sec="$1"
-    shift
-
-    if command -v timeout >/dev/null 2>&1; then
-        timeout "${timeout_sec}s" "$@" 2>/dev/null
-        return $?
-    elif command -v gtimeout >/dev/null 2>&1; then
-        gtimeout "${timeout_sec}s" "$@" 2>/dev/null
-        return $?
-    else
-        # Fallback: run without timeout if timeout command not available
-        "$@" 2>/dev/null
-        return $?
-    fi
-}
 
 # Format elapsed time indicator for timed-out operations
 format_timeout() {
@@ -1856,6 +1836,18 @@ cmd_fix() {
     fi
 }
 
+# Run a tailscale CLI command, bounded: the CLI hangs when its daemon does
+run_tailscale_cli() {
+    setopt local_options no_err_exit
+    run_with_timeout $TIMEOUT_TAILSCALE_CLI tailscale "$@"
+    local rc=$?
+    if (( rc == 124 )); then
+        log_error "tailscale $1 timed out after ${TIMEOUT_TAILSCALE_CLI}s (daemon hung?)"
+        log_info "Try: netfix ts restart-app"
+    fi
+    return $rc
+}
+
 cmd_ts() {
     local subcommand="${1:-status}"
 
@@ -1865,7 +1857,7 @@ cmd_ts() {
         status|st)
             log_info "Tailscale Status:"
             echo ""
-            tailscale status
+            run_tailscale_cli status
             ;;
 
         up|connect)
@@ -1887,23 +1879,23 @@ cmd_ts() {
         check|netcheck)
             log_info "Running Tailscale network check..."
             echo ""
-            tailscale netcheck
+            run_tailscale_cli netcheck
             ;;
 
         dns)
             log_info "Tailscale DNS Status:"
             echo ""
-            tailscale dns status
+            run_tailscale_cli dns status
             ;;
 
         ip|ips)
             log_info "Tailscale IP Addresses:"
             echo ""
-            tailscale ip
+            run_tailscale_cli ip
             ;;
 
         version|ver)
-            tailscale version
+            run_tailscale_cli version
             ;;
 
         help|--help|-h)
