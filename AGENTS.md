@@ -113,16 +113,16 @@ For more details, see: <https://developer.1password.com/docs/cli/shell-plugins/t
 
 ### Primary Commands
 
-- `nx up` or `nixup`: Apply configuration changes
+- `nx up`: Apply configuration changes
 - `nx check` or `nx c`: Validate configuration
 - `nx build` or `nx b`: Build without applying
-- `nx diff` or `nx d`: Show pending changes
+- `nx diff` or `nx d`: Show what would be built (dry-run)
 
 ### Development Commands
 
-- `nx edit` or `nixedit`: Open configuration in editor
+- `nx edit` or `nx e`: Open configuration in VS Code
 - `nx status` or `nx s`: Show git status
-- `nx clean` or `nx cl`: Clean old generations
+- `nx clean` or `nx cl`: Clean old generations and optimise the store
 - `nx help` or `nx h`: Show available commands
 
 ## Project Structure
@@ -144,30 +144,7 @@ This repository uses a hierarchical AI configuration system managed through Nix:
    - `~/AGENTS.md`: Universal execution constraints (all AI tools)
    - `~/.claude/CLAUDE.md`: Claude-specific global preferences
    - `~/GEMINI.md`: Gemini-specific global preferences
-   - `~/.cursor/rules/global-ai-integration.md`: Cursor global rules
 
 2. **Project-specific configurations** (in repository root):
    - `AGENTS.md` (this file): Dotfiles-specific constraints
    - `CLAUDE.md`: Claude-specific dotfiles preferences
-
-### Cursor Rules System
-
-**IMPORTANT**: Cursor uses a **rules directory** (`~/.cursor/rules/`), not a `.cursorrules` file.
-
-- Rules are markdown files in `~/.cursor/rules/`
-- Global rules are managed by Nix via `ai-globals.nix`
-- Each rule file has YAML frontmatter with metadata
-- Rules can be scoped to specific file types or always active
-- When adding rules, update `nix/modules/home/ai-globals.nix`, not individual files
-
-Example rule structure:
-
-```markdown
----
-type: always
-description: "Rule description"
----
-
-# Rule Content
-...
-```
