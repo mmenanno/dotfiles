@@ -51,7 +51,7 @@ dotfiles/
 
 ## Key Modules
 
-- `ai-globals.nix` - Generates global CLAUDE.md, AGENTS.md, GEMINI.md
+- `ai-globals.nix` - Generates the global `~/.claude/CLAUDE.md`
 - `claude.nix` - Claude Code settings and MCP servers
 - `claude-skills.nix` - Skill imports from repos (ralph-claude-code)
 - `zsh.nix` - Shell config with zinit plugin management
