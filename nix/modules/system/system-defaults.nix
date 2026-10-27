@@ -1,6 +1,6 @@
-{ username, homeDirectory, lib, isWorkMachine ? false, ... }:
+{ username, homeDirectory, isWorkMachine ? false, ... }:
 # Scope: System (nix-darwin). Configures macOS defaults and Dock.
-# Behavior: Applies preferences via system.defaults and runs Dock setup during activation.
+# Behavior: Applies preferences (including the Dock layout) via system.defaults.
 let
   appsDir = "/Applications";
   localAppsDir = "${homeDirectory}${appsDir}";
@@ -46,31 +46,6 @@ let
   ];
 
   activeDockApps = if isWorkMachine then workDockApps else dockApps;
-
-  # Optimized dock setup - batch operations for better performance
-  dockPlistEntries = map (app: ''
-    <dict>
-      <key>tile-data</key>
-      <dict>
-        <key>file-data</key>
-        <dict>
-          <key>_CFURLString</key>
-          <string>file://${app}/</string>
-          <key>_CFURLStringType</key>
-          <integer>15</integer>
-        </dict>
-      </dict>
-      <key>tile-type</key>
-      <string>file-tile</string>
-    </dict>'') activeDockApps;
-
-  # Create complete dock plist in one operation
-  dockSetupCommand = ''
-    # Clear existing dock apps
-    defaults write com.apple.dock persistent-apps -array
-
-    # Write all dock entries as a single plist
-    defaults write com.apple.dock persistent-apps -array ${lib.concatStringsSep " " (map (entry: "'" + entry + "'") dockPlistEntries)}'';
 in
 {
   system.defaults = {
@@ -81,6 +56,25 @@ in
       AppleShowAllExtensions = true;
       FXEnableExtensionChangeWarning = false;
       _FXSortFoldersFirst = false;
+    };
+
+    dock = {
+      show-recents = false;
+      tilesize = 64;
+      largesize = 16;
+      orientation = "left";
+      autohide = false;
+      persistent-apps = activeDockApps;
+      persistent-others = [
+        {
+          folder = {
+            path = "${homeDirectory}/Downloads";
+            arrangement = "date-added";
+            displayas = "stack";
+            showas = "fan";
+          };
+        }
+      ];
     };
 
     menuExtraClock = {
@@ -122,15 +116,6 @@ in
         disableHotPlug = true;
       };
 
-      "com.apple.dock" = {
-        show-recents = false;
-        tilesize = 64;
-        largesize = 16;
-        orientation = "left";
-        autohide = false;
-        persistent-apps = [];
-      };
-
       "com.apple.trackpad" = {
         forceClick = true;
         scaling = "1.5";
@@ -148,56 +133,7 @@ in
     };
   };
 
-  # Create a dock setup script that runs as the user
   system.activationScripts.extraActivation.text = ''
-    echo -e "\033[0;34mℹ\033[0m Creating dock setup script"
-
-    # Create the script with the actual paths expanded
-    cat > /usr/local/bin/setup-dock << 'SCRIPT_END'
-    #!/bin/bash
-    echo -e "\033[0;34mℹ\033[0m Setting up dock for user $(whoami)"
-
-    # Optimized dock setup - batch operation
-    ${dockSetupCommand}
-
-    # Set Downloads folder
-    defaults write com.apple.dock persistent-others -array '
-    <dict>
-      <key>tile-data</key>
-      <dict>
-        <key>arrangement</key>
-        <integer>2</integer>
-        <key>displayas</key>
-        <integer>0</integer>
-        <key>file-data</key>
-        <dict>
-          <key>_CFURLString</key>
-          <string>file://${homeDirectory}/Downloads/</string>
-          <key>_CFURLStringType</key>
-          <integer>15</integer>
-        </dict>
-        <key>showas</key>
-        <integer>1</integer>
-      </dict>
-      <key>tile-type</key>
-      <string>directory-tile</string>
-    </dict>
-    '
-
-    # Restart Dock to apply changes
-    killall Dock 2>/dev/null || true
-    echo -e "\033[0;32m✓\033[0m Dock setup complete with all ${username}'s apps!"
-    SCRIPT_END
-
-    # Make script executable
-    chmod +x /usr/local/bin/setup-dock
-
-    # Run the script as the user
-    su ${username} -c "/usr/local/bin/setup-dock"
-
-    echo -e "\033[0;32m✓\033[0m Dock setup script created and executed"
-    echo -e "\033[0;34mℹ\033[0m You can re-run it anytime with: setup-dock"
-
     # iTerm2: Set profile defaults
     ITERM_PLIST="${homeDirectory}/Library/Preferences/com.googlecode.iterm2.plist"
     if [ -f "$ITERM_PLIST" ]; then
