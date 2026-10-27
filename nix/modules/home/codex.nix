@@ -1,12 +1,14 @@
-{ mcpServers, mkHomebrewWrapper, ... }:
+{ mcpServers, ... }:
 {
   programs.codex = {
     enable = true;
-    # Use Homebrew-installed codex for faster updates
-    package = mkHomebrewWrapper {
-      name = "codex";
-      homebrewBinary = "codex";
-    };
+    # Installed via Homebrew. A null package also tells home-manager to assume
+    # the latest Codex; a wrapper with no version selects the legacy
+    # config.yaml, which Codex ignores
+    package = null;
+    # Codex writes its own state (model, trusted projects) to config.toml, so
+    # merge the declared settings into it instead of replacing it
+    mutableSettings = true;
 
     settings = {
       approval_policy = "on-request";

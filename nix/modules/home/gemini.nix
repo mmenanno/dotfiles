@@ -28,19 +28,16 @@
         theme = "GitHub";
       };
 
-      history_limit = 20;
-      max_tokens = 8192;
-
       security = {
         enablePermanentToolApproval = true;
         auth = {
           selectedType = "oauth-personal";
         };
       };
-
-      # MCP server configuration
-      mcp_servers = mcpServers;
     };
+
+    # Written to ~/.gemini/settings.json as mcpServers in legacy mode
+    inherit mcpServers;
   };
 }
 

@@ -5,22 +5,23 @@ _:
       NSDocumentSaveNewDocumentsToCloud = false;
     };
 
-    com.apple = {
-      desktopservices = {
-        DSDontWriteNetworkStores = true;
-        DSDontWriteUSBStores = true;
-      };
+    # Domains must be quoted: an unquoted com.apple.finder is a nested attrset
+    # and lands in a bogus "com" domain
+    "com.apple.desktopservices" = {
+      DSDontWriteNetworkStores = true;
+      DSDontWriteUSBStores = true;
+    };
 
-      finder = {
-        FXRemoveOldTrashItems = true;
-      };
+    "com.apple.finder" = {
+      FXRemoveOldTrashItems = true;
+    };
 
-      controlcenter = {
-        "NSStatusItem Visible Bluetooth" = true;
-        "NSStatusItem Visible ScreenMirroring" = true;
-        "NSStatusItem Visible Sound" = true;
-        "NSStatusItem Visible WiFi" = true;
-      };
+    # Menu bar items, under the keys Control Center itself writes
+    "com.apple.controlcenter" = {
+      "NSStatusItem VisibleCC Bluetooth" = true;
+      "NSStatusItem VisibleCC ScreenMirroring" = true;
+      "NSStatusItem VisibleCC Sound" = true;
+      "NSStatusItem VisibleCC WiFi" = true;
     };
   };
 }
