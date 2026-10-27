@@ -1195,15 +1195,15 @@ fix_config() {
     local removed=0
 
     if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/com.apple.airport.preferences.plist 2>/dev/null; then
-        ((removed++))
+        removed=$((removed + 1))
     fi
 
     if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/NetworkInterfaces.plist 2>/dev/null; then
-        ((removed++))
+        removed=$((removed + 1))
     fi
 
     if sudo /bin/rm -f /Library/Preferences/SystemConfiguration/preferences.plist 2>/dev/null; then
-        ((removed++))
+        removed=$((removed + 1))
     fi
 
     if [[ $removed -gt 0 ]]; then
@@ -1349,8 +1349,9 @@ show_interactive_menu() {
     echo ""
 }
 
-# Show individual fixes menu
+# Show individual fixes menu; the choice is returned in MENU_SELECTION
 show_individual_fixes_menu() {
+    MENU_SELECTION=""
     echo ""
     echo "Available individual fixes:"
     echo "  ${BOLD}1)${NC} dns        - ${FIX_NAMES[dns]}"
@@ -1367,14 +1368,14 @@ show_individual_fixes_menu() {
         read -r "choice?Choose fix [1-7]: "
 
         case "$choice" in
-            1) echo "dns" ;;
-            2) echo "wifi" ;;
-            3) echo "interface" ;;
-            4) echo "daemons" ;;
-            5) echo "config" ;;
-            6) echo "tailscale" ;;
-            7) echo "back" ;;
-            *) echo "" ;;
+            1) MENU_SELECTION="dns" ;;
+            2) MENU_SELECTION="wifi" ;;
+            3) MENU_SELECTION="interface" ;;
+            4) MENU_SELECTION="daemons" ;;
+            5) MENU_SELECTION="config" ;;
+            6) MENU_SELECTION="tailscale" ;;
+            7) MENU_SELECTION="back" ;;
+            *) MENU_SELECTION="" ;;
         esac
     else
         echo "  ${BOLD}6)${NC} Back to main menu"
@@ -1382,19 +1383,20 @@ show_individual_fixes_menu() {
         read -r "choice?Choose fix [1-6]: "
 
         case "$choice" in
-            1) echo "dns" ;;
-            2) echo "wifi" ;;
-            3) echo "interface" ;;
-            4) echo "daemons" ;;
-            5) echo "config" ;;
-            6) echo "back" ;;
-            *) echo "" ;;
+            1) MENU_SELECTION="dns" ;;
+            2) MENU_SELECTION="wifi" ;;
+            3) MENU_SELECTION="interface" ;;
+            4) MENU_SELECTION="daemons" ;;
+            5) MENU_SELECTION="config" ;;
+            6) MENU_SELECTION="back" ;;
+            *) MENU_SELECTION="" ;;
         esac
     fi
 }
 
-# Show progressive levels menu
+# Show progressive levels menu; the choice is returned in MENU_SELECTION
 show_progressive_menu() {
+    MENU_SELECTION=""
     echo ""
     echo "Available progressive levels:"
     echo "  ${BOLD}1)${NC} quick      - dns"
@@ -1407,13 +1409,13 @@ show_progressive_menu() {
     read -r "choice?Choose level [1-6]: "
 
     case "$choice" in
-        1) echo "quick" ;;
-        2) echo "moderate" ;;
-        3) echo "aggressive" ;;
-        4) echo "deep" ;;
-        5) echo "nuclear" ;;
-        6) echo "back" ;;
-        *) echo "" ;;
+        1) MENU_SELECTION="quick" ;;
+        2) MENU_SELECTION="moderate" ;;
+        3) MENU_SELECTION="aggressive" ;;
+        4) MENU_SELECTION="deep" ;;
+        5) MENU_SELECTION="nuclear" ;;
+        6) MENU_SELECTION="back" ;;
+        *) MENU_SELECTION="" ;;
     esac
 }
 
@@ -1528,7 +1530,8 @@ cmd_fix_interactive() {
             2)
                 # Choose individual fix
                 local selected_fix
-                selected_fix=$(show_individual_fixes_menu)
+                show_individual_fixes_menu
+                selected_fix=$MENU_SELECTION
 
                 if [[ "$selected_fix" == "back" ]]; then
                     continue
@@ -1553,7 +1556,8 @@ cmd_fix_interactive() {
             3)
                 # Choose progressive level
                 local selected_level
-                selected_level=$(show_progressive_menu)
+                show_progressive_menu
+                selected_level=$MENU_SELECTION
 
                 if [[ "$selected_level" == "back" ]]; then
                     continue

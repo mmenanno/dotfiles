@@ -28,7 +28,8 @@ USAGE:
 OPTIONS:
     -h, --help              Show this help message
     -d, --dry-run           Show what would be deleted without actually doing it
-    -f, --force             Force delete branches (use -D instead of -d)
+    -f, --force             Force delete branches (use -D instead of -d) and
+                            reset a diverged default branch to origin
     -kc, --keep-current     Keep current branch even if it would be deleted
     -nkc, --no-keep-current Allow deletion of current branch (default)
     -nw, --no-worktrees     Skip cleanup of stale .claude/worktrees worktrees
@@ -282,30 +283,46 @@ perform_cleanup() {
     # Switch to default branch if not already there
     if [[ "$current_branch" != "$default_branch" ]]; then
         log_info "Switching to $default_branch branch..."
-        if [[ "$DRY_RUN" == false ]]; then
-            git checkout "$default_branch"
+        # perform_cleanup runs inside `if`, so set -e is off here: every
+        # step that later steps depend on must check its own status
+        if [[ "$DRY_RUN" == false ]] && ! git checkout "$default_branch"; then
+            log_error "Could not switch to $default_branch; aborting before touching any branches"
+            return 1
         fi
     fi
 
     # Fetch latest changes and prune
     log_info "Fetching latest changes and pruning..."
-    if [[ "$DRY_RUN" == false ]]; then
-        git fetch --prune
+    if [[ "$DRY_RUN" == false ]] && ! git fetch --prune; then
+        log_error "git fetch failed; aborting"
+        return 1
     fi
 
     # Ensure default branch matches origin to get a clean state
     log_info "Syncing $default_branch with origin..."
     if [[ "$DRY_RUN" == false ]]; then
+        if [[ "$(get_current_branch)" != "$default_branch" ]]; then
+            log_error "Not on $default_branch; refusing to sync"
+            return 1
+        fi
         if ! git merge --ff-only "origin/$default_branch" >/dev/null 2>&1; then
-            log_warning "Local $default_branch is divergent; resetting to origin/$default_branch"
-            git reset --hard "origin/$default_branch"
+            local unpushed
+            unpushed=$(git rev-list --count "origin/$default_branch..$default_branch")
+            if [[ "$FORCE" == false ]] && ! git diff --quiet HEAD; then
+                log_warning "$default_branch has uncommitted changes; leaving it as is (use --force to reset)"
+            elif [[ "$FORCE" == false && "$unpushed" -gt 0 ]]; then
+                log_warning "Local $default_branch has $unpushed commit(s) not on origin; leaving it as is (use --force to reset)"
+            else
+                log_warning "Local $default_branch is divergent; resetting to origin/$default_branch"
+                git reset --hard "origin/$default_branch" || return 1
+            fi
         fi
     fi
 
     # Prune remote references (cleanup remote tracking)
     log_info "Pruning remote branch references..."
     if [[ "$DRY_RUN" == false ]]; then
-        git remote prune origin
+        git remote prune origin || log_warning "git remote prune origin failed; continuing"
     fi
 
     # Remove stale worktrees before branch deletion so their (now-freed) branches

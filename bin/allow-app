@@ -11,6 +11,7 @@ source "${BASH_SOURCE[0]%/*}/shared"
 VERBOSE=false
 QUIET=false
 DRY_RUN=false
+FILES=()
 
 # Print usage information
 show_help() {
@@ -118,9 +119,9 @@ process_files() {
         local target="${files[i]}"
 
         if remove_quarantine "$target" "$((i+1))" "$total_files"; then
-            ((success_count++))
+            success_count=$((success_count + 1))
         else
-            ((failed_count++))
+            failed_count=$((failed_count + 1))
         fi
     done
 
@@ -138,9 +139,10 @@ process_files() {
     return 0
 }
 
-# Parse command line arguments
+# Parse command line arguments into FILES and the option globals.
+# Must not run in a subshell, or the option globals never reach main.
 parse_args() {
-    local -a files=()
+    FILES=()
 
     while (( $# > 0 )); do
         case "$1" in
@@ -169,14 +171,14 @@ parse_args() {
                 return 1
                 ;;
             *)
-                files+=("$1")
+                FILES+=("$1")
                 shift
                 ;;
         esac
     done
 
     # Add any remaining arguments after -- as files
-    files+=("$@")
+    FILES+=("$@")
 
     # Validate conflicting options
     if [[ "$VERBOSE" == true && "$QUIET" == true ]]; then
@@ -184,14 +186,11 @@ parse_args() {
         return 1
     fi
 
-    # Return files as output (one per line)
-    if (( ${#files[@]} == 0 )); then
+    if (( ${#FILES[@]} == 0 )); then
         log_error "No files or applications specified"
         log_error "Use -h or --help for usage information"
         return 1
     fi
-
-    printf '%s\n' "${files[@]}"
 }
 
 # Main function
@@ -205,20 +204,11 @@ main() {
         fi
     done
 
-    # Parse arguments
-    local -a files=()
-    set +e  # Temporarily disable exit on error
-    while IFS= read -r file; do
-        files+=("$file")
-    done < <(parse_args "$@")
-    local parse_exit_code=$?
-    set -e  # Re-enable exit on error
-
-    if (( parse_exit_code != 0 )); then
+    if ! parse_args "$@"; then
         exit 1
     fi
 
-    log_verbose "Files to process: ${#files[@]}"
+    log_verbose "Files to process: ${#FILES[@]}"
 
     # Show dry run notice
     if [[ "$DRY_RUN" == true ]]; then
@@ -226,7 +216,7 @@ main() {
     fi
 
     # Process files
-    if process_files "${files[@]}"; then
+    if process_files "${FILES[@]}"; then
         log_success "All files processed successfully"
         exit 0
     else

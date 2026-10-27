@@ -281,18 +281,22 @@ checkout_local_default_branch() {
     if [[ "$current_branch" == "$branch" ]]; then
         log_info "Already on ${branch}"
     elif git show-ref --verify --quiet "refs/heads/${branch}"; then
-        run_cmd git checkout "$branch" && DID_SWITCH_BRANCH=true
+        run_cmd git checkout "$branch"
+        DID_SWITCH_BRANCH=true
     else
         if git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
-            run_cmd git checkout -B "$branch" "origin/${branch}" && DID_SWITCH_BRANCH=true
+            run_cmd git checkout -B "$branch" "origin/${branch}"
+            DID_SWITCH_BRANCH=true
         else
             # As a last resort, create from upstream default branch (fetched earlier)
             if [[ -n "$upstream_default_branch" ]] && git show-ref --verify --quiet "refs/remotes/upstream/${upstream_default_branch}"; then
                 log_warning "Origin default branch '${branch}' not found locally; creating it from upstream/${upstream_default_branch}"
-                run_cmd git checkout -B "$branch" "upstream/${upstream_default_branch}" && DID_SWITCH_BRANCH=true
+                run_cmd git checkout -B "$branch" "upstream/${upstream_default_branch}"
+                DID_SWITCH_BRANCH=true
             else
                 log_warning "Upstream default branch ref not found; creating a new local branch '${branch}'"
-                run_cmd git checkout -B "$branch" && DID_SWITCH_BRANCH=true
+                run_cmd git checkout -B "$branch"
+                DID_SWITCH_BRANCH=true
             fi
         fi
     fi
@@ -315,7 +319,11 @@ sync_with_upstream() {
         if [[ "$DRY_RUN" == true ]]; then
             log_success "(dry-run) Fast-forward would be applied"
         else
-            run_cmd git merge --ff-only "upstream/${upstream_default_branch}"
+            # stdout is captured as the sync mode, so git's output goes to stderr
+            if ! run_cmd git merge --ff-only "upstream/${upstream_default_branch}" >&2; then
+                log_error "Fast-forward merge failed"
+                return 1
+            fi
             log_success "Fast-forward merge applied"
         fi
         echo "FF"
@@ -331,7 +339,10 @@ sync_with_upstream() {
             if [[ "$DRY_RUN" == true ]]; then
                 log_info "(dry-run) Would run: git reset --hard upstream/${upstream_default_branch}"
             else
-                run_cmd git reset --hard "upstream/${upstream_default_branch}"
+                if ! run_cmd git reset --hard "upstream/${upstream_default_branch}" >&2; then
+                    log_error "Reset to upstream/${upstream_default_branch} failed"
+                    return 1
+                fi
             fi
             echo "RESET"
             return 0
@@ -369,6 +380,8 @@ push_to_origin() {
     if [[ -n "$ls_out" ]]; then
         remote_branch_exists=true
     fi
+    local remote_label="(new upstream)"
+    [[ "$remote_branch_exists" == true ]] && remote_label="(existing)"
 
     # If the remote branch does not exist yet, set upstream (-u)
     if [[ "$remote_branch_exists" == false ]]; then
@@ -376,10 +389,10 @@ push_to_origin() {
     fi
 
     if [[ "$push_mode" == "RESET" ]]; then
-        log_info "Pushing ${origin_default_branch} to origin with --force-with-lease${remote_branch_exists:+ (existing)}${remote_branch_exists:-(new upstream)}"
+        log_info "Pushing ${origin_default_branch} to origin with --force-with-lease ${remote_label}"
         run_cmd git push --force-with-lease "${push_args[@]}"
     else
-        log_info "Pushing ${origin_default_branch} to origin${remote_branch_exists:+ (existing)}${remote_branch_exists:-(new upstream)}"
+        log_info "Pushing ${origin_default_branch} to origin ${remote_label}"
         run_cmd git push "${push_args[@]}"
     fi
 }
@@ -514,8 +527,17 @@ main() {
 
     checkout_local_default_branch "$origin_default_branch" "$upstream_default_branch"
 
+    if [[ "$DRY_RUN" == false && "$(git rev-parse --abbrev-ref HEAD)" != "$origin_default_branch" ]]; then
+        log_error "Expected to be on ${origin_default_branch} after checkout; aborting"
+        exit 1
+    fi
+
     # Warn if working tree is dirty (uncommitted changes might block checkout/merge/reset)
     if [[ -n "$(git status --porcelain)" ]]; then
+        if [[ "$FORCE" == true ]]; then
+            log_error "Working tree has uncommitted changes that --force would discard; stash or commit first"
+            exit 1
+        fi
         log_warning "Working tree has uncommitted changes; stash or commit to avoid conflicts"
     fi
 
