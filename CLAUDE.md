@@ -11,7 +11,7 @@ nx up       # Apply full configuration (darwin-rebuild switch)
 nx up -hm   # Apply Home Manager only (faster for config changes)
 nx lint     # Run statix + deadnix code quality checks
 nx build    # Build without applying
-nx clean    # Clean old generations
+nx clean    # Clean old generations (runs `clean --only nix`)
 nx managed  # Show mutable config file status (alias: nx m)
 ```
 
@@ -85,6 +85,8 @@ darwin-rebuild --rollback                 # Undo last change
 - **deadnix catches unused module args**: Don't add `lib` to module args unless it's actually used in the body — use `if/then/else` over `lib.optionalAttrs` when simpler
 - **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`
 - **System vs Home**: System = nix-darwin (OS-level), Home = Home Manager (user-level)
+- **Quote dotted defaults domains**: in `targets.darwin.defaults` / `CustomUserPreferences`, write `"com.apple.finder" = { … }`. Unquoted `com.apple.finder` is a nested attrset and silently lands in a bogus `com` domain
+- **zsh init order**: zinit loads at `lib.mkOrder 550`, `completionInit` (570) adds `completions/` to fpath and runs the cached `compinit`, and the main `initContent` (1000) starts with `zinit cdreplay`. Don't add another `compinit`
 - **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`
 - **Module pattern**: Import in `modules/default.nix`, use `{ config, pkgs, ... }:` signature
 - **1Password in scripts**: Use `op plugin run -- <cmd>` in subshells (aliases don't inherit)

@@ -179,11 +179,11 @@ show_completion_message() {
     echo "1. 🔄 Restart your terminal to load the new shell configuration"
     echo "2. 🔑 Sign into applications that require authentication"
     echo "3. 🛠  Configure 1Password for SSH/Git signing"
-    echo "4. ⚡ Run 'nixup' to rebuild configuration anytime"
+    echo "4. ⚡ Run 'nx up' to rebuild configuration anytime"
     echo
     echo -e "${BLUE}Useful commands:${NC}"
-    echo "• nixup     - Rebuild and switch configuration"
-    echo "• nixedit   - Open dotfiles in Cursor"
+    echo "• nx up     - Rebuild and switch configuration"
+    echo "• nx edit   - Open dotfiles in VS Code"
     echo "• mise list - Show installed development tools"
     echo
     echo -e "${GREEN}Configuration details: $DOTFILES_DIR/README.md${NC}"

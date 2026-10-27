@@ -95,7 +95,7 @@ After running the bootstrap:
 1. **Restart your terminal** to load new shell configuration
 2. **Sign into applications** that require authentication
 3. **Configure 1Password** for SSH/Git signing (see `BOOTSTRAP.md` for required items and environment variables)
-4. **Run `nixup` or `nx up`** to rebuild configuration
+4. **Run `nx up`** to rebuild configuration
 
 ## 🛠 Customization
 
@@ -140,13 +140,16 @@ Modules receive `isWorkMachine ? false`. Use conditionals for machine-specific b
 
 ## 📱 Available Commands
 
-- `nixup` or `nx up` - Rebuild and switch configuration
-- `nixedit` or `nx edit` - Open dotfiles in Cursor
+- `nx up` - Rebuild and switch configuration (`-hm` for Home Manager only)
+- `nx edit` or `nx e` - Open dotfiles in VS Code
 - `nx check` or `nx c` - Validate flake configuration
+- `nx lint` or `nx l` - Run statix and deadnix
 - `nx update` or `nx u` - Update flake dependencies
 - `nx status` or `nx s` - Show git status
-- `nx diff` or `nx d` - Show configuration changes (dry-run)
-- `nx clean` or `nx cl` - Clean old generations
+- `nx build` or `nx b` - Build without applying
+- `nx diff` or `nx d` - Show what would be built (dry-run)
+- `nx clean` or `nx cl` - Clean old generations and optimise the store
+- `nx managed` or `nx m` - Status of mutable config files
 - `nx help` - Show all available commands
 - `mise list` - Show installed development tools
 
@@ -155,7 +158,7 @@ Modules receive `isWorkMachine ? false`. Use conditionals for machine-specific b
 ```bash
 cd ~/dotfiles
 git pull
-nx up      # or nixup
+nx up
 ```
 
 ## 📁 Repository Structure
