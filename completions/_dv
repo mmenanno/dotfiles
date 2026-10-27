@@ -6,8 +6,10 @@ _dv() {
     local -a commands
     commands=(
         'cd:Navigate to a project or special directory'
+        'up:Install/update dependencies, prepare database, build assets'
         'list:List all available projects'
         'ls:List all available projects (alias)'
+        'logs:View or clean logs from dv up runs'
         'help:Show help message'
         'h:Show help message (alias)'
     )
@@ -51,21 +53,44 @@ _dv() {
 
     # Main completion logic
     if (( CURRENT == 2 )); then
-        # Complete main commands
         _describe 'command' commands
-    elif (( CURRENT == 3 )); then
-        # Complete subcommand arguments
-        case "$words[2]" in
-            cd)
-                _dv_projects
-                ;;
-            ls|list)
-                _values 'option' \
-                    '-d[Show only projects within ~/dev]' \
-                    '-w[Show only projects within ~/writing]'
-                ;;
-        esac
+        return
     fi
+
+    # Drop "dv" so _arguments sees the subcommand as the command word
+    local cmd=$words[2]
+    shift words
+    (( CURRENT-- ))
+
+    case "$cmd" in
+        cd)
+            (( CURRENT == 2 )) && _dv_projects
+            ;;
+        up)
+            _arguments -S \
+                '(-f --force)'{-f,--force}'[Reinstall dependencies from scratch]' \
+                '(-v --verbose)'{-v,--verbose}'[Show all output instead of the progress UI]'
+            ;;
+        ls|list)
+            _arguments -S \
+                '(-d --dev -w --writing)'{-d,--dev}'[Show only projects within ~/dev]' \
+                '(-d --dev -w --writing)'{-w,--writing}'[Show only projects within ~/writing]'
+            ;;
+        logs)
+            if (( CURRENT == 2 )); then
+                local -a log_subcommands=(
+                    'view:View the latest log (default)'
+                    'clean:Delete old logs'
+                )
+                _describe 'subcommand' log_subcommands
+            elif [[ "$words[2]" == clean ]]; then
+                _arguments -S \
+                    '(-a --all -A)'{-a,--all}'[Delete all logs regardless of age]' \
+                    '(-ap --all-projects -A)'{-ap,--all-projects}'[Clean logs for every project]' \
+                    '(-a --all -ap --all-projects)-A[Delete all logs for every project]'
+            fi
+            ;;
+    esac
 }
 
 _dv "$@"
