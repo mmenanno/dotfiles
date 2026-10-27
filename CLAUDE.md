@@ -84,6 +84,7 @@ darwin-rebuild --rollback                 # Undo last change
 - **Homebrew + Home Manager pattern**: Use `mkHomebrewWrapper` from `mcp-shared.nix` to install via Homebrew but keep Home Manager config (see `claude.nix`, `mise.nix`, `codex.nix`, `gemini.nix`)
 - **deadnix catches unused module args**: Don't add `lib` to module args unless it's actually used in the body — use `if/then/else` over `lib.optionalAttrs` when simpler
 - **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`
+- **Tokens never go through Nix eval**: anything passed via `getEnvOrFallback` ends up in the world-readable `/nix/store`. `nixup-with-secrets` writes tokens (`SECRET_FILES`) to `~/.local/state/nix-secrets/<name>` (0600); modules reference the path with `secretFile "<name>"` (from `mcp-shared.nix`) and read it at runtime (`.zshenv` export, wrapper script, activation)
 - **System vs Home**: System = nix-darwin (OS-level), Home = Home Manager (user-level)
 - **Quote dotted defaults domains**: in `targets.darwin.defaults` / `CustomUserPreferences`, write `"com.apple.finder" = { … }`. Unquoted `com.apple.finder` is a nested attrset and silently lands in a bogus `com` domain
 - **zsh init order**: zinit loads at `lib.mkOrder 550`, `completionInit` (570) adds `completions/` to fpath and runs the cached `compinit`, and the main `initContent` (1000) starts with `zinit cdreplay`. Don't add another `compinit`

@@ -240,6 +240,12 @@ stop_sudo_keepalive() {
 NIX_OP_ACCOUNT="${NIX_OP_ACCOUNT:-my.1password.com}"
 NIX_OP_TIMEOUT=30
 
+# Tokens are written here (0600) by nixup-with-secrets instead of being passed
+# to Nix, which would copy them into the world-readable /nix/store. Must match
+# secretsDir in nix/modules/home/mcp-shared.nix
+# shellcheck disable=SC2034  # consumed by nixup-with-secrets
+NIX_SECRETS_DIR="$HOME/.local/state/nix-secrets"
+
 # Build the darwin-rebuild command as an array, falling back to nix run on fresh systems
 # shellcheck disable=SC2034  # DARWIN_REBUILD_CMD is consumed by the caller
 get_darwin_rebuild_cmd() {
