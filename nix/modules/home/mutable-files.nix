@@ -12,9 +12,12 @@ let
     { path = ".config/op/plugins.sh"; fileKey = ".config/op/plugins.sh"; }
     { path = "Library/Application Support/Code/User/settings.json"; fileKey = "Library/Application Support/Code/User/settings.json"; }
     { path = "Library/Application Support/Code/User/mcp.json"; fileKey = "Library/Application Support/Code/User/mcp.json"; }
-  ] ++ lib.optionals isWorkMachine [
+  ] ++ (if isWorkMachine then [
     { path = ".npmrc"; fileKey = ".npmrc"; }
-  ];
+  ] else [
+    # gemini-cli migrates and rewrites its own settings, replacing a symlink
+    { path = ".gemini/settings.json"; fileKey = ".gemini/settings.json"; }
+  ]);
 
   deployCommands = lib.concatMapStringsSep "\n" (file:
     "deploy_mutable_file ${lib.escapeShellArg file.path} ${lib.escapeShellArg (toString config.home.file.${file.fileKey}.source)}"

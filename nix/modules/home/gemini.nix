@@ -15,14 +15,17 @@
     };
 
     settings = {
+      # Kept in the shape gemini-cli migrates to, so it has nothing to rewrite
       general = {
         previewFeatures = true;
+        plan.enabled = true;
       };
 
       experimental = {
         skills = true;
-        plan = true;
       };
+
+      agents.overrides = { };
 
       ui = {
         theme = "GitHub";

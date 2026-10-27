@@ -51,9 +51,11 @@ _nx() {
         'vsmcp:Library/Application Support/Code/User/mcp.json'
         'all:All managed files'
     )
-    # npmrc is work-machine-only; suggest it only if a baseline exists
+    # Machine-specific; suggest them only if a baseline exists
     [[ -f "$HOME/.local/share/nix-managed-baselines/.npmrc" ]] && \
         managed_names+=('npmrc:.npmrc')
+    [[ -f "$HOME/.local/share/nix-managed-baselines/.gemini/settings.json" ]] && \
+        managed_names+=('gemini:.gemini/settings.json')
 
     if (( CURRENT == 2 )); then
         _describe 'command' commands
