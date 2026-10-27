@@ -1,4 +1,4 @@
-{ pkgs, dotlib, isWorkMachine ? false, ... }:
+{ config, lib, pkgs, dotlib, isWorkMachine ? false, ... }:
 
 # Shared MCP (Model Context Protocol) server configurations and helpers
 # This module provides common MCP server definitions and utility functions
@@ -22,14 +22,26 @@ let
       fi
     '';
 
-  # Shared environment variables
-  #
+  # Tokens never pass through Nix (they'd be copied into the world-readable
+  # /nix/store): `nx up` writes them to 0600 files here, and consumers read the
+  # file at runtime. Must match NIX_SECRETS_DIR in bin/shared
+  secretsDir = "${config.home.homeDirectory}/.local/state/nix-secrets";
+  secretFile = name: "${secretsDir}/${name}";
+
   # GitHub MCP token (classic PAT) scopes:
   #   repo, workflow, write:packages, read:packages, write:repo_hook,
   #   read:repo_hook, gist, notifications, read:user, write:discussion,
   #   read:discussion, project, read:project
   #   Manage at: GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
-  githubMcpToken = getEnvOrFallback "NIX_GITHUB_MCP_TOKEN" "bootstrap-github-token" "placeholder-github-token";
+  githubMcpServer = pkgs.writeShellScript "github-mcp-server" ''
+    set -euo pipefail
+    token_file=${lib.escapeShellArg (secretFile "github-mcp-token")}
+    if [ -r "$token_file" ]; then
+      GITHUB_PERSONAL_ACCESS_TOKEN="$(cat "$token_file")"
+      export GITHUB_PERSONAL_ACCESS_TOKEN
+    fi
+    exec ${lib.getExe pkgs.github-mcp-server} "$@"
+  '';
 
   # Shared identity values (centralized to avoid drift between git.nix and ssh.nix)
   sharedIdentity = {
@@ -41,9 +53,8 @@ let
   # Common MCP server configurations
   mcpServers = {
     github = {
-      command = "github-mcp-server";
+      command = "${githubMcpServer}";
       args = [ "stdio" ];
-      env = { GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken; };
     };
   };
 
@@ -52,6 +63,6 @@ in
   # Export the shared configurations and helpers for use by other modules
   # This allows other modules to import and use these standardized configs
   _module.args = {
-    inherit mcpServers githubMcpToken mkHomebrewWrapper sharedIdentity;
+    inherit mcpServers secretFile mkHomebrewWrapper sharedIdentity;
   };
 }

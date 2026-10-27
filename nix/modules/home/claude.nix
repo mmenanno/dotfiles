@@ -1,4 +1,4 @@
-{ config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, githubMcpToken, isWorkMachine ? false, ... }:
+{ config, lib, pkgs, homeDirectory, mcpServers, mkHomebrewWrapper, secretFile, isWorkMachine ? false, ... }:
 
 let
   # --- Development tool commands (npm, cargo, pytest, go, make) ---
@@ -390,10 +390,14 @@ let
   ];
 in
 {
+  # For the official Claude Code GitHub plugin. Read from the 0600 file `nx up`
+  # writes, in .zshenv so non-interactive shells get it too
+  programs.zsh.envExtra = ''
+    [[ -r ${secretFile "github-mcp-token"} ]] && export GITHUB_PERSONAL_ACCESS_TOKEN="$(<${secretFile "github-mcp-token"})"
+  '';
+
   home = {
-    # Set GITHUB_PERSONAL_ACCESS_TOKEN for the official Claude Code GitHub plugin
     sessionVariables = {
-      GITHUB_PERSONAL_ACCESS_TOKEN = githubMcpToken;
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
     };
 
