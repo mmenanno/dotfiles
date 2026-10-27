@@ -382,13 +382,18 @@ declare -A MANAGED_NIX_SOURCES=(
     [vsmcp]="nix/modules/home/vscode.nix"
 )
 
-# Work-machine-only managed files. Lazily added so non-managed commands
-# don't pay the get_config_name cost (which may hit 1Password).
+# Machine-specific managed files (must match mutable-files.nix). Lazily added
+# so non-managed commands don't pay the get_config_name cost (which may hit
+# 1Password).
 register_work_managed_files() {
     if [[ "$(get_config_name)" == "work_macbook" ]]; then
         MANAGED_NAMES+=(npmrc)
         MANAGED_FILES[npmrc]=".npmrc"
         MANAGED_NIX_SOURCES[npmrc]="nix/modules/home/npmrc.nix"
+    else
+        MANAGED_NAMES+=(gemini)
+        MANAGED_FILES[gemini]=".gemini/settings.json"
+        MANAGED_NIX_SOURCES[gemini]="nix/modules/home/gemini.nix"
     fi
 }
 
