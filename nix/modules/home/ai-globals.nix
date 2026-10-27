@@ -55,7 +55,7 @@ let
       "Use #!/usr/bin/env bash shebang for portability (picks up Homebrew bash on macOS, finds bash via PATH on systems where it isn't at /bin/bash)"
       "Include 'set -euo pipefail' for safety"
       "Must pass shellcheck validation"
-      "**1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells where the shell alias isn't visible, wrap commands with 'op plugin run --'. Not needed for 'gh': its token is persisted at ~/.config/gh/hosts.yml by gh.nix, so 'gh' works directly from any context."
+      "**1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells where the shell alias isn't visible, wrap commands with 'op plugin run --'. Not needed for 'gh': gh.nix logs it in with its own stored credential (macOS Keychain), so 'gh' works directly from any context."
     ];
   };
 
@@ -210,7 +210,7 @@ in
 
       ## 1Password CLI
 
-      Shell aliases don't inherit into non-interactive subshells. For 1Password-plugin-backed tools whose alias exists only in zsh, wrap with `op plugin run --`. Exception: `gh` has its token persisted in `~/.config/gh/hosts.yml` (see `gh.nix`) and works directly in any context — no `op plugin run --` needed.
+      Shell aliases don't inherit into non-interactive subshells. For 1Password-plugin-backed tools whose alias exists only in zsh, wrap with `op plugin run --`. Exception: `gh` is logged in with its own stored credential in the macOS Keychain (see `gh.nix`) and works directly in any context — no `op plugin run --` needed.
 
       ## Git
 

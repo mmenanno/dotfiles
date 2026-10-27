@@ -50,7 +50,7 @@ markdownlint **/*.md
 - Must pass `shellcheck` validation
 - Use lowercase, short names (e.g., `nx`, `gbclean`)
 - Source `bin/shared` for logging (`log_info`/`log_success`/`log_warning`/`log_error`), plus `run_with_timeout`, `confirm` and `start_sudo_keepalive`/`stop_sudo_keepalive`
-- **1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells (where zsh aliases aren't visible), wrap commands with `op plugin run --`. Exception: `gh` — its token is persisted to `~/.config/gh/hosts.yml` by `nix/modules/home/gh.nix`, so `gh` works directly in any context without wrapping.
+- **1Password Plugin Pattern**: For CLI tools with 1Password plugin support in non-interactive subshells (where zsh aliases aren't visible), wrap commands with `op plugin run --`. Exception: `gh` — `nix/modules/home/gh.nix` logs it in with its own stored credential (macOS Keychain), so `gh` works directly in any context without wrapping.
 
 ### Markdown Documentation
 
@@ -103,7 +103,7 @@ This repository uses 1Password CLI plugins for secure credential management. Whe
 
 1. **Aliases don't work in subshells**: Shell aliases set in `~/.config/op/plugins.sh` don't inherit into non-interactive subshells used by scripts.
 2. **Explicit wrapping when a plugin is in play**: When relying on a zsh-only 1Password alias, wrap the command: `result=$(op plugin run -- <tool> ...)`.
-3. **`gh` is the exception**: Its token is persisted declaratively to `~/.config/gh/hosts.yml` by `nix/modules/home/gh.nix` (sourced from `op://Nix/Github/dev_token` at `nx up` time), so `gh` authenticates in any context — Dock-launched GUI apps, non-interactive scripts, CI subprocesses — without `op plugin run --`.
+3. **`gh` is the exception**: `nix/modules/home/gh.nix` logs it in at activation, storing the token in gh's own credential store (macOS Keychain) (sourced from `op://Nix/Github/dev_token` at `nx up` time), so `gh` authenticates in any context — Dock-launched GUI apps, non-interactive scripts, CI subprocesses — without `op plugin run --`.
 4. **Plugin initialization**: Before using a new plugin, run `op plugin init <tool>`.
 5. **Configuration location**: Plugin alias declarations live in `nix/modules/home/onepassword.nix`.
 

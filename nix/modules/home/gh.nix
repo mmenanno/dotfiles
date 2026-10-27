@@ -22,37 +22,43 @@ in
     extensions = [ pkgs.gh-stack ];
   };
 
-  # Persist gh CLI auth from the 1Password-sourced token into ~/.config/gh/hosts.yml.
+  # Persist gh CLI auth from the 1Password-sourced token.
   # Why: the `alias gh="op plugin run -- gh"` approach only applies to interactive zsh —
   # Dock-launched GUI apps (Claude Code UI, VS Code) and non-interactive subshells
   # spawn `gh` without that alias and without the shell env, so authentication fails.
-  # Persisting the token in gh's own config file makes `gh` work everywhere.
+  # Logging gh in with its own stored credential makes `gh` work everywhere.
+  #
+  # gh keeps the token in the macOS Keychain (hosts.yml only records the user), so
+  # compare against `gh auth token`, which reads the Keychain without a network call.
   #
   # `gh auth login` writes to both hosts.yml AND config.yml, but config.yml is a
   # read-only Nix-store symlink (managed by programs.gh.settings). We isolate gh
   # in a temporary GH_CONFIG_DIR so its writes to config.yml are harmless, then
-  # copy only the resulting hosts.yml to the real location.
+  # copy only the resulting hosts.yml to the real location. That runs in a
+  # subshell so its EXIT trap doesn't replace home-manager's own.
   home.activation.ghAuth = lib.mkIf (!isPlaceholderToken) (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      hosts_file="$HOME/.config/gh/hosts.yml"
-      current=""
-      if [ -f "$hosts_file" ]; then
-        current=$(sed -n 's/^[[:space:]]*oauth_token:[[:space:]]*//p' "$hosts_file" | head -1)
-      fi
+      # Clear any ambient GitHub tokens: `gh auth token` would report them instead
+      # of the stored credential, and `gh auth login` would defer to them rather
+      # than persisting (env vars don't survive into Dock-launched app subprocesses).
+      gh_clean_env="env -u GITHUB_TOKEN -u GH_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN"
+      current=$($gh_clean_env ${pkgs.gh}/bin/gh auth token --hostname github.com 2>/dev/null || true)
       if [ "$current" != "${githubDevToken}" ]; then
-        echo -e "\033[0;34mℹ\033[0m Persisting gh CLI authentication to $hosts_file"
+        hosts_file="$HOME/.config/gh/hosts.yml"
+        echo -e "\033[0;34mℹ\033[0m Persisting gh CLI authentication"
         mkdir -p "$HOME/.config/gh"
-        tmp_dir=$(mktemp -d)
-        trap 'rm -rf "$tmp_dir"' EXIT
-        # Clear any ambient GitHub tokens so gh persists the token to disk rather than
-        # deferring to an env var (which wouldn't survive in Dock-launched app subprocesses).
-        env -u GITHUB_TOKEN -u GH_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
-          GH_CONFIG_DIR="$tmp_dir" \
-          ${pkgs.gh}/bin/gh auth login \
-            --hostname github.com \
-            --git-protocol ssh \
-            --with-token <<< "${githubDevToken}"
-        install -m 600 "$tmp_dir/hosts.yml" "$hosts_file"
+        if ! (
+          tmp_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_dir"' EXIT
+          $gh_clean_env GH_CONFIG_DIR="$tmp_dir" \
+            ${pkgs.gh}/bin/gh auth login \
+              --hostname github.com \
+              --git-protocol ssh \
+              --with-token <<< "${githubDevToken}" \
+            && install -m 600 "$tmp_dir/hosts.yml" "$hosts_file"
+        ); then
+          echo -e "\033[1;33m!\033[0m gh auth login failed; gh keeps its previous credentials"
+        fi
       fi
     ''
   );

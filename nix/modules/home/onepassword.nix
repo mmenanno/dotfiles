@@ -3,8 +3,8 @@
 {
   home.file = {
     # 1Password CLI plugin aliases (sourced by zsh for interactive shells).
-    # Note: `gh` no longer aliased here — its token is persisted in ~/.config/gh/hosts.yml
-    # by gh.nix, so `gh` works directly in any context (GUI apps, subshells, CI).
+    # `gh` isn't aliased here: gh.nix logs it in with its own Keychain credential,
+    # so `gh` works directly in any context (GUI apps, subshells, CI).
     ".config/op/plugins.sh".text = ''
       export OP_PLUGIN_ALIASES_SOURCED=1
     '';
