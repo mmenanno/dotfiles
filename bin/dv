@@ -24,7 +24,6 @@ SCRIPT_DIR=${0:A:h}
 source "$SCRIPT_DIR/shared"
 
 export USE_ICON_STYLE=true
-typeset -g VERBOSE=false
 
 # ============================================================================
 # TUI Progress Functions
@@ -824,8 +823,8 @@ handle_step_completion() {
     shift 2
 
     local rc=0
-    if ! run_step "$step_id" "$step_name" "$@"; then
-        rc=$?
+    run_step "$step_id" "$step_name" "$@" || rc=$?
+    if (( rc != 0 )); then
         failed_steps+=("$step_name")
         if (( rc == 130 )); then
             interrupted=true
@@ -1156,7 +1155,6 @@ cmd_up() {
     setopt local_options no_monitor no_notify no_xtrace no_verbose no_err_exit
 
     local force=false
-    export VERBOSE=false
 
     for arg in "$@"; do
         case "$arg" in
@@ -1164,7 +1162,7 @@ cmd_up() {
                 force=true
                 ;;
             --verbose|-v)
-                export VERBOSE=true
+                VERBOSE=true
                 ;;
             *)
                 log_error "Unknown option: $arg"
@@ -1483,21 +1481,21 @@ cmd_passthrough() {
 
 # Main entry point: parse global flags and dispatch to command functions
 dv_main() {
-    local -a args=()
+    # Local so it never leaks into the interactive shell (Rails reads VERBOSE),
+    # and only leading flags are global: anything after the command is the
+    # command's own, e.g. `dv rspec -v`
+    local VERBOSE=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --verbose|-v)
-                export VERBOSE=true
+                VERBOSE=true
                 shift
                 ;;
             *)
-                args+=("$1")
-                shift
+                break
                 ;;
         esac
     done
-
-    set -- "${args[@]}"
 
     local command="${1:-help}"
     shift $(( $# ? 1 : 0 ))
