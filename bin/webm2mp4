@@ -236,9 +236,9 @@ process_files() {
             wait "${pids[0]}"
             local exit_code=$?
             if (( exit_code == 0 )); then
-                ((success_count++))
+                success_count=$((success_count + 1))
             else
-                ((failed_count++))
+                failed_count=$((failed_count + 1))
             fi
             pids=("${pids[@]:1}")
         fi
@@ -249,9 +249,9 @@ process_files() {
             pids+=($!)
         else
             if convert_file "$input_file" "$output_file" "$((i+1))" "$total_files"; then
-                ((success_count++))
+                success_count=$((success_count + 1))
             else
-                ((failed_count++))
+                failed_count=$((failed_count + 1))
             fi
         fi
     done
@@ -262,9 +262,9 @@ process_files() {
             wait "$pid"
             local exit_code=$?
             if (( exit_code == 0 )); then
-                ((success_count++))
+                success_count=$((success_count + 1))
             else
-                ((failed_count++))
+                failed_count=$((failed_count + 1))
             fi
         done
     fi

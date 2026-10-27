@@ -418,7 +418,7 @@ startup_cleanup() {
             if (( mtime < cutoff )); then
                 log_verbose "Removing old temp: $(basename "$dir")"
                 rm -rf "$dir"
-                ((cleaned++))
+                cleaned=$((cleaned + 1))
             fi
         fi
     done
@@ -470,7 +470,7 @@ compute_sizes_kb() {
     local idx=1
     for dir in "${dirs[@]}"; do
         /usr/bin/du -sk "$dir" 2>/dev/null | /usr/bin/awk '{print $1}' > "$tmpdir/$idx" &
-        ((idx++))
+        idx=$((idx + 1))
     done
     wait
 
@@ -1044,7 +1044,7 @@ cmd_cleanup_tmp() {
     for dir in "${temp_dirs[@]}"; do
         log_verbose "Removing: $(basename "$dir")"
         rm -rf "$dir"
-        ((removed++))
+        removed=$((removed + 1))
     done
 
     log_success "Removed $(pluralize $removed "temporary directory" "temporary directories")"

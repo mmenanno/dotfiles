@@ -222,9 +222,9 @@ display_steps() {
 
     # Header
     output_buffer+="${BOLD}Running: dv up${NC}"$'\n'
-    ((line_count++))
+    line_count=$((line_count + 1))
     output_buffer+=""$'\n'
-    ((line_count++))
+    line_count=$((line_count + 1))
 
     for step_id in "${STEP_ORDER[@]:-}"; do
         # Skip if step_id is empty or not in STEP_STATUS
@@ -244,7 +244,7 @@ display_steps() {
             pending)
                 icon="$ICON_PENDING"
                 output_buffer+="  ${DIM}${icon} ${name}${NC}"$'\n'
-                ((line_count++))
+                line_count=$((line_count + 1))
                 ;;
             running)
                 if [[ "$step_id" == "${CURRENT_STEP:-}" ]]; then
@@ -280,7 +280,7 @@ display_steps() {
                 else
                     icon="${ICON_PENDING}"
                     output_buffer+="  ${icon} ${name}"$'\n'
-                    ((line_count++))
+                    line_count=$((line_count + 1))
                 fi
                 ;;
             success)
@@ -290,7 +290,7 @@ display_steps() {
                 else
                     output_buffer+="  ${icon} ${name}"$'\n'
                 fi
-                ((line_count++))
+                line_count=$((line_count + 1))
                 ;;
             error)
                 icon="${RED}${ICON_ERROR}${NC}"
@@ -299,7 +299,7 @@ display_steps() {
                 else
                     output_buffer+="  ${icon} ${name}"$'\n'
                 fi
-                ((line_count++))
+                line_count=$((line_count + 1))
                 ;;
             warning)
                 icon="${YELLOW}${ICON_WARNING}${NC}"
@@ -308,7 +308,7 @@ display_steps() {
                 else
                     output_buffer+="  ${icon} ${name}"$'\n'
                 fi
-                ((line_count++))
+                line_count=$((line_count + 1))
                 ;;
         esac
     done
@@ -694,7 +694,7 @@ resolve_collision() {
     local index=1 path
     for path in "${paths[@]}"; do
         printf '  %d) %s\n' "$index" "$path" >&2
-        ((index++))
+        index=$((index + 1))
     done
 
     echo "" >&2
