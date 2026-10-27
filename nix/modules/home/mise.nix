@@ -17,10 +17,9 @@
         ruby = "latest";
         node = "latest";
         pnpm = "latest";
-        rust = "latest";
       };
       settings = {
-        idiomatic_version_file_enable_tools = ["ruby" "python" "node" "nodejs" "rust"];
+        idiomatic_version_file_enable_tools = ["ruby" "python" "node" "nodejs"];
         auto_install = true;
         ruby.compile = false;
         # Disable tools that are managed by Nix instead of mise
