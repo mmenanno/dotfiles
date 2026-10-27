@@ -1410,9 +1410,7 @@ cmd_logs() {
 
             # Prompt for confirmation on destructive operations
             log_warning "$warning_msg"
-            printf "Continue? (y/N): "
-            read -r response
-            if [[ "$response" =~ ^[Yy]$ ]]; then
+            if confirm "Continue?"; then
                 cleanup_old_logs "$project_name" "$clean_all"
                 if [[ $all_projects == true && $clean_all == true ]]; then
                     log_success "All logs deleted for all projects"

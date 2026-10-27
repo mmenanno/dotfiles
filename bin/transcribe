@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # transcribe - Transcribe audio/video files using OpenAI Whisper
 # Usage: transcribe [options] <file|dir> [file|dir ...]
 
@@ -23,10 +23,6 @@ TARGETS=()
 
 # Extensions whisper/ffmpeg can handle (audio + video with audio tracks)
 AUDIO_EXTENSIONS=(ogg oga m4a mp3 mp4 wav flac aac opus wma webm mkv mov mpg mpeg mpga)
-
-gum_clean() {
-    env -u BOLD -u DIM gum "$@"
-}
 
 show_help() {
     cat << EOF
@@ -240,12 +236,15 @@ if [[ "$ASSUME_YES" == false && "$QUIET" == false ]]; then
             log_info "Cancelled"
             exit 0
         fi
-    else
-        read -r -p "Proceed? [Y/n] " reply
+    elif [[ -t 0 ]]; then
+        read -r -p "Proceed? [Y/n] " reply || reply=""
         if [[ "$reply" =~ ^[Nn] ]]; then
             log_info "Cancelled"
             exit 0
         fi
+    else
+        log_error "stdin is not a terminal; pass --yes to skip confirmation"
+        exit 1
     fi
     echo ""
 fi

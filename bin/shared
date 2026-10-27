@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Shared utilities for dotfiles scripts
 # Source this file to get colors and common logging functions
 
@@ -201,6 +201,12 @@ confirm() {
     fi
 
     [[ "$response" =~ ^[Yy]$ ]]
+}
+
+# Run gum without our exported BOLD/DIM color vars, which gum reads as its own
+# style settings
+gum_clean() {
+    env -u BOLD -u DIM gum "$@"
 }
 
 # Refresh sudo credentials in the background so long runs never prompt mid-task

@@ -78,12 +78,6 @@ pluralize() {
     fi
 }
 
-# Wrapper for gum that clears color environment variables
-# This prevents conflicts with gum's own color handling
-gum_clean() {
-    env -u BOLD -u DIM gum "$@"
-}
-
 # Normalize basename: remove path/extension and convert underscores to dashes
 # This provides consistent naming for version/name extraction
 # Usage: normalize_basename <filename>
@@ -649,7 +643,16 @@ cleanup() {
         rm -rf "$WORK_DIR"
     fi
 }
-trap cleanup EXIT INT TERM
+# A handler that returns would let execution resume after Ctrl-C, so disarm,
+# tear down, then re-raise to exit with the signal's status
+on_signal() {
+    trap - INT TERM EXIT
+    cleanup
+    kill -"$1" $$
+}
+trap cleanup EXIT
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
 
 # ============================================================================
 # Command: Install

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # webm2mp4 - Convert WebM files to MP4 format
 # Usage: webm2mp4 [options] [file_or_directory]

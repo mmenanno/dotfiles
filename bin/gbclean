@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # gbclean - Clean up merged git branches and prune remote references
 # Usage: gbclean [options]
 
@@ -56,8 +56,12 @@ EOF
 get_default_branch() {
     local default_branch
 
-    # Try to get from remote
-    default_branch=$(git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d' ' -f5 2>/dev/null || echo "")
+    # Prefer the locally cached origin/HEAD; only ask the remote if it's unset
+    default_branch=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+    default_branch=${default_branch#origin/}
+    if [[ -z "$default_branch" ]]; then
+        default_branch=$(run_with_timeout 15 git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d' ' -f5 || true)
+    fi
 
     # Fall back to checking what exists locally
     if [[ -z "$default_branch" ]]; then

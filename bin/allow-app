@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # allow-app - Remove macOS quarantine flag from downloaded applications
 # Usage: allow-app [options] <app_or_file>...
 

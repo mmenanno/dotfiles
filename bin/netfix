@@ -1164,9 +1164,7 @@ fix_config() {
     fi
 
     # Confirm with user
-    printf "  Continue with deep reset? (y/N): "
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    if ! confirm "  Continue with deep reset?"; then
         log_info "  Level 4 cancelled"
         return 0
     fi
