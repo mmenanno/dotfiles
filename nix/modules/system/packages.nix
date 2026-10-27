@@ -14,7 +14,6 @@ let
     imagemagick
     lazygit
     markdownlint-cli
-    mkalias
     openssl
     pkg-config
     rclone

@@ -8,7 +8,6 @@ let
     ./system/system-defaults.nix
     ./system/rectangle.nix
     ./system/fonts.nix
-    ./system/app-aliases.nix
   ];
 
   commonHomeModules = [
