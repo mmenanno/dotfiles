@@ -118,6 +118,7 @@ let
     "Proton Pass for Safari" = 6502835663;
     "Tampermonkey Classic" = 1482490089;
     "The Camelizer" = 1532579087;
+    "Xcode" = 497799835;
   };
 in
 {
