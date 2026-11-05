@@ -61,9 +61,6 @@ let
   ];
 
   personalOnlyCasks = [
-    "affinity-designer"
-    "affinity-photo"
-    "affinity-publisher"
     "chatgpt"
     "daisydisk"
     "discord"
