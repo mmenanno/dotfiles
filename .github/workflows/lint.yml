@@ -35,7 +35,7 @@ jobs:
           VALIDATE_GITHUB_ACTIONS: true
 
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@v3.99.7
+        uses: trufflesecurity/trufflehog@v3.99.8
         with:
           extra_args: --results=verified,unknown
 
