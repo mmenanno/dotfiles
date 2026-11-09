@@ -654,6 +654,11 @@ in
         "fight-me@babylist" = isWorkMachine;
         "preflight-review@babylist" = isWorkMachine;
         "skill-creator@claude-plugins-official" = false;
+        "create-linear-tickets@babylist" = isWorkMachine;
+        "devin@babylist" = isWorkMachine;
+        "generated-file-guard@babylist" = isWorkMachine;
+        "launchdarkly@babylist" = isWorkMachine;
+        "snowflake@babylist" = isWorkMachine;
       };
       extraKnownMarketplaces = lib.optionalAttrs isWorkMachine {
         babylist = {
@@ -668,6 +673,7 @@ in
       );
       autoDreamEnabled = true;
       autoUpdates = true;
+      autoUpdatesChannel = "stable";
       teammateMode = "auto";
       theme = "dark";
       tui = "fullscreen";
