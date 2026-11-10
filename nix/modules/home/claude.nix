@@ -345,7 +345,6 @@ let
     "claude.ai Ahrefs"
     "claude.ai Airtable"
     "claude.ai Amplitude"
-    "claude.ai Asana"
     "claude.ai Atlassian"
     "claude.ai BrightHire"
     "claude.ai Canva"
