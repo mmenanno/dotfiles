@@ -77,6 +77,10 @@ check_required_commands() {
     log_success "All required commands available."
 }
 
+needs_reboot_for_nix() {
+    [[ ! -d /nix ]] && grep -qE '^nix([[:space:]]|$)' /etc/synthetic.conf 2>/dev/null
+}
+
 # Function to install Nix
 install_nix() {
     # A re-run from the same terminal that installed Nix won't have it on PATH yet
@@ -90,11 +94,24 @@ install_nix() {
         return 0
     fi
 
+    # The installer adds nix to /etc/synthetic.conf, then asks macOS to create
+    # /nix right away. That fails when FileVault is on (as Setup Assistant
+    # leaves a new Mac); a reboot creates it from synthetic.conf instead
+    if needs_reboot_for_nix; then
+        log_warning "/etc/synthetic.conf has a /nix entry but /nix doesn't exist yet."
+        log_info "Reboot, then re-run this script to finish installing Nix."
+        exit 1
+    fi
+
     log_info "Installing Nix package manager..."
-    
-    # Download and verify the Nix installer
-    if ! curl -L https://nixos.org/nix/install | sh -s -- --daemon; then
-        log_error "Failed to install Nix."
+
+    if ! curl -fsSL https://nixos.org/nix/install | sh -s -- --daemon; then
+        if needs_reboot_for_nix; then
+            log_warning "macOS couldn't create /nix until it reboots (a known issue with FileVault)."
+            log_info "Reboot, then re-run this script to finish installing Nix."
+        else
+            log_error "Failed to install Nix."
+        fi
         exit 1
     fi
 
