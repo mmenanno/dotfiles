@@ -109,8 +109,8 @@ let
     "Deliveries" = 290986013;
     "JSON Peep for Safari" = 1458969831;
     "MetaDoctor" = 988250390;
-    "Numbers" = 409203825;
-    "Pages" = 409201541;
+    "Numbers" = 361304891;
+    "Pages" = 361309726;
     "Palworld" = 6503918400;
     "Proton Pass for Safari" = 6502835663;
     "Tampermonkey Classic" = 1482490089;

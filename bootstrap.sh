@@ -332,6 +332,10 @@ cleanup_on_error() {
 main() {
     # Set up error handling and display header in one block
     trap cleanup_on_error ERR
+
+    # Keep the Mac awake (not the display) until this script exits; the first
+    # build downloads for a long time
+    caffeinate -ims -w $$ &
     
     cat << EOF
 ${BLUE}🍎 macOS Dotfiles Bootstrap${NC}
