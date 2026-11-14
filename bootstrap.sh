@@ -51,13 +51,69 @@ check_macos() {
     fi
 }
 
-# Function to check if Xcode Command Line Tools are installed
-check_xcode_tools() {
-    if ! xcode-select -p >/dev/null 2>&1; then
-        log_warning "Xcode Command Line Tools not found. Installing..."
-        xcode-select --install
-        log_info "Please complete the Xcode Command Line Tools installation and re-run this script."
-        exit 1
+APP_MANAGEMENT_MARKER="$HOME/.local/state/dotfiles/app-management-granted"
+
+terminal_app_name() {
+    case "${TERM_PROGRAM:-}" in
+        Apple_Terminal) echo "Terminal" ;;
+        iTerm.app) echo "iTerm" ;;
+        ghostty) echo "Ghostty" ;;
+        WezTerm) echo "WezTerm" ;;
+        vscode) echo "Visual Studio Code" ;;
+        *) echo "your terminal app" ;;
+    esac
+}
+
+# Start the Command Line Tools install if needed. Returns 0 if it was started
+start_xcode_tools_install() {
+    xcode-select -p >/dev/null 2>&1 && return 1
+    log_warning "Xcode Command Line Tools not found. Starting the installer..."
+    xcode-select --install
+    log_info "Finish the Command Line Tools install in the popup."
+    return 0
+}
+
+# Homebrew installs and updates apps in /Applications, which macOS blocks
+# unless the terminal has App Management permission. Granting it mid-run only
+# takes effect after the terminal restarts, so the casks being installed at
+# the time fail. There's no API to check or request it, so ask up front.
+# Returns 0 if the user still has to grant it and restart.
+needs_app_management() {
+    [[ -f "$APP_MANAGEMENT_MARKER" || -e /run/current-system ]] && return 1
+
+    local app
+    app="$(terminal_app_name)"
+
+    if [[ ! -t 0 ]]; then
+        log_warning "Can't ask about App Management without a terminal. If casks fail to install, give $app App Management permission, restart it and re-run."
+        return 1
+    fi
+
+    log_info "Homebrew needs $app to have App Management permission to install apps."
+    local reply=""
+    read -r -p "Is $app already turned on in System Settings → Privacy & Security → App Management (and restarted since)? [y/N] " reply
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+        mkdir -p "$(dirname "$APP_MANAGEMENT_MARKER")"
+        touch "$APP_MANAGEMENT_MARKER"
+        return 1
+    fi
+
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles" || true
+    log_warning "Opened App Management in System Settings. Turn on $app there (use + to add it if it isn't listed)."
+    return 0
+}
+
+# Batch the steps that need the user to act outside the script, so there's
+# only one stop-and-re-run on a fresh machine
+check_user_actions() {
+    local rerun_needed=false
+    start_xcode_tools_install && rerun_needed=true
+    needs_app_management && rerun_needed=true
+
+    if [[ "$rerun_needed" == true ]]; then
+        echo
+        log_info "When that's done, quit $(terminal_app_name) with ⌘Q, reopen it, and re-run this script."
+        exit 0
     fi
 }
 
@@ -239,7 +295,7 @@ EOF
     # Batch all pre-flight and environment checks
     local checks=(
         "check_macos:macOS compatibility"
-        "check_xcode_tools:Xcode Command Line Tools" 
+        "check_user_actions:setup steps that need you"
         "check_required_commands:required commands"
     )
     
