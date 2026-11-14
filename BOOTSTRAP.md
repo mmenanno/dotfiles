@@ -7,9 +7,8 @@ This dotfiles configuration supports both fresh system setup and ongoing managem
 On a fresh macOS system, the configuration will automatically detect that 1Password CLI is not available and run in bootstrap mode:
 
 ```bash
-git clone https://github.com/mmenanno/dotfiles.git
-cd dotfiles
-nixup  # This will run in bootstrap mode automatically
+git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
+~/dotfiles/bin/nixup-with-secrets  # Runs in bootstrap mode automatically
 ```
 
 Bootstrap mode provides safe fallback values for:
@@ -36,7 +35,7 @@ Once the bootstrap is complete:
 
 ## Required 1Password Items
 
-Create these items in your 1Password vault before running nixup:
+Create these items in the `Nix` vault before running `nx up`:
 
 ### Nix/MainID
 
@@ -79,7 +78,7 @@ Create these items in your 1Password vault before running nixup:
 1. **Apply your configuration**
 
    ```bash
-   nixup  # Now loads your secrets from 1Password
+   nx up  # Now loads your secrets from 1Password
    ```
 
 ## Environment Variables
@@ -115,8 +114,10 @@ The system uses these environment variables loaded from 1Password:
 You can manually force bootstrap mode:
 
 ```bash
-NIX_BOOTSTRAP_MODE=1 darwin-rebuild switch --flake ~/dotfiles/nix
+sudo NIX_BOOTSTRAP_MODE=1 NIX_FULL_NAME="$(id -un)" darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup --impure
 ```
+
+The variables go after `sudo`, which otherwise strips them. `NIX_FULL_NAME` must be your real macOS account name even in bootstrap mode.
 
 ## Public Repository Safety
 

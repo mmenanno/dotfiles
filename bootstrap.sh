@@ -1,14 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # macOS Dotfiles Bootstrap Script
 # Sets up a complete development environment using nix-darwin
+#
+# Runs before the repo is cloned (via curl), so it can't source bin/shared
+# and must stay compatible with macOS's stock bash 3.2
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
-# Load shared colors
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/bin/colors.sh"
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+NC=$'\033[0m'
+
+NIX_DAEMON_PROFILE="/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
 
 # Configuration
 DOTFILES_REPO="https://github.com/mmenanno/dotfiles.git"
@@ -73,6 +79,12 @@ check_required_commands() {
 
 # Function to install Nix
 install_nix() {
+    # A re-run from the same terminal that installed Nix won't have it on PATH yet
+    if ! command_exists nix && [[ -f "$NIX_DAEMON_PROFILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$NIX_DAEMON_PROFILE"
+    fi
+
     if command_exists nix; then
         log_success "Nix is already installed."
         return 0
@@ -87,9 +99,9 @@ install_nix() {
     fi
 
     # Source the Nix environment
-    if [[ -f "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]]; then
+    if [[ -f "$NIX_DAEMON_PROFILE" ]]; then
         # shellcheck source=/dev/null
-        source "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+        source "$NIX_DAEMON_PROFILE"
     else
         log_error "Nix installation completed but environment setup failed."
         log_info "Please restart your terminal and re-run this script."
@@ -176,10 +188,10 @@ show_completion_message() {
     log_success "🎉 macOS setup completed successfully!"
     echo
     echo -e "${BLUE}Next steps:${NC}"
-    echo "1. 🔄 Restart your terminal to load the new shell configuration"
-    echo "2. 🔑 Sign into applications that require authentication"
-    echo "3. 🛠  Configure 1Password for SSH/Git signing"
-    echo "4. ⚡ Run 'nx up' to rebuild configuration anytime"
+    echo "1. 🔄 Open a new terminal to load the new shell configuration"
+    echo "2. 🔑 Sign into 1Password and enable its CLI integration"
+    echo "   (1Password → Settings → Developer → Integrate with 1Password CLI)"
+    echo "3. ⚡ Run 'nx up' to apply the full configuration with your secrets"
     echo
     echo -e "${BLUE}Useful commands:${NC}"
     echo "• nx up     - Rebuild and switch configuration"

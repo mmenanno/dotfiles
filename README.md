@@ -9,8 +9,10 @@
 #### Method 1: Bootstrap Script (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh | bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh)"
 ```
+
+This installs the Xcode Command Line Tools (re-run once they finish), Nix, clones the repo to `~/dotfiles`, and runs `bin/nixup-with-secrets`. On a fresh machine that is a bootstrap build with placeholder secrets; see [Finishing setup](#finishing-setup).
 
 #### Method 2: Manual Installation
 
@@ -18,39 +20,22 @@ curl -sSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh 
 # Install Nix
 sh <(curl -L https://nixos.org/nix/install) --daemon
 
-# Clone dotfiles
+# Open a new terminal so nix is on PATH, then clone dotfiles
 git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
-cd ~/dotfiles
 
-# Enable flakes
-mkdir -p ~/.config/nix
-echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
-
-# Build and activate
-darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup
+# Bootstrap build (no 1Password yet, so placeholder secrets)
+~/dotfiles/bin/nixup-with-secrets
 ```
+
+#### Finishing setup
+
+1. Open a new terminal
+2. Sign into the 1Password app and enable **Settings → Developer → Integrate with 1Password CLI**
+3. Run `nx up` to rebuild with your secrets from the `Nix` vault (see `BOOTSTRAP.md` for the items it expects)
 
 ### Work Machine
 
-```bash
-# Install Nix
-sh <(curl -L https://nixos.org/nix/install) --daemon
-
-# Clone dotfiles
-git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
-cd ~/dotfiles
-
-# Enable flakes
-mkdir -p ~/.config/nix
-echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
-
-# Bootstrap (installs 1Password CLI and essentials)
-NIX_BOOTSTRAP_MODE=1 sudo darwin-rebuild switch --flake ~/dotfiles/nix#macbook_setup --impure
-
-# After bootstrap: sign into 1Password, add Work item to Nix vault with hostname field
-# Then run nx up — config is auto-detected via hostname
-nx up
-```
+Same as Method 2 above. The bootstrap build always uses the `macbook_setup` configuration; after it, add a `hostname` field to the `Nix/Work` 1Password item matching `scutil --get LocalHostName`, then run `nx up`.
 
 The `nx` script auto-detects which configuration to use by comparing the local hostname against the value stored in 1Password (`Nix/Work/hostname`). No manual config name selection is needed after initial setup.
 
@@ -90,12 +75,10 @@ The `nx` script auto-detects which configuration to use by comparing the local h
 
 ## 🔧 Post-Installation
 
-After running the bootstrap:
+After [finishing setup](#finishing-setup):
 
-1. **Restart your terminal** to load new shell configuration
-2. **Sign into applications** that require authentication
-3. **Configure 1Password** for SSH/Git signing (see `BOOTSTRAP.md` for required items and environment variables)
-4. **Run `nx up`** to rebuild configuration
+1. **Sign into applications** that require authentication
+2. **Configure 1Password** for SSH/Git signing
 
 ## 🛠 Customization
 
