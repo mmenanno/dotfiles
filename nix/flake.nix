@@ -46,8 +46,11 @@
         nixpkgs.lib.composeManyExtensions (import ./overlays.nix)
       );
 
-      # Environment-based username with fallback using consistent pattern
-      username = getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
+      # The macOS account name. Read even in bootstrap mode: a placeholder would
+      # point primaryUser, nix-homebrew and Home Manager at a user that doesn't exist
+      username =
+        let fromEnv = builtins.getEnv "NIX_FULL_NAME";
+        in if fromEnv != "" then fromEnv else getEnvOrFallback "NIX_FULL_NAME" "bootstrap-user" "placeholder-user";
       homeDirectory = "/Users/${username}";
       homeManagerConfig = {
         inherit username homeDirectory;
