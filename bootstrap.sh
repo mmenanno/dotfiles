@@ -73,16 +73,63 @@ start_xcode_tools_install() {
     return 0
 }
 
+# Any app in /Applications the user owns (in practice, a Homebrew cask). App
+# Store apps are root-owned, so a write there fails on plain file permissions
+# and says nothing about App Management
+find_probe_app() {
+    local app
+    for app in /Applications/*.app; do
+        if [[ -d "$app" && ! -L "$app" && -w "$app/Contents" ]]; then
+            echo "$app"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Try a write inside an app bundle. macOS answers "Operation not permitted"
+# when the terminal lacks App Management, and shows a notification that leads
+# to the toggle. Returns 0 if granted, 1 if denied, 2 if there's nothing to test
+probe_app_management() {
+    local app probe err
+    app="$(find_probe_app)" || return 2
+    probe="$app/Contents/.dotfiles-app-management-probe"
+    if err="$(mkdir "$probe" 2>&1)"; then
+        rmdir "$probe"
+        return 0
+    fi
+    [[ "$err" == *"Operation not permitted"* ]] && return 1
+    return 2
+}
+
+open_app_management_settings() {
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles" || true
+}
+
 # Homebrew installs and updates apps in /Applications, which macOS blocks
 # unless the terminal has App Management permission. Granting it mid-run only
 # takes effect after the terminal restarts, so the casks being installed at
-# the time fail. There's no API to check or request it, so ask up front.
-# Returns 0 if the user still has to grant it and restart.
+# the time fail. Returns 0 if the user still has to grant it and restart.
 needs_app_management() {
-    [[ -f "$APP_MANAGEMENT_MARKER" || -e /run/current-system ]] && return 1
-
-    local app
+    local app status=0
     app="$(terminal_app_name)"
+
+    probe_app_management || status=$?
+    case "$status" in
+        0)
+            log_success "$app has App Management permission."
+            return 1
+            ;;
+        1)
+            open_app_management_settings
+            log_warning "macOS blocked $app from modifying an app: it needs App Management permission."
+            log_info "Turn on $app in the System Settings window that just opened (or click the macOS notification)."
+            return 0
+            ;;
+    esac
+
+    # Nothing to test against (a fresh Mac has no user-owned apps yet), so ask
+    [[ -f "$APP_MANAGEMENT_MARKER" || -e /run/current-system ]] && return 1
 
     if [[ ! -t 0 ]]; then
         log_warning "Can't ask about App Management without a terminal. If casks fail to install, give $app App Management permission, restart it and re-run."
@@ -98,7 +145,7 @@ needs_app_management() {
         return 1
     fi
 
-    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles" || true
+    open_app_management_settings
     log_warning "Opened App Management in System Settings. Turn on $app there (use + to add it if it isn't listed)."
     return 0
 }
