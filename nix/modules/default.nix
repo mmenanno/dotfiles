@@ -30,6 +30,7 @@ let
     ./home/ai-globals.nix
     ./home/tmux.nix
     ./home/zellij.nix
+    ./home/iterm.nix
   ];
 in
 {
