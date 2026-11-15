@@ -18,11 +18,13 @@ in
             echo -e "\033[0;32m✓\033[0m Ruby $version installation verified"
           else
             echo -e "\033[1;33m!\033[0m Installing Ruby $version..."
-            if ! mise install ruby@$version; then
-              echo -e "\033[0;31m✗\033[0m Failed to install Ruby $version"
-              exit 1
+            # A missing Ruby shouldn't stop the rest of the Mac being set up;
+            # the next nx up retries it
+            if mise install ruby@$version; then
+              echo -e "\033[0;32m✓\033[0m Ruby $version installation completed"
+            else
+              echo -e "\033[1;33m!\033[0m Failed to install Ruby $version; nx up will try again"
             fi
-            echo -e "\033[0;32m✓\033[0m Ruby $version installation completed"
           fi
         done
         echo -e "\033[0;34mℹ\033[0m Finished Ruby versions verification/installation"

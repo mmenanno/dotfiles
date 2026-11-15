@@ -12,6 +12,10 @@ in
 {
   inherit getEnvOrFallback;
 
+  # True during the bootstrap build, before 1Password (and so any secret or
+  # SSH key) is available
+  isBootstrap = builtins.getEnv "NIX_BOOTSTRAP_MODE" == "1";
+
   # Like getEnvOrFallback, but returns "" on work machines (personal-only secrets)
   getPersonalEnvOrFallback = isWorkMachine: envVar: bootstrapVal: fallbackVal:
     if isWorkMachine then "" else getEnvOrFallback envVar bootstrapVal fallbackVal;
