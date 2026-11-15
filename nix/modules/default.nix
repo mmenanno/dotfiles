@@ -29,6 +29,7 @@ let
     ./home/mutable-files.nix
     ./home/ai-globals.nix
     ./home/tmux.nix
+    ./home/zellij.nix
   ];
 in
 {
