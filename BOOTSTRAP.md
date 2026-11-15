@@ -21,17 +21,12 @@ Bootstrap mode provides safe fallback values for:
 
 Once the bootstrap is complete:
 
-1. **Install and configure 1Password**
-   - Launch 1Password app and sign in
-   - Enable CLI integration: 1Password → Settings → Developer → Command Line Interface
+1. **Set up 1Password**
+   - Open the 1Password app and sign in
+   - In **Settings → Developer**, turn on **Integrate with 1Password CLI** and **Use the SSH agent**
+   - There's no `op signin` step: with the integration on, each `op` call asks for approval in the app
 
-2. **Sign into 1Password CLI**
-
-   ```bash
-   op signin
-   ```
-
-3. **Create required 1Password items**
+2. **Create required 1Password items**
 
 ## Required 1Password Items
 
