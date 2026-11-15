@@ -11,7 +11,9 @@ export USE_ICON_STYLE=true
 BASELINE_DIR="${BASELINE_DIR:-$HOME/.local/share/nix-managed-baselines}"
 
 # path (relative to $HOME) | process that must be closed on both Macs |
-# comma-separated rsync excludes (relative to the path)
+# comma-separated rsync excludes (relative to the path) | mode. Mode "merge"
+# is for line-based files both Macs add to: this Mac keeps its lines and gains
+# the old Mac's, instead of being replaced
 MIGRATE_ENTRIES=(
     "Library/Application Support/Paradox Interactive||"
     "Library/Containers/com.pocketpair.palworld.mac|Palworld|"
@@ -23,24 +25,25 @@ MIGRATE_ENTRIES=(
     "conductor|conductor|"
     ".claude||"
     ".claude.json||"
-    ".zsh_history||"
-    ".ssh/known_hosts||"
+    ".zsh_history|||merge"
+    ".ssh/known_hosts|||merge"
     ".local/share/cyberdrop-dl||"
     ".local/state/cyberdrop-dl||"
-    ".config/openlogi||"
+    ".config/openlogi||*.lock,armed-session,overlay.claim"
     ".local/share/openlogi||"
-    ".local/state/openlogi||"
+    ".local/state/openlogi||*.lock,*.log"
     ".config/scriptbin/cookies.txt||"
 )
 
-# Print one field (path, process or excludes) of a MIGRATE_ENTRIES item
+# Print one field (path, process, excludes or mode) of a MIGRATE_ENTRIES item
 entry_field() {
-    local entry="$1" field="$2" path process excludes
-    IFS='|' read -r path process excludes <<< "$entry"
+    local entry="$1" field="$2" path process excludes mode
+    IFS='|' read -r path process excludes mode <<< "$entry"
     case "$field" in
         path) echo "$path" ;;
         process) echo "$process" ;;
         excludes) echo "$excludes" ;;
+        mode) echo "$mode" ;;
         *) log_error "entry_field: unknown field '$field'"; return 1 ;;
     esac
 }
@@ -169,11 +172,12 @@ explain_ssh_failure() {
 }
 
 # Print "dir" or "file" for a path on the old Mac. Reading (not just stat-ing)
-# is what macOS privacy protection blocks, so this lists folders and reads a
-# byte of files
+# is what macOS privacy protection blocks, so this reads a byte of files and
+# walks two levels into folders: an app container's top level is readable,
+# its Data folder isn't without Full Disk Access
 remote_kind() {
     # shellcheck disable=SC2016  # expanded by the remote shell
-    remote sh -c 'if [ -d "$1" ]; then ls "$1" >/dev/null && echo dir;
+    remote sh -c 'if [ -d "$1" ]; then find "$1" -maxdepth 2 >/dev/null && echo dir;
         elif [ -e "$1" ]; then head -c 1 "$1" >/dev/null && echo file;
         else echo "$1: No such file or directory" >&2; exit 1; fi' _ "$1"
 }
@@ -261,7 +265,9 @@ set_rsync_base() {
         rsync_path=/usr/bin/rsync
         xattrs=()
     fi
+    # A container's metadata belongs to the Mac that created the container
     RSYNC_BASE=(-aH "${xattrs[@]}" --partial --mkpath
+        --exclude=.com.apple.containermanagerd.metadata.plist
         -e "ssh -o ControlPath=$CONTROL_PATH -o ControlMaster=no ${SSH_BOUNDS[*]}"
         "--rsync-path=$rsync_path")
 }
@@ -325,6 +331,27 @@ sqlite_orphans() {
             echo "$HOME/$relpath/${f#./}"
         fi
     done < <(find "$HOME/$relpath" \( -name '*.db-wal' -o -name '*.db-shm' \) -print0)
+}
+
+# Merge a line-based file: this Mac keeps every line it has and gains the old
+# Mac's lines it lacks, old Mac's first. Copied as-is if this Mac has none
+merge_file() {
+    local relpath="$1" dest="$HOME/$1" old
+    old="$(mktemp)"
+    if ! remote cat "$relpath" > "$old"; then
+        rm -f "$old"
+        return 1
+    fi
+    mkdir -p "$(dirname "$dest")"
+    if [[ -f "$dest" ]]; then
+        awk 'FNR == NR { print; seen[$0] = 1; next } !seen[$0]' "$old" "$dest" > "$old.merged"
+        # Write in place so the file keeps its permissions
+        cat "$old.merged" > "$dest"
+        rm -f "$old.merged"
+    else
+        (umask 077 && cp "$old" "$dest")
+    fi
+    rm -f "$old"
 }
 
 # ============================================================================
@@ -471,6 +498,10 @@ main() {
     for i in "${!ready[@]}"; do
         entry="${ready[$i]}"
         relpath="$(entry_field "$entry" path)"
+        if [[ "$(entry_field "$entry" mode)" == merge ]]; then
+            echo "    $relpath: merge (keeps this Mac's lines, adds the old Mac's)"
+            continue
+        fi
         mapfile -t args < <(rsync_paths "$entry" "${kinds[$i]}")
         code=0
         stats="$(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --stats -h "${args[@]}")" || code=$?
@@ -488,7 +519,11 @@ main() {
         newer="$(newer_on_destination "$entry" "${kinds[$i]}")"
         if [[ -n "$newer" ]]; then
             while IFS= read -r f; do
-                all_newer+="    $relpath/$f"$'\n'
+                if [[ "${kinds[$i]}" == file ]]; then
+                    all_newer+="    $relpath"$'\n'
+                else
+                    all_newer+="    $relpath/$f"$'\n'
+                fi
             done <<< "$newer"
         fi
     done
@@ -510,6 +545,14 @@ main() {
     for i in "${!ready[@]}"; do
         entry="${ready[$i]}"
         relpath="$(entry_field "$entry" path)"
+        if [[ "$(entry_field "$entry" mode)" == merge ]]; then
+            log_info "Merging $relpath..."
+            if ! merge_file "$relpath"; then
+                log_error "Couldn't merge $relpath. Re-run nx migrate to try again."
+                return 1
+            fi
+            continue
+        fi
         log_info "Copying $relpath..."
         mapfile -t args < <(rsync_paths "$entry" "${kinds[$i]}")
         if [[ "${kinds[$i]}" == dir ]]; then

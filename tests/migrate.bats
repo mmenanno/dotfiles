@@ -7,6 +7,11 @@ setup() {
     source_script migrate
 }
 
+# A test may make a folder unreadable; let bats clean it up
+teardown() {
+    chmod -R u+rwx "$BATS_TEST_TMPDIR" 2>/dev/null || true
+}
+
 @test "entry_field splits a path containing spaces" {
     entry="Library/Application Support/Paradox Interactive||"
     [ "$(entry_field "$entry" path)" = "Library/Application Support/Paradox Interactive" ]
@@ -113,6 +118,10 @@ setup_remote() {
             printf ' [%s]' "$@"
             printf '\n'
         } >> "$CALLS"
+        # A file the itemized dry run reports, unless --update would skip it
+        if [[ -n "${STUB_NEWER_ITEM:-}" && " $* " == *" --itemize-changes "* && " $* " != *" --update "* ]]; then
+            echo ">f.st...... $STUB_NEWER_ITEM"
+        fi
         # Fail only real copies, so a failure lands partway through the run
         [[ " $* " == *" --dry-run "* ]] && return 0
         return "${STUB_RSYNC_EXIT:-0}"
@@ -371,4 +380,76 @@ SH
     [[ "$output" == *"couldn't be read"* ]]
     [[ "$output" != *"check the connection"* ]]
     [ "$(grep -v -- '--dry-run' "$CALLS" | grep -c '^rsync')" -eq 2 ]
+}
+
+# --- Fixes from the first real preview -----------------------------------
+
+@test "folders are checked for readability inside, not just at the top" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/Containers/app/Data/stuff"
+    chmod 000 "$OLD_HOME/Library/Containers/app/Data"
+    only_entry "Library/Containers/app|App|"
+    run main oldmac --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Library/Containers/app"* ]]
+    refute grep -q '^rsync' "$CALLS"
+}
+
+@test "container metadata files are never copied" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    grep -qF '[--exclude=.com.apple.containermanagerd.metadata.plist]' "$CALLS"
+}
+
+@test "merge entries combine both Macs' lines instead of replacing" {
+    setup_remote
+    mkdir -p "$OLD_HOME/.ssh" "$HOME/.ssh"
+    printf 'old-only\nshared\n' > "$OLD_HOME/.ssh/known_hosts"
+    printf 'shared\nnew-only\n' > "$HOME/.ssh/known_hosts"
+    chmod 600 "$HOME/.ssh/known_hosts"
+    only_entry ".ssh/known_hosts|||merge"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *".ssh/known_hosts"*"merge"* ]]
+    [ "$(cat "$HOME/.ssh/known_hosts")" = "$(printf 'shared\nnew-only')" ]
+    run main oldmac --yes
+    [ "$status" -eq 0 ]
+    [ "$(cat "$HOME/.ssh/known_hosts")" = "$(printf 'old-only\nshared\nnew-only')" ]
+    [ "$(stat -f %Lp "$HOME/.ssh/known_hosts")" = "600" ]
+    refute grep -q 'known_hosts\]' <(grep '^rsync' "$CALLS")
+}
+
+@test "a merge entry that's missing on this Mac is just copied over" {
+    setup_remote
+    mkdir -p "$OLD_HOME/.ssh"
+    printf 'old-only\n' > "$OLD_HOME/.ssh/known_hosts"
+    only_entry ".ssh/known_hosts|||merge"
+    run main oldmac --yes
+    [ "$status" -eq 0 ]
+    [ "$(cat "$HOME/.ssh/known_hosts")" = "old-only" ]
+}
+
+@test "newer files in a single-file entry are listed by the entry's own path" {
+    setup_remote
+    printf '{}' > "$OLD_HOME/.claude.json"
+    STUB_NEWER_ITEM=".claude.json"
+    export STUB_NEWER_ITEM
+    only_entry ".claude.json||"
+    run main oldmac --dry-run
+    [[ "$output" == *"    .claude.json"* ]]
+    [[ "$output" != *".claude.json/.claude.json"* ]]
+}
+
+@test "history and known hosts merge, and OpenLogi's runtime files are skipped" {
+    for p in .zsh_history .ssh/known_hosts; do
+        e="$(printf '%s\n' "${MIGRATE_ENTRIES[@]}" | grep "^$p|")"
+        [ "$(entry_field "$e" mode)" = merge ]
+    done
+    for p in .config/openlogi .local/state/openlogi; do
+        e="$(printf '%s\n' "${MIGRATE_ENTRIES[@]}" | grep "^$p|")"
+        [[ "$(entry_field "$e" excludes)" == *"*.lock"* ]]
+    done
 }
