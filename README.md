@@ -12,7 +12,11 @@
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mmenanno/dotfiles/main/bootstrap.sh)"
 ```
 
-On the first run it starts the Xcode Command Line Tools install and opens **System Settings → Privacy & Security → App Management** so you can turn on your terminal (Homebrew needs this to install apps). Do both, quit the terminal with ⌘Q, reopen it and re-run. It then installs Nix (on a new Mac with FileVault on, it may ask you to reboot and re-run), clones the repo to `~/dotfiles`, and runs `bin/nixup-with-secrets`. On a fresh machine that is a bootstrap build with placeholder secrets; see [Finishing setup](#finishing-setup).
+The script works in stages, re-running where a step needs you:
+
+1. **First run:** starts the Xcode Command Line Tools install and checks that your terminal has **App Management** permission, which Homebrew needs to install apps. If it doesn't, it opens that page in System Settings. Do both, quit the terminal with ⌘Q, reopen it and re-run.
+2. **Nix:** installs it. On a new Mac with FileVault on, it may ask you to reboot and re-run.
+3. **Config:** clones the repo to `~/dotfiles` and runs `bin/nixup-with-secrets`. On a fresh machine that is a bootstrap build with placeholder secrets; see [Finishing setup](#finishing-setup).
 
 #### Method 2: Manual Installation
 
