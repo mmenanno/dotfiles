@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Copy files that nothing else covers (app data, game saves, history) from
+# the old Mac over SSH. See `nx migrate --help`.
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+export USE_ICON_STYLE=true
+
+BASELINE_DIR="${BASELINE_DIR:-$HOME/.local/share/nix-managed-baselines}"
+
+# path (relative to $HOME) | process that must be closed on both Macs |
+# comma-separated rsync excludes (relative to the path)
+# shellcheck disable=SC2034  # read by main and the tests
+MIGRATE_ENTRIES=(
+    "Library/Application Support/Paradox Interactive||"
+    "Library/Containers/com.pocketpair.palworld.mac|Palworld|"
+    "Library/RenPy||"
+    "Library/Application Support/Transmit|Transmit|Logs"
+    "Library/Application Support/com.charliemonroe.Downie-4|Downie|"
+    "Library/Containers/com.charliemonroe.Downie-4|Downie|"
+    "Library/Application Support/com.conductor.app|Conductor|agent-binaries,bin,cache.db*"
+    "conductor|Conductor|"
+    ".claude||"
+    ".claude.json||"
+    ".zsh_history||"
+    ".ssh/known_hosts||"
+    ".local/share/cyberdrop-dl||"
+    ".local/state/cyberdrop-dl||"
+    ".config/openlogi||"
+    ".local/share/openlogi||"
+    ".local/state/openlogi||"
+    ".config/scriptbin/cookies.txt||"
+)
+
+# Print one field (path, process or excludes) of a MIGRATE_ENTRIES item
+entry_field() {
+    local entry="$1" field="$2" path process excludes
+    IFS='|' read -r path process excludes <<< "$entry"
+    case "$field" in
+        path) echo "$path" ;;
+        process) echo "$process" ;;
+        excludes) echo "$excludes" ;;
+        *) log_error "entry_field: unknown field '$field'"; return 1 ;;
+    esac
+}
+
+# Print, relative to $HOME/<relpath>, every file under it that Nix manages on
+# this Mac: Home Manager symlinks into /nix/store, and mutable files (each has
+# a baseline under $BASELINE_DIR). These become rsync excludes
+nix_managed_excludes() {
+    local relpath="$1" root="$HOME/$1" f target
+    {
+        if [[ -d "$root" ]]; then
+            while IFS= read -r -d '' f; do
+                target="$(readlink "$f")"
+                [[ "$target" == /nix/store/* ]] && echo "${f#"$root"/}"
+            done < <(find "$root" -type l -print0 2>/dev/null)
+        fi
+        if [[ -d "$BASELINE_DIR/$relpath" ]]; then
+            while IFS= read -r -d '' f; do
+                echo "${f#"$BASELINE_DIR/$relpath"/}"
+            done < <(find "$BASELINE_DIR/$relpath" -type f -print0)
+        fi
+    } | sort -u
+}
+
+# Print each folder path in a Syncthing config.xml, with ~ expanded
+syncthing_folder_paths() {
+    # A literal "~/" prefix, which Syncthing writes for home-relative folders
+    # shellcheck disable=SC2088
+    local config="$1" path tilde='~/'
+    xmllint --xpath '//folder/@path' "$config" 2>/dev/null \
+        | grep -o 'path="[^"]*"' \
+        | sed -e 's/^path="//' -e 's/"$//' \
+        | while IFS= read -r path; do
+            [[ "$path" == "$tilde"* ]] && path="$HOME/${path#"$tilde"}"
+            echo "$path"
+        done
+}
+
+# Return 0 if $HOME/<relpath> is one of the given folders or inside one
+inside_synced_folder() {
+    local abs="$HOME/$1" folder
+    shift
+    for folder in "$@"; do
+        folder="${folder%/}"
+        [[ "$abs" == "$folder" || "$abs" == "$folder"/* ]] && return 0
+    done
+    return 1
+}
+
+main() {
+    log_error "not implemented yet"
+    exit 1
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
