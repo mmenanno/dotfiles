@@ -31,3 +31,12 @@ setup() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"2 folders still receive-only"*"nx syncthing promote"* ]]
 }
+
+@test "run_syncthing_setup succeeds when setup skipped before creating its state folder" {
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$BIN/syncthing-setup"
+    chmod +x "$BIN/syncthing-setup"
+    # Under the script's own set -euo pipefail, which bats' `run` doesn't apply
+    run bash -c 'set -euo pipefail; source "$1" >/dev/null; run_syncthing_setup macbook_setup; echo "nx up continued"' _ "$BIN/nixup-with-secrets"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"nx up continued"* ]]
+}

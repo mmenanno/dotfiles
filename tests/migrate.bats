@@ -103,6 +103,7 @@ setup_remote() {
             echo "ls: $STUB_DENY: Operation not permitted" >&2
             return 1
         fi
+        [[ -n "${STUB_NOISE:-}" ]] && echo "$STUB_NOISE"
         (cd "$OLD_HOME" && HOME="$OLD_HOME" bash -c "$cmd")
     }
     rsync() {
@@ -230,7 +231,7 @@ XML
     HOST=oldmac
     mkdir -p "$OLD_HOME/app" "$HOME/app"
     touch "$OLD_HOME/app/conductor.db" "$HOME/app/conductor.db" "$HOME/app/conductor.db-wal" "$HOME/app/other.db-shm"
-    run sqlite_orphans app
+    run sqlite_orphans app ""
     [ "$status" -eq 0 ]
     [ "$output" = "$HOME/app/conductor.db-wal" ]
 }
@@ -279,4 +280,49 @@ SH
     run main --dry-run
     [ "$status" -ne 0 ]
     [[ "$output" == *"nx migrate <host>"* ]]
+}
+
+# --- Final review fixes ---------------------------------------------------
+
+@test "the shared connection outlives a long confirm prompt, and rsync's ssh is bounded" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    run main oldmac --dry-run
+    grep -q 'ControlPersist=yes' "$CALLS"
+    grep -q '^rsync.*\[ssh [^]]*ServerAliveInterval=15[^]]*\]' "$CALLS"
+}
+
+@test "sqlite_orphans leaves alone a database the entry excludes" {
+    setup_remote
+    HOST=oldmac
+    mkdir -p "$OLD_HOME/app" "$HOME/app"
+    touch "$OLD_HOME/app/cache.db" "$HOME/app/cache.db" "$HOME/app/cache.db-wal"
+    run sqlite_orphans app "agent-binaries,cache.db*"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "files vanishing during a copy (rsync 24) warn but don't stop later entries" {
+    setup_remote
+    mkdir -p "$OLD_HOME/.claude" "$OLD_HOME/Library/RenPy"
+    only_entry ".claude||" "Library/RenPy||"
+    STUB_RSYNC_EXIT=24
+    export STUB_RSYNC_EXIT
+    run main oldmac --yes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"changed while"* ]]
+    [ "$(grep -v -- '--dry-run' "$CALLS" | grep -c '^rsync')" -eq 2 ]
+}
+
+@test "unexpected output from the old Mac's shell is reported, not guessed at" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    STUB_NOISE="Welcome to zsh"
+    export STUB_NOISE
+    run main oldmac --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Library/RenPy"*"unexpected"* ]]
+    refute grep -q '^rsync' "$CALLS"
 }

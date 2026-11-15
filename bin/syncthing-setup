@@ -94,7 +94,7 @@ cmd_apply() {
     local unraid
     unraid="$(unraid_id)"
     if [[ -z "$unraid" ]]; then
-        log_info "Syncthing: skipped; add syncthing_device_id to Nix/Server in 1Password (NIX_SYNCTHING_UNRAID_ID)"
+        log_info "Syncthing: skipped; add unraid_device_id to the Nix/Syncthing note in 1Password (NIX_SYNCTHING_UNRAID_ID)"
         return 0
     fi
 
@@ -131,16 +131,29 @@ cmd_apply() {
             continue
         fi
 
+        # The marker and folder come first, so a failure below can't leave a
+        # folder that's never promotable or that Syncthing can't write ignores to
+        touch "$STATE_DIR/$id.pending"
+        mkdir -p "$(expand_home "$path")"
+
+        # Created paused, so nothing syncs before its ignore patterns exist
         local folder
         folder="$(jq -c \
             --arg id "$id" --arg label "$label" --arg path "$path" --arg dev "$unraid" \
             --argjson extra "$(spec '.folderDefaults')" \
             '. + $extra + {id: $id, label: $label, path: $path, type: "receiveonly",
-                devices: [{deviceID: $dev}]}' <<< "$defaults")"
-        st_api PUT "/rest/config/folders/$id" "$folder" >/dev/null
-        st_api POST "/rest/db/ignores?folder=$id" \
-            "$(spec ".folders[$i] | {ignore: .ignores}" | jq -c .)" >/dev/null
-        touch "$STATE_DIR/$id.pending"
+                devices: [{deviceID: $dev}], paused: true}' <<< "$defaults")"
+        if ! st_api PUT "/rest/config/folders/$id" "$folder" >/dev/null; then
+            rm -f "$STATE_DIR/$id.pending"
+            log_warning "Syncthing: couldn't add $label; nx up will try again"
+            continue
+        fi
+        if ! st_api POST "/rest/db/ignores?folder=$id" \
+            "$(jq -c ".folders[$i] | {ignore: .ignores}" "$SYNCTHING_SPEC")" >/dev/null; then
+            log_warning "Syncthing: added $label but couldn't set its ignore patterns, so it's left paused. Add them in Syncthing (Edit Folder → Ignore Patterns): $(spec ".folders[$i].ignores | join(\", \")"), then resume it."
+            continue
+        fi
+        st_api PATCH "/rest/config/folders/$id" '{"paused":false}' >/dev/null
         log_success "Syncthing: added $label (receive-only until you run nx syncthing promote)"
     done
 }
