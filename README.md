@@ -34,7 +34,7 @@ git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
 #### Finishing setup
 
 1. Open a new terminal
-2. Sign into the 1Password app and enable **Settings → Developer → Integrate with 1Password CLI**
+2. Sign into the 1Password app and, in **Settings → Developer**, turn on **Integrate with 1Password CLI** and **Use the SSH agent** (after this step git reaches GitHub over SSH through 1Password)
 3. Run `nx up` to rebuild with your secrets from the `Nix` vault (see `BOOTSTRAP.md` for the items it expects)
 
 ### Moving from an old Mac

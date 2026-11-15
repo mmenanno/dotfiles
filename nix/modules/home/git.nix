@@ -90,8 +90,10 @@ in
       # Git LFS locking support
       lfs.locksverify = true;
 
-      # URL rewrites for faster cloning (use SSH instead of HTTPS)
-      url = {
+      # URL rewrites for faster cloning (use SSH instead of HTTPS). Not during
+      # bootstrap: the SSH keys are placeholders then, and the rewrite would
+      # break every tool that clones a public repo (mise's ruby-build, zinit)
+      url = if dotlib.isBootstrap then { } else {
         "git@github.com:" = {
           insteadOf = "https://github.com/";
         };
