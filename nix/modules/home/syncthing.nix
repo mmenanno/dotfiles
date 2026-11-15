@@ -14,7 +14,7 @@ let
     "**/tmp"
     "**/__pycache__"
     "**/*_env"
-    "**/.venv"
+    "**/.venv*"
     "**/node_modules"
   ];
 
