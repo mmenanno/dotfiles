@@ -31,6 +31,8 @@ _nx() {
         'pr:Create PR from current changes'
         'migrate:Copy app data, saves and history from an old Mac'
         'mg:Migrate (alias)'
+        'syncthing:Syncthing folder status and promotion'
+        'st:Syncthing (alias)'
         'help:Show help message'
         'h:Help (alias)'
     )
@@ -98,6 +100,20 @@ _nx() {
                 '(-n --dry-run)'{-n,--dry-run}'[Show what would run without changing anything]' \
                 '(-q --quiet -v --verbose)'{-q,--quiet}'[Suppress informational output]' \
                 '(-q --quiet -v --verbose)'{-v,--verbose}'[Show extra detail]'
+            ;;
+        syncthing|st)
+            if (( CURRENT == 2 )); then
+                local -a st_subcommands=(
+                    'status:Show each folder as receive-only or send-only, with progress'
+                    'promote:Switch fully synced folders to send-only'
+                    'apply:Add the Unraid device and any missing folders'
+                )
+                _describe 'subcommand' st_subcommands
+            elif [[ "$words[2]" == promote ]]; then
+                _arguments -S \
+                    "--revert[Revert this Mac's local changes first]" \
+                    "(-y --yes)"{-y,--yes}"[Don't ask before promoting]"
+            fi
             ;;
         migrate|mg)
             _arguments -S \
