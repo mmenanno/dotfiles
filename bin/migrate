@@ -268,6 +268,9 @@ set_rsync_base() {
     # A container's metadata belongs to the Mac that created the container
     RSYNC_BASE=(-aH "${xattrs[@]}" --partial --mkpath
         --exclude=.com.apple.containermanagerd.metadata.plist
+        # With -X, rsync applies a read-only folder's attributes before writing
+        # the files inside it, then can't create them; keep folders writable
+        --chmod=Du+w
         -e "ssh -o ControlPath=$CONTROL_PATH -o ControlMaster=no ${SSH_BOUNDS[*]}"
         "--rsync-path=$rsync_path")
 }
@@ -507,7 +510,7 @@ main() {
         stats="$(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --stats -h "${args[@]}")" || code=$?
         case "$code" in
             0|24) ;;
-            23) log_warning "Some files or attributes in $relpath couldn't be read on the old Mac; the rest will copy" ;;
+            23) log_warning "Some files or attributes in $relpath couldn't be copied; the rest will copy" ;;
             *)
                 log_error "Couldn't preview $relpath (rsync exit $code). Check the connection to $HOST and re-run."
                 return 1
@@ -564,7 +567,7 @@ main() {
         rsync "${RSYNC_BASE[@]}" --info=progress2 "${args[@]}" || code=$?
         case "$code" in
             0) ;;
-            23) log_warning "Some files or attributes in $relpath couldn't be read on the old Mac; the rest copied" ;;
+            23) log_warning "Some files or attributes in $relpath couldn't be copied; the rest copied" ;;
             24) log_warning "Some files in $relpath changed while copying (an app on the old Mac may be writing); the rest copied" ;;
             *)
                 log_error "Copying $relpath failed (rsync exit $code). Re-run nx migrate to pick up where it stopped."

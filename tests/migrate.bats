@@ -377,7 +377,7 @@ SH
     export -f rsync
     run main oldmac --yes
     [ "$status" -eq 0 ]
-    [[ "$output" == *"couldn't be read"* ]]
+    [[ "$output" == *"couldn't be copied"* ]]
     [[ "$output" != *"check the connection"* ]]
     [ "$(grep -v -- '--dry-run' "$CALLS" | grep -c '^rsync')" -eq 2 ]
 }
@@ -452,4 +452,13 @@ SH
         e="$(printf '%s\n' "${MIGRATE_ENTRIES[@]}" | grep "^$p|")"
         [[ "$(entry_field "$e" excludes)" == *"*.lock"* ]]
     done
+}
+
+@test "copied folders stay writable, so read-only folders still get their files" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    grep -qF '[--chmod=Du+w]' "$CALLS"
 }
