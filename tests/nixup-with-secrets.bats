@@ -56,3 +56,12 @@ setup() {
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+@test "load_secrets stops with integration instructions when op has no account" {
+    # shellcheck disable=SC2329  # called by load_secrets
+    op() { [[ "$1 $2" == "account list" ]] && return 0; return 1; }
+    run load_secrets
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Integrate with 1Password CLI"* ]]
+    [[ "$output" != *"op signin"* ]]
+}
