@@ -81,6 +81,19 @@ Create these items in the `Nix` vault before running `nx up`:
    nx up  # Now loads your secrets from 1Password
    ```
 
+## Restored Files (Document items)
+
+`nx up` restores these files from Document items in the `Nix` vault (`SECRET_DOCUMENTS` in `bin/nixup-with-secrets`). 1Password is the source of truth: if a local file differs, it is moved to `<path>.local-<timestamp>` and replaced.
+
+| Document | Restored to |
+|----------|-------------|
+| `sops age key` | `~/.config/sops/age/keys.txt` |
+| `atuin key` | `~/.local/share/atuin/key` |
+| `mycelium env keys` | `~/.config/mycelium/.env.keys` |
+| `reddit matrix token` | `~/.reddit_matrix_token` |
+
+To add one, upload the file with `op document create <file> --vault Nix --title "<title>"` and add the title and path to `SECRET_DOCUMENTS`.
+
 ## Environment Variables
 
 The system uses these environment variables loaded from 1Password:
