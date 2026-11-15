@@ -37,6 +37,23 @@ git clone https://github.com/mmenanno/dotfiles.git ~/dotfiles
 2. Sign into the 1Password app and enable **Settings → Developer → Integrate with 1Password CLI**
 3. Run `nx up` to rebuild with your secrets from the `Nix` vault (see `BOOTSTRAP.md` for the items it expects)
 
+### Moving from an old Mac
+
+Once the new Mac is set up, two commands bring over what Nix and 1Password don't cover.
+
+**Files (`nx migrate`):** app data, game saves, Claude Code and Conductor history, and a few dotfiles. The list is `MIGRATE_ENTRIES` in `bin/migrate`.
+
+1. On the old Mac, open **System Settings → General → Sharing**, turn on **Remote Login**, and in its (i) panel tick **Allow full disk access for remote users**.
+2. Quit Conductor, Transmit, Downie and Palworld on both Macs.
+3. Run `nx migrate` to pick the old Mac from your tailnet, or `nx migrate <tailscale-name>`. Add `--dry-run` to only check and preview. It asks for the old Mac's password once, checks everything before copying, shows a preview (including files that are newer on this Mac), and asks before copying. Re-running is safe.
+
+**Syncthing (`nx syncthing`):** `nx up` adds the Unraid device and your folders (declared in `nix/modules/home/syncthing.nix`) as receive-only, so they download without changing anything on Unraid.
+
+1. In Unraid's Syncthing UI, accept the new device and give it a name, then accept each "wants to share folder" prompt.
+2. `nx syncthing` shows each folder's mode and progress.
+3. When this Mac becomes your main one, pause Syncthing on the old Mac and run `nx syncthing promote` to switch fully synced folders to send-only.
+4. A folder with files that changed on this Mac before promotion is held back. Click **Revert Local Changes** for it in Syncthing, or run `nx syncthing promote --revert`.
+
 ### Work Machine
 
 Same as Method 2 above. The bootstrap build always uses the `macbook_setup` configuration; after it, add a `hostname` field to the `Nix/Work` 1Password item matching `scutil --get LocalHostName`, then run `nx up`.
@@ -137,6 +154,8 @@ Modules receive `isWorkMachine ? false`. Use conditionals for machine-specific b
 - `nx diff` or `nx d` - Show what would be built (dry-run)
 - `nx clean` or `nx cl` - Clean old generations and optimise the store
 - `nx managed` or `nx m` - Status of mutable config files
+- `nx migrate` or `nx mg` - Copy app data, saves and history from an old Mac
+- `nx syncthing` or `nx st` - Syncthing folder status (`promote` to make synced folders send-only)
 - `nx help` - Show all available commands
 - `mise list` - Show installed development tools
 

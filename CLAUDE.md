@@ -13,6 +13,8 @@ nx lint     # Run statix + deadnix code quality checks
 nx build    # Build without applying
 nx clean    # Clean old generations (runs `clean --only nix`)
 nx managed  # Show mutable config file status (alias: nx m)
+nx migrate  # Copy app data/saves/history from an old Mac over SSH (alias: nx mg)
+nx syncthing # Syncthing folder status; `promote` makes synced folders send-only (alias: nx st)
 ```
 
 ## Multi-Machine Support
@@ -46,7 +48,7 @@ dotfiles/
 `mutable-files.nix` deploys writable copies instead of read-only HM symlinks for files that apps need to modify (VS Code settings, Claude settings). Uses `home.file.*.enable = lib.mkForce false` to suppress symlinks while keeping `.source` evaluable, then an activation script copies with conflict detection. Baselines stored at `~/.local/share/nix-managed-baselines/`.
 
 - `nx m` — status, `nx m d <name>` — diff in VS Code, `nx m r <name>` — revert to Nix version, `nx m a <name>` — apply app changes into Nix module
-- Shorthands: `claude`, `op`, `vscode`, `vsmcp`, `all`, plus `gemini` (personal) / `npmrc` (work)
+- Shorthands: `claude`, `op`, `vscode`, `vsmcp`, `zellij`, `all`, plus `gemini` (personal) / `npmrc` (work)
 - Zsh completions in `completions/_nx`
 
 ## Key Modules
@@ -58,6 +60,8 @@ dotfiles/
 - `mutable-files.nix` - Writable copies of app config files with conflict detection
 - `modern-cli-tools.nix` - bat, eza, ripgrep, fd, atuin, etc.
 - `ide-extensions.nix` - VS Code extension list; work-only extensions go in `workOnlyExtensions` (gated by `isWorkMachine`)
+- `syncthing.nix` - Personal Mac's Syncthing folders, written to `~/.config/dotfiles/syncthing.json`; `bin/syncthing-setup` applies them through Syncthing's API after `nx up`
+- `bin/migrate` - `nx migrate`'s copy list (`MIGRATE_ENTRIES`) and checks. Tests: `nix shell nixpkgs#bats -c bats tests/`
 
 ## Adding a New Module
 

@@ -75,6 +75,10 @@ Create these items in the `Nix` vault before running `nx up`:
 - `main_server_keyfile`: Main server SSH keyfile name
 - `nvm_server_keyfile`: NVM server SSH keyfile name
 
+### Nix/Syncthing (Secure Note, personal Mac)
+
+- `unraid_device_id`: The Unraid server's Syncthing device ID. Without it, `nx up` skips the Syncthing setup.
+
 1. **Apply your configuration**
 
    ```bash
@@ -121,6 +125,7 @@ The system uses these environment variables loaded from 1Password:
 - `NIX_SSH_MAIN_SERVER_KEY`: Your main server SSH public key
 - `NIX_SSH_NVM_SERVER_KEY`: Your NVM server SSH public key
 - `NIX_FORGEJO_DOMAIN`: Your Forgejo instance URL
+- `NIX_SYNCTHING_UNRAID_ID`: The Unraid server's Syncthing device ID
 
 ## Bootstrap Mode Override
 
