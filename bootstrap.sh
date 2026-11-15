@@ -153,13 +153,20 @@ needs_app_management() {
 # Batch the steps that need the user to act outside the script, so there's
 # only one stop-and-re-run on a fresh machine
 check_user_actions() {
-    local rerun_needed=false
-    start_xcode_tools_install && rerun_needed=true
-    needs_app_management && rerun_needed=true
+    local clt_started=false restart_needed=false
+    start_xcode_tools_install && clt_started=true
+    needs_app_management && restart_needed=true
 
-    if [[ "$rerun_needed" == true ]]; then
+    # Only App Management needs the terminal restarted; the tools just need
+    # to finish installing
+    if [[ "$restart_needed" == true ]]; then
         echo
         log_info "When that's done, quit $(terminal_app_name) with ⌘Q, reopen it, and re-run this script."
+        exit 0
+    fi
+    if [[ "$clt_started" == true ]]; then
+        echo
+        log_info "Once the Command Line Tools finish installing, re-run this script."
         exit 0
     fi
 }
@@ -364,5 +371,9 @@ EOF
     show_completion_message
 }
 
-# Run main function
-main "$@"
+# Run main function. Tests set BOOTSTRAP_SOURCE_ONLY to load the functions
+# without running anything (BASH_SOURCE can't tell: the script usually runs
+# from `bash -c "$(curl ...)"`, which has no source file)
+if [[ -z "${BOOTSTRAP_SOURCE_ONLY:-}" ]]; then
+    main "$@"
+fi
