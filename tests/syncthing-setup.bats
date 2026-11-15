@@ -168,3 +168,27 @@ mark_pending() {
     mkdir -p "$HOME/.local/state/syncthing-setup"
     touch "$HOME/.local/state/syncthing-setup/$1.pending"
 }
+
+@test "the missing-ID message points at the Nix/Syncthing 1Password item" {
+    write_spec ""
+    run cmd_apply
+    [[ "$output" == *"Nix/Syncthing"* && "$output" == *"unraid_device_id"* ]]
+}
+
+@test "apply creates the folder paused, keeps its marker and folder even if ignores fail, then unpauses" {
+    st_api() {
+        local method="$1" path="$2" body="${3:-}" key
+        printf '%s %s %s\n' "$method" "$path" "$body" >> "$CALLS"
+        [[ "$method $path" == "POST /rest/db/ignores?folder=michael-macbook-tasks" ]] && return 22
+        key="$method${path//[\/?=&]/_}"
+        if [[ -f "$FIX/$key" ]]; then cat "$FIX/$key"; else echo '{}'; fi
+    }
+    run cmd_apply
+    [ "$status" -eq 0 ]
+    [ -d "$HOME/tasks" ]
+    [ -f "$HOME/.local/state/syncthing-setup/michael-macbook-tasks.pending" ]
+    grep -q '^PUT /rest/config/folders/michael-macbook-tasks .*"paused":true' "$CALLS"
+    [[ "$output" == *"tasks"*"ignore"* ]]
+    grep -qF 'PATCH /rest/config/folders/michael-macbook-dev {"paused":false}' "$CALLS"
+    refute grep -qF 'PATCH /rest/config/folders/michael-macbook-tasks {"paused":false}' "$CALLS"
+}

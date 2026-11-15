@@ -98,10 +98,13 @@ HOST=""
 CONTROL_PATH="${CONTROL_PATH:-/tmp/nx-migrate-$$}"
 REMOTE_RSYNC=/run/current-system/sw/bin/rsync
 
+# ServerAlive bounds a dead connection, since nothing else here times out
+SSH_BOUNDS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
 SSH_OPTS=(
-    -o ControlMaster=auto -o "ControlPath=$CONTROL_PATH" -o ControlPersist=60
-    # ServerAlive bounds a dead connection, since nothing else here times out
-    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4
+    # Persist until the EXIT trap closes it: the confirm prompt can sit idle
+    -o ControlMaster=auto -o "ControlPath=$CONTROL_PATH" -o ControlPersist=yes
+    "${SSH_BOUNDS[@]}"
 )
 
 # Run a command on the old Mac over the shared connection. Each argument is
@@ -252,7 +255,7 @@ set_rsync_base() {
         xattrs=()
     fi
     RSYNC_BASE=(-aH "${xattrs[@]}" --partial --mkpath
-        -e "ssh -o ControlPath=$CONTROL_PATH -o ControlMaster=no"
+        -e "ssh -o ControlPath=$CONTROL_PATH -o ControlMaster=no ${SSH_BOUNDS[*]}"
         "--rsync-path=$rsync_path")
 }
 
@@ -291,9 +294,13 @@ newer_on_destination() {
 }
 
 # Print local SQLite -wal/-shm files that would end up next to a database
-# copied from the old Mac without a matching file from there
+# copied from the old Mac without a matching file from there. Databases the
+# entry excludes aren't copied, so their side files stay
+# Usage: sqlite_orphans <relpath> <comma-separated excludes>
 sqlite_orphans() {
-    local relpath="$1" remote_list f db
+    local relpath="$1" excludes="${2:-}" remote_list f db pattern skip
+    local -a patterns=()
+    IFS=',' read -r -a patterns <<< "$excludes"
     [[ -d "$HOME/$relpath" ]] || return 0
     # shellcheck disable=SC2016  # expanded by the remote shell
     remote_list="$(remote sh -c 'cd "$1" && find . -name "*.db" -o -name "*.db-wal" -o -name "*.db-shm"' _ "$relpath" 2>/dev/null || true)"
@@ -301,6 +308,12 @@ sqlite_orphans() {
         f="./${f#"$HOME/$relpath"/}"
         db="${f%-wal}"
         db="${db%-shm}"
+        skip=false
+        for pattern in "${patterns[@]}"; do
+            # shellcheck disable=SC2053  # the pattern is a glob on purpose
+            [[ -n "$pattern" && ( "${db#./}" == $pattern || "${db#./}" == $pattern/* ) ]] && skip=true
+        done
+        [[ "$skip" == true ]] && continue
         if grep -qxF "$db" <<< "$remote_list" && ! grep -qxF "$f" <<< "$remote_list"; then
             echo "$HOME/$relpath/${f#./}"
         fi
@@ -394,6 +407,10 @@ main() {
             continue
         fi
         if kind="$(remote_kind "$relpath" 2>"$errfile")"; then
+            if [[ "$kind" != dir && "$kind" != file ]]; then
+                denied+=("$relpath: unexpected output from the old Mac's shell: ${kind//$'\n'/ }")
+                continue
+            fi
             ready+=("$entry")
             kinds+=("$kind")
         elif [[ "$(remote_read_problem "$(cat "$errfile")")" == missing ]]; then
@@ -404,9 +421,14 @@ main() {
     done
     rm -f "$errfile"
     if (( ${#denied[@]} )); then
-        log_error "The old Mac wouldn't let SSH read:"
+        log_error "Couldn't read these on the old Mac:"
         printf '    %s\n' "${denied[@]}" >&2
-        log_info "On the old Mac: System Settings → General → Sharing → Remote Login (i) → tick \"Allow full disk access for remote users\", then re-run."
+        if [[ "${denied[*]}" == *"Operation not permitted"* ]]; then
+            log_info "On the old Mac: System Settings → General → Sharing → Remote Login (i) → tick \"Allow full disk access for remote users\", then re-run."
+        fi
+        if [[ "${denied[*]}" == *"unexpected output"* ]]; then
+            log_info "Something in the old Mac's shell startup prints output for non-interactive SSH sessions; make it quiet, then re-run."
+        fi
         return 1
     fi
 
@@ -479,12 +501,18 @@ main() {
         if [[ "${kinds[$i]}" == dir ]]; then
             while IFS= read -r orphan; do
                 rm -f "$orphan"
-            done < <(sqlite_orphans "$relpath")
+            done < <(sqlite_orphans "$relpath" "$(entry_field "$entry" excludes)")
         fi
-        if ! rsync "${RSYNC_BASE[@]}" --info=progress2 "${args[@]}"; then
-            log_error "Copying $relpath failed. Re-run nx migrate to pick up where it stopped."
-            return 1
-        fi
+        local code=0
+        rsync "${RSYNC_BASE[@]}" --info=progress2 "${args[@]}" || code=$?
+        case "$code" in
+            0) ;;
+            24) log_warning "Some files in $relpath changed while copying (an app on the old Mac may be writing); the rest copied" ;;
+            *)
+                log_error "Copying $relpath failed (rsync exit $code). Re-run nx migrate to pick up where it stopped."
+                return 1
+                ;;
+        esac
         [[ "$relpath" == Library/Preferences* ]] && prefs=true
     done
 
