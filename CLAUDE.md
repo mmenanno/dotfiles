@@ -61,6 +61,7 @@ dotfiles/
 - `modern-cli-tools.nix` - bat, eza, ripgrep, fd, atuin, etc.
 - `ide-extensions.nix` - VS Code extension list; work-only extensions go in `workOnlyExtensions` (gated by `isWorkMachine`)
 - `syncthing.nix` - Personal Mac's Syncthing folders, written to `~/.config/dotfiles/syncthing.json`; `bin/syncthing-setup` applies them through Syncthing's API after `nx up`
+- `bin/renpy-sdk` - Installs the Ren'Py SDK `ren` uses into `~/Applications/renpy-sdk` at a pinned version and SHA-256 (Homebrew disabled the `renpy` cask); `nx up` runs it on the personal Mac
 - `bin/migrate` - `nx migrate`'s copy list (`MIGRATE_ENTRIES`) and checks. Tests: `nix shell nixpkgs#bats -c bats tests/`
 
 ## Adding a New Module
@@ -90,6 +91,7 @@ darwin-rebuild --rollback                 # Undo last change
 - **Bootstrap mode**: `NIX_BOOTSTRAP_MODE=1` uses placeholder values; check `dotlib.getEnvOrFallback`
 - **Tokens never go through Nix eval**: anything passed via `getEnvOrFallback` ends up in the world-readable `/nix/store`. `nixup-with-secrets` writes tokens (`SECRET_FILES`) to `~/.local/state/nix-secrets/<name>` (0600); modules reference the path with `secretFile "<name>"` (from `mcp-shared.nix`) and read it at runtime (`.zshenv` export, wrapper script, activation)
 - **System vs Home**: System = nix-darwin (OS-level), Home = Home Manager (user-level)
+- **Removing a cask can zap its data**: `homebrew.onActivation.cleanup = "zap"`, so a cask dropped from the list is zapped on the next `nx up`, including its `zap trash` paths (e.g. `renpy` lists `~/Library/RenPy`, the game saves). Run `brew uninstall --cask <name>` first on machines that have it
 - **Quote dotted defaults domains**: in `targets.darwin.defaults` / `CustomUserPreferences`, write `"com.apple.finder" = { … }`. Unquoted `com.apple.finder` is a nested attrset and silently lands in a bogus `com` domain
 - **zsh init order**: zinit loads at `lib.mkOrder 550`, `completionInit` (570) adds `completions/` to fpath and runs the cached `compinit`, and the main `initContent` (1000) starts with `zinit cdreplay`. Don't add another `compinit`
 - **Global configs are Nix-managed**: `~/.claude/CLAUDE.md` is symlink - edit `ai-globals.nix`

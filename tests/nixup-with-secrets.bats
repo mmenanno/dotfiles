@@ -40,3 +40,19 @@ setup() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"nx up continued"* ]]
 }
+
+@test "run_renpy_sdk_install installs on the personal Mac and never fails nx up" {
+    printf '#!/usr/bin/env bash\necho "renpy-sdk $*"\nexit 1\n' > "$BIN/renpy-sdk"
+    chmod +x "$BIN/renpy-sdk"
+    run bash -c 'set -euo pipefail; source "$1" >/dev/null; run_renpy_sdk_install macbook_setup; echo "nx up continued"' _ "$BIN/nixup-with-secrets"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"renpy-sdk install"*"nx up continued"* ]]
+}
+
+@test "run_renpy_sdk_install does nothing on the work machine" {
+    printf '#!/usr/bin/env bash\necho "renpy-sdk $*"\n' > "$BIN/renpy-sdk"
+    chmod +x "$BIN/renpy-sdk"
+    run run_renpy_sdk_install work_macbook
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
