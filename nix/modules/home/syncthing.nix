@@ -9,8 +9,11 @@ let
   unraidDeviceId = dotlib.getEnvOrFallback "NIX_SYNCTHING_UNRAID_ID" "" "";
 
   # Caches and environments that rebuild themselves. Thousands of tiny files
-  # make a new Mac's first sync crawl, and none of them are worth copying
-  regenerable = [
+  # make a new Mac's first sync crawl, and none of them are worth copying.
+  # (?d) lets Syncthing delete them when they're all that's left in a folder
+  # another device deleted; otherwise that folder can never be removed and the
+  # whole Syncthing folder stays out of sync
+  regenerable = map (pattern: "(?d)${pattern}") [
     "**/tmp"
     "**/__pycache__"
     "**/*_env"
