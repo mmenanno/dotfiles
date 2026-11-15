@@ -183,7 +183,7 @@ validate_renpy_sdk() {
     if [[ ! -d "$RENPY_SDK" ]]; then
         log_error "Ren'Py SDK not found"
         log_error "Expected location: $RENPY_SDK"
-        log_error "Install via Homebrew: brew install --cask renpy"
+        log_error "Install it with: renpy-sdk install (nx up also installs it)"
         return 1
     fi
 

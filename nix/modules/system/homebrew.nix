@@ -84,7 +84,6 @@ let
     "protonvpn"
     "proxyman"
     "quicklook-video"
-    "renpy"
     "scummvm-app"
     "signal"
     "steam"

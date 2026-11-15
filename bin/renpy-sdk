@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Install the Ren'Py SDK that `ren` uses, at a pinned version. Homebrew
+# disabled its renpy cask (the app isn't notarized), so this replaces it.
+#
+#   renpy-sdk install    download, verify and install (no-op if current)
+#   renpy-sdk status     show what's installed
+#
+# To upgrade: bump RENPY_SDK_VERSION and RENPY_SDK_SHA256 (the SHA-256 of
+# renpy-<version>-sdk.zip from renpy.org).
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+export USE_ICON_STYLE=true
+
+RENPY_SDK_VERSION="${RENPY_SDK_VERSION:-8.5.3}"
+RENPY_SDK_SHA256="${RENPY_SDK_SHA256:-ff57648f9c04f27e381c48af6d8e3ee3cdec296bed4d3831f47f09b0a71b505e}"
+RENPY_SDK_DIR="${RENPY_SDK_DIR:-$HOME/Applications/renpy-sdk}"
+MARKER=".dotfiles-renpy-version"
+
+installed_version() {
+    cat "$RENPY_SDK_DIR/$MARKER" 2>/dev/null || true
+}
+
+download_sdk() {
+    local out="$1"
+    # curl bounds itself, so a stalled download can't hang nx up
+    curl -fsSL --retry 2 --connect-timeout 15 --max-time 900 -o "$out" \
+        "https://www.renpy.org/dl/$RENPY_SDK_VERSION/renpy-$RENPY_SDK_VERSION-sdk.zip"
+}
+
+install_sdk() {
+    local current
+    current="$(installed_version)"
+    if [[ "$current" == "$RENPY_SDK_VERSION" ]]; then
+        log_success "Ren'Py SDK $RENPY_SDK_VERSION is installed"
+        return 0
+    fi
+    if [[ -e "$RENPY_SDK_DIR" && -z "$current" ]]; then
+        log_warning "$RENPY_SDK_DIR exists but this script didn't install it; leaving it alone"
+        return 0
+    fi
+
+    local work status=0
+    work="$(mktemp -d "${TMPDIR:-/tmp}/renpy-sdk.XXXXXX")"
+    install_from "$work" || status=$?
+    rm -rf "$work"
+    return "$status"
+}
+
+# Download, verify and swap in the SDK, using <work> as scratch space
+install_from() {
+    local work="$1"
+    log_info "Downloading Ren'Py SDK $RENPY_SDK_VERSION..."
+    if ! download_sdk "$work/sdk.zip"; then
+        log_error "Couldn't download the Ren'Py SDK"
+        return 1
+    fi
+    if [[ "$(shasum -a 256 "$work/sdk.zip" | cut -d' ' -f1)" != "$RENPY_SDK_SHA256" ]]; then
+        log_error "The Ren'Py SDK download doesn't match its pinned checksum; not installing it"
+        return 1
+    fi
+
+    unzip -q "$work/sdk.zip" -d "$work/unpacked"
+    local sdk="$work/unpacked/renpy-$RENPY_SDK_VERSION-sdk"
+    if [[ ! -d "$sdk/renpy.app" ]]; then
+        log_error "The Ren'Py SDK archive doesn't contain renpy-$RENPY_SDK_VERSION-sdk/renpy.app"
+        return 1
+    fi
+    echo "$RENPY_SDK_VERSION" > "$sdk/$MARKER"
+
+    # Swap in the new SDK; only an SDK this script installed is ever replaced
+    mkdir -p "$(dirname "$RENPY_SDK_DIR")"
+    if [[ -e "$RENPY_SDK_DIR" ]]; then
+        mv "$RENPY_SDK_DIR" "$work/previous"
+    fi
+    mv "$sdk" "$RENPY_SDK_DIR"
+    log_success "Installed Ren'Py SDK $RENPY_SDK_VERSION in $RENPY_SDK_DIR"
+}
+
+main() {
+    case "${1:-status}" in
+        install) install_sdk ;;
+        status)
+            local current
+            current="$(installed_version)"
+            if [[ -n "$current" ]]; then
+                echo "Ren'Py SDK $current in $RENPY_SDK_DIR (pinned: $RENPY_SDK_VERSION)"
+            else
+                echo "Ren'Py SDK not installed by this script (pinned: $RENPY_SDK_VERSION). Run: renpy-sdk install"
+            fi
+            ;;
+        -h|--help|help) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+        *) log_error "Unknown command: $1"; return 1 ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
