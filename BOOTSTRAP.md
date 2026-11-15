@@ -86,7 +86,7 @@ Create these items in the `Nix` vault before running `nx up`:
 `nx up` restores these files from Document items in the `Nix` vault (`SECRET_DOCUMENTS` in `bin/nixup-with-secrets`). 1Password is the source of truth: if a local file differs, it is moved to `<path>.local-<timestamp>` and replaced.
 
 | Document | Restored to |
-|----------|-------------|
+| -------- | ----------- |
 | `sops age key` | `~/.config/sops/age/keys.txt` |
 | `atuin key` | `~/.local/share/atuin/key` |
 | `mycelium env keys` | `~/.config/mycelium/.env.keys` |
