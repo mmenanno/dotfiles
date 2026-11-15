@@ -104,6 +104,11 @@ SSH_BOUNDS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMa
 SSH_OPTS=(
     # Persist until the EXIT trap closes it: the confirm prompt can sit idle
     -o ControlMaster=auto -o "ControlPath=$CONTROL_PATH" -o ControlPersist=yes
+    # ssh.nix limits every host to the 1Password agent's keys
+    # (PreferredAuthentications publickey, IdentitiesOnly). The old Mac doesn't
+    # know those keys, so allow its login password
+    -o "PreferredAuthentications=publickey,keyboard-interactive,password"
+    -o IdentitiesOnly=no
     "${SSH_BOUNDS[@]}"
 )
 

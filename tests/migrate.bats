@@ -331,3 +331,11 @@ SH
     [[ "$output" == *"Library/RenPy"*"unexpected"* ]]
     refute grep -q '^rsync' "$CALLS"
 }
+
+@test "the connection allows a password, overriding a publickey-only SSH config" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    run main oldmac --dry-run
+    grep -q 'PreferredAuthentications=publickey,keyboard-interactive,password' "$CALLS"
+}
