@@ -11,7 +11,7 @@ let
   # Caches and environments that rebuild themselves. Thousands of tiny files
   # make a new Mac's first sync crawl, and none of them are worth copying
   regenerable = [
-    "**/tmp/cache"
+    "**/tmp"
     "**/__pycache__"
     "**/*_env"
     "**/.venv"
