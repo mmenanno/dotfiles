@@ -246,3 +246,37 @@ XML
     [ ! -e "$CONTROL_PATH" ]
     grep -q -- '-O exit' "$CALLS"
 }
+
+# --- Task 3: Tailscale host picker ----------------------------------------
+
+tailscale_fixture() {
+    cat > "$BATS_TEST_TMPDIR/tailscale" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSON'
+{
+  "Self": {"DNSName": "new-mac.tail.ts.net.", "OS": "macOS", "Online": true},
+  "Peer": {
+    "a": {"HostName": "Michael’s M1 MacBook Pro", "DNSName": "macbook-pro-michael.tail.ts.net.", "OS": "macOS", "Online": true},
+    "b": {"HostName": "old", "DNSName": "old-imac.tail.ts.net.", "OS": "macOS", "Online": false},
+    "c": {"HostName": "unraid", "DNSName": "unraid.tail.ts.net.", "OS": "linux", "Online": true}
+  }
+}
+JSON
+SH
+    chmod +x "$BATS_TEST_TMPDIR/tailscale"
+    export TAILSCALE_BIN="$BATS_TEST_TMPDIR/tailscale"
+}
+
+@test "tailscale_macs lists only online macOS peers, by their SSH-able name" {
+    tailscale_fixture
+    run tailscale_macs
+    [ "$status" -eq 0 ]
+    [ "$output" = "macbook-pro-michael" ]
+}
+
+@test "with no host and no Macs online, main says how to pass a host" {
+    export TAILSCALE_BIN="$BATS_TEST_TMPDIR/missing-tailscale"
+    run main --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"nx migrate <host>"* ]]
+}

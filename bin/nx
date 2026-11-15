@@ -35,6 +35,7 @@ COMMANDS:
     clean, cl         Clean old generations and optimise the store (clean --only nix)
     managed, m        Manage mutable config files (status/diff/revert/apply)
     pr                Create PR from current changes (opts: --merge, --title, --body)
+    migrate, mg       Copy app data, saves and history from an old Mac (opts: --dry-run, --yes)
     help, h           Show this help message
 
 EXAMPLES:
@@ -53,6 +54,8 @@ EXAMPLES:
     nx m r claude     # Revert managed file to Nix version
     nx m a claude     # Apply app changes back into Nix module
     nx pr             # Create PR from current changes
+    nx mg             # Pick the old Mac on your tailnet and copy from it
+    nx mg old-mac -n  # Check and preview a copy from old-mac, without copying
 
 EOF
 }
@@ -673,6 +676,10 @@ case "${1:-help}" in
     pr)
         shift || true
         create_pr "$@"
+        ;;
+    migrate|mg)
+        shift || true
+        "$SCRIPT_DIR/migrate" "$@"
         ;;
     help|h|--help|-h)
         show_help

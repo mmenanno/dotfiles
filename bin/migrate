@@ -140,9 +140,9 @@ explain_ssh_failure() {
         resolve|timeout)
             log_error "Can't reach $HOST."
             log_info "Check the name, and that the old Mac is awake and signed into Tailscale."
-            if declare -F tailscale_macs >/dev/null; then
-                macs="$(tailscale_macs 2>/dev/null || true)"
-                [[ -n "$macs" ]] && log_info "Macs online on your tailnet: $(paste -sd ' ' - <<< "$macs")"
+            macs="$(tailscale_macs 2>/dev/null || true)"
+            if [[ -n "$macs" ]]; then
+                log_info "Macs online on your tailnet: $(paste -sd ' ' - <<< "$macs")"
             fi
             ;;
         refused)
@@ -168,6 +168,32 @@ remote_kind() {
     remote sh -c 'if [ -d "$1" ]; then ls "$1" >/dev/null && echo dir;
         elif [ -e "$1" ]; then head -c 1 "$1" >/dev/null && echo file;
         else echo "$1: No such file or directory" >&2; exit 1; fi' _ "$1"
+}
+
+TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+
+# Print the SSH-able name (first label of the MagicDNS name) of each online
+# macOS peer on the tailnet. HostName is the Mac's display name, with spaces
+tailscale_macs() {
+    [[ -x "$TAILSCALE_BIN" ]] || return 0
+    run_with_timeout 10 "$TAILSCALE_BIN" status --json 2>/dev/null \
+        | jq -r '.Peer // {} | .[] | select(.OS == "macOS" and .Online) | .DNSName | split(".")[0]' \
+        | sort
+}
+
+# Let the user pick the old Mac from the tailnet; prints nothing if none
+pick_host() {
+    local macs
+    macs="$(tailscale_macs)"
+    if [[ -z "$macs" ]]; then
+        return 1
+    fi
+    if [[ "$(wc -l <<< "$macs")" -eq 1 ]]; then
+        log_info "Using $macs, the only Mac online on your tailnet."
+        echo "$macs"
+        return 0
+    fi
+    gum_clean choose --header "Which Mac are you copying from?" <<< "$macs"
 }
 
 # ============================================================================
@@ -290,7 +316,7 @@ show_help() {
 nx migrate - copy app data, saves and history from your old Mac
 
 USAGE:
-    nx migrate [host] [--dry-run] [--yes]
+    nx migrate [host] [-n|--dry-run] [-y|--yes]
 
     host       The old Mac's Tailscale name, <name>.local or IP address.
                Leave it out to pick from the Macs on your tailnet.
@@ -327,15 +353,15 @@ main() {
     local dry_run=false assume_yes=false arg
     for arg in "$@"; do
         case "$arg" in
-            --dry-run) dry_run=true ;;
+            --dry-run|-n) dry_run=true ;;
             --yes|-y) assume_yes=true ;;
             -h|--help) show_help; return 0 ;;
             -*) log_error "Unknown option: $arg"; show_help; return 1 ;;
             *) HOST="$arg" ;;
         esac
     done
-    if [[ -z "$HOST" ]] && declare -F pick_host >/dev/null; then
-        HOST="$(pick_host)" || return 1
+    if [[ -z "$HOST" ]]; then
+        HOST="$(pick_host)" || HOST=""
     fi
     if [[ -z "$HOST" ]]; then
         log_error "Which Mac? Run: nx migrate <host>"
