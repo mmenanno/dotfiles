@@ -24,12 +24,14 @@ XML
     fixture GET /rest/system/connections "{\"connections\":{\"$UNRAID\":{\"connected\":true}}}"
     source_script syncthing-setup
     # Answers from $FIX/<METHOD><path with / and ? as _>, and logs each call
+    # shellcheck disable=SC2329  # called by bin/syncthing-setup
     st_api() {
         local method="$1" path="$2" body="${3:-}" key
         printf '%s %s %s\n' "$method" "$path" "$body" >> "$CALLS"
         key="$method${path//[\/?=&]/_}"
         if [[ -f "$FIX/$key" ]]; then cat "$FIX/$key"; else echo '{}'; fi
     }
+    # shellcheck disable=SC2329  # called by st_ready
     open() { echo "open $*" >> "$CALLS"; }
 }
 
@@ -60,6 +62,11 @@ write_spec() {
 
 pending_count() {
     find "$HOME/.local/state/syncthing-setup" -name '*.pending' 2>/dev/null | wc -l | tr -d ' '
+}
+
+mark_pending() {
+    mkdir -p "$HOME/.local/state/syncthing-setup"
+    touch "$HOME/.local/state/syncthing-setup/$1.pending"
 }
 
 folder_status() {
@@ -164,10 +171,6 @@ folder_status() {
     [[ "$output" == *"music"*"send-only"*"100%"* ]]
 }
 
-mark_pending() {
-    mkdir -p "$HOME/.local/state/syncthing-setup"
-    touch "$HOME/.local/state/syncthing-setup/$1.pending"
-}
 
 @test "the missing-ID message points at the Nix/Syncthing 1Password item" {
     write_spec ""

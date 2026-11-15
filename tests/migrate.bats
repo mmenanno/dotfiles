@@ -107,9 +107,11 @@ setup_remote() {
         (cd "$OLD_HOME" && HOME="$OLD_HOME" bash -c "$cmd")
     }
     rsync() {
-        printf 'rsync' >> "$CALLS"
-        printf ' [%s]' "$@" >> "$CALLS"
-        printf '\n' >> "$CALLS"
+        {
+            printf 'rsync'
+            printf ' [%s]' "$@"
+            printf '\n'
+        } >> "$CALLS"
         # Fail only real copies, so a failure lands partway through the run
         [[ " $* " == *" --dry-run "* ]] && return 0
         return "${STUB_RSYNC_EXIT:-0}"
@@ -218,6 +220,7 @@ XML
     setup_remote
     mkdir -p "$OLD_HOME/Library/RenPy"
     only_entry "Library/RenPy|conductor|"
+    # shellcheck disable=SC2329  # called by running_apps
     pgrep() { [[ "$*" == *conductor* ]]; }
     export -f pgrep
     run main oldmac --dry-run
@@ -228,6 +231,7 @@ XML
 
 @test "sqlite_orphans reports a local WAL whose database is being replaced" {
     setup_remote
+    # shellcheck disable=SC2034  # read by bin/migrate's remote()
     HOST=oldmac
     mkdir -p "$OLD_HOME/app" "$HOME/app"
     touch "$OLD_HOME/app/conductor.db" "$HOME/app/conductor.db" "$HOME/app/conductor.db-wal" "$HOME/app/other.db-shm"
@@ -295,6 +299,7 @@ SH
 
 @test "sqlite_orphans leaves alone a database the entry excludes" {
     setup_remote
+    # shellcheck disable=SC2034  # read by bin/migrate's remote()
     HOST=oldmac
     mkdir -p "$OLD_HOME/app" "$HOME/app"
     touch "$OLD_HOME/app/cache.db" "$HOME/app/cache.db" "$HOME/app/cache.db-wal"
