@@ -36,6 +36,7 @@ COMMANDS:
     managed, m        Manage mutable config files (status/diff/revert/apply)
     pr                Create PR from current changes (opts: --merge, --title, --body)
     migrate, mg       Copy app data, saves and history from an old Mac (opts: --dry-run, --yes)
+    syncthing, st     Syncthing folder status (promote: make synced folders send-only)
     help, h           Show this help message
 
 EXAMPLES:
@@ -56,6 +57,8 @@ EXAMPLES:
     nx pr             # Create PR from current changes
     nx mg             # Pick the old Mac on your tailnet and copy from it
     nx mg old-mac -n  # Check and preview a copy from old-mac, without copying
+    nx st             # Syncthing folders: receive-only/send-only and progress
+    nx st promote     # Switch fully synced folders to send-only
 
 EOF
 }
@@ -680,6 +683,10 @@ case "${1:-help}" in
     migrate|mg)
         shift || true
         "$SCRIPT_DIR/migrate" "$@"
+        ;;
+    syncthing|st)
+        shift || true
+        "$SCRIPT_DIR/syncthing-setup" "${@:-status}"
         ;;
     help|h|--help|-h)
         show_help

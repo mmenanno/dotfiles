@@ -44,6 +44,7 @@ in
     ./home/codex.nix
     ./home/gemini.nix
     ./home/torrent-file-icon.nix
+    ./home/syncthing.nix
   ];
 
   # Work machine system modules (excludes personal apps/services)
