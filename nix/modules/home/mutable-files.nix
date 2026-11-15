@@ -21,8 +21,12 @@ let
     { path = ".gemini/settings.json"; fileKey = ".gemini/settings.json"; }
   ]);
 
+  # Interpolating the source (not toString) copies a plain repo file into the
+  # store and records it as a dependency of the activation script. toString
+  # only names its path, which a fresh Mac (or Nix's lazy trees) may never
+  # have copied into the store
   deployCommands = lib.concatMapStringsSep "\n" (file:
-    "deploy_mutable_file ${lib.escapeShellArg file.path} ${lib.escapeShellArg (toString config.home.file.${file.fileKey}.source)}"
+    "deploy_mutable_file ${lib.escapeShellArg file.path} ${lib.escapeShellArg "${config.home.file.${file.fileKey}.source}"}"
   ) mutableFiles;
 in
 {
