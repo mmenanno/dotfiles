@@ -29,6 +29,8 @@ _nx() {
         'managed:Manage mutable config files'
         'm:Managed (alias)'
         'pr:Create PR from current changes'
+        'migrate:Copy app data, saves and history from an old Mac'
+        'mg:Migrate (alias)'
         'help:Show help message'
         'h:Help (alias)'
     )
@@ -96,6 +98,12 @@ _nx() {
                 '(-n --dry-run)'{-n,--dry-run}'[Show what would run without changing anything]' \
                 '(-q --quiet -v --verbose)'{-q,--quiet}'[Suppress informational output]' \
                 '(-q --quiet -v --verbose)'{-v,--verbose}'[Show extra detail]'
+            ;;
+        migrate|mg)
+            _arguments -S \
+                '(-n --dry-run)'{-n,--dry-run}'[Check and preview without copying]' \
+                '(-y --yes)'{-y,--yes}"[Don't ask before copying]" \
+                '1:old Mac (Tailscale name, .local name or IP):_hosts'
             ;;
         pr)
             _arguments -S \
