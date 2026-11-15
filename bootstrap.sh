@@ -297,6 +297,24 @@ enable_flakes() {
     log_success "Nix flakes enabled."
 }
 
+XCODE_DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+
+# Xcode is installed (from the App Store, during the build) but its license
+# isn't accepted yet. Homebrew refuses to run until it is
+xcode_license_pending() {
+    [[ -d "$XCODE_DEVELOPER_DIR" ]] &&
+        ! DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" /usr/bin/xcodebuild -license check >/dev/null 2>&1
+}
+
+# On a fresh Mac the first build installs Xcode, then fails at Homebrew's
+# license check. The next build accepts the license before Homebrew runs
+# (homebrew.nix), so one retry finishes the job
+retry_after_xcode_license() {
+    xcode_license_pending || return 1
+    log_info "Xcode was just installed. Accepting the Xcode license (Homebrew needs it) and building again..."
+    "$DOTFILES_DIR/bin/nixup-with-secrets"
+}
+
 # Function to build and activate configuration
 build_configuration() {
     cd "$DOTFILES_DIR"
@@ -304,7 +322,7 @@ build_configuration() {
     log_info "Building and activating nix-darwin configuration with secrets..."
     log_warning "This may take 15-20 minutes on first run (downloading applications)..."
     
-    if ! "$DOTFILES_DIR/bin/nixup-with-secrets"; then
+    if ! "$DOTFILES_DIR/bin/nixup-with-secrets" && ! retry_after_xcode_license; then
         log_error "Failed to build nix-darwin configuration."
         log_info "You can try running manually: cd $DOTFILES_DIR && ./bin/nixup-with-secrets"
         exit 1

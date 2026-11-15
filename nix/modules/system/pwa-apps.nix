@@ -1,4 +1,4 @@
-{ homeDirectory, pkgs, ... }:
+{ homeDirectory, username, pkgs, ... }:
 
 let
   appsDir = "${homeDirectory}/Applications/";
@@ -7,6 +7,13 @@ in
 {
   system.activationScripts.postActivation.text = ''
     echo -e "\033[0;34mℹ\033[0m Checking and linking PWA apps..."
+
+    # A fresh Mac has no ~/Applications. Activation runs as root, so hand the
+    # new folder to the user
+    if [ ! -d "${appsDir}" ]; then
+      mkdir -p "${appsDir}"
+      chown ${username}:staff "${appsDir}"
+    fi
 
     # Loop through all .app directories in the source directory
     for app in ${pwaAppsSourceDir}/*.app; do

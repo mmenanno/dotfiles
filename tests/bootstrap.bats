@@ -92,3 +92,35 @@ make_clone() {
     [ "$status" -eq 0 ]
     [ "$(git -C "$HOME/dotfiles" log -1 --format=%s)" = "two" ]
 }
+
+# A nixup-with-secrets stand-in that fails its first $1 runs, counting calls
+fake_nixup() {
+    DOTFILES_DIR="$BATS_TEST_TMPDIR/dotfiles"
+    mkdir -p "$DOTFILES_DIR/bin"
+    cat > "$DOTFILES_DIR/bin/nixup-with-secrets" <<SH
+#!/usr/bin/env bash
+n=\$(( \$(cat "$BATS_TEST_TMPDIR/runs" 2>/dev/null || echo 0) + 1 ))
+echo \$n > "$BATS_TEST_TMPDIR/runs"
+(( n > $1 ))
+SH
+    chmod +x "$DOTFILES_DIR/bin/nixup-with-secrets"
+}
+
+@test "a build that fails on the Xcode license is retried once" {
+    fake_nixup 1
+    # shellcheck disable=SC2329  # called by build_configuration
+    xcode_license_pending() { [[ "$(cat "$BATS_TEST_TMPDIR/runs")" == 1 ]]; }
+    run build_configuration
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/runs")" -eq 2 ]
+    [[ "$output" == *"Xcode license"* ]]
+}
+
+@test "a build that fails for another reason isn't retried" {
+    fake_nixup 1
+    # shellcheck disable=SC2329  # called by build_configuration
+    xcode_license_pending() { return 1; }
+    run build_configuration
+    [ "$status" -ne 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/runs")" -eq 1 ]
+}
