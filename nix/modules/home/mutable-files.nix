@@ -10,6 +10,8 @@ let
   mutableFiles = [
     { path = ".claude/settings.json"; fileKey = "${homeDirectory}/.claude/settings.json"; }
     { path = ".config/op/plugins.sh"; fileKey = ".config/op/plugins.sh"; }
+    # Zellij's settings screen rewrites its whole config
+    { path = ".config/zellij/config.kdl"; fileKey = ".config/zellij/config.kdl"; }
     { path = "Library/Application Support/Code/User/settings.json"; fileKey = "Library/Application Support/Code/User/settings.json"; }
     { path = "Library/Application Support/Code/User/mcp.json"; fileKey = "Library/Application Support/Code/User/mcp.json"; }
   ] ++ (if isWorkMachine then [

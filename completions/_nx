@@ -53,6 +53,7 @@ _nx() {
         'op:.config/op/plugins.sh'
         'vscode:Library/Application Support/Code/User/settings.json'
         'vsmcp:Library/Application Support/Code/User/mcp.json'
+        'zellij:.config/zellij/config.kdl'
         'all:All managed files'
     )
     # Machine-specific; suggest them only if a baseline exists

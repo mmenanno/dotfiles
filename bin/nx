@@ -369,7 +369,7 @@ json_files_equal() {
 }
 # Must match mutablePaths in nix/modules/home/mutable-files.nix
 # Ordered list of shorthand names (used for iteration order)
-MANAGED_NAMES=(claude op vscode vsmcp)
+MANAGED_NAMES=(claude op vscode vsmcp zellij)
 BASELINE_DIR="$HOME/.local/share/nix-managed-baselines"
 
 # Shorthand -> full path mapping
@@ -378,6 +378,7 @@ declare -A MANAGED_FILES=(
     [op]=".config/op/plugins.sh"
     [vscode]="Library/Application Support/Code/User/settings.json"
     [vsmcp]="Library/Application Support/Code/User/mcp.json"
+    [zellij]=".config/zellij/config.kdl"
 )
 
 # Shorthand -> Nix source file mapping
@@ -386,6 +387,7 @@ declare -A MANAGED_NIX_SOURCES=(
     [op]="nix/modules/home/onepassword.nix"
     [vscode]="nix/modules/home/vscode.nix"
     [vsmcp]="nix/modules/home/vscode.nix"
+    [zellij]="nix/files/zellij/config.kdl"
 )
 
 # Machine-specific managed files (must match mutable-files.nix). Lazily added
