@@ -81,3 +81,168 @@ XML
         grep -qxF "$p" <<< "$paths" || { echo "missing: $p"; return 1; }
     done
 }
+
+# --- Task 2: checks, preview and copy -------------------------------------
+
+# The "old Mac" is a directory: the ssh stub runs each remote command there.
+# Paths containing $STUB_DENY fail like macOS privacy protection does
+setup_remote() {
+    export OLD_HOME="$BATS_TEST_TMPDIR/old"
+    export CALLS="$BATS_TEST_TMPDIR/calls"
+    export CONTROL_PATH="$BATS_TEST_TMPDIR/ctl"
+    mkdir -p "$OLD_HOME"
+    : > "$CALLS"
+    ssh() {
+        local args=("$@") cmd
+        printf 'ssh %s\n' "${args[*]}" >> "$CALLS"
+        if [[ " ${args[*]} " == *" -O exit "* ]]; then rm -f "$CONTROL_PATH"; return 0; fi
+        if [[ -n "${STUB_SSH_ERR:-}" ]]; then echo "$STUB_SSH_ERR" >&2; return 255; fi
+        touch "$CONTROL_PATH"
+        cmd="${args[-1]}"
+        if [[ -n "${STUB_DENY:-}" && "$cmd" == *"$STUB_DENY"* ]]; then
+            echo "ls: $STUB_DENY: Operation not permitted" >&2
+            return 1
+        fi
+        (cd "$OLD_HOME" && HOME="$OLD_HOME" bash -c "$cmd")
+    }
+    rsync() {
+        printf 'rsync' >> "$CALLS"
+        printf ' [%s]' "$@" >> "$CALLS"
+        printf '\n' >> "$CALLS"
+        # Fail only real copies, so a failure lands partway through the run
+        [[ " $* " == *" --dry-run "* ]] && return 0
+        return "${STUB_RSYNC_EXIT:-0}"
+    }
+    pgrep() { return 1; }
+    caffeinate() { :; }
+    export -f ssh rsync pgrep caffeinate
+}
+
+only_entry() {
+    MIGRATE_ENTRIES=("$@")
+}
+
+@test "ssh_failure_reason classifies ssh errors" {
+    [ "$(ssh_failure_reason 'ssh: Could not resolve hostname x: nodename nor servname provided')" = resolve ]
+    [ "$(ssh_failure_reason 'ssh: connect to host x port 22: Connection refused')" = refused ]
+    [ "$(ssh_failure_reason 'ssh: connect to host x port 22: Operation timed out')" = timeout ]
+    [ "$(ssh_failure_reason 'x: Permission denied (publickey,password,keyboard-interactive).')" = auth ]
+    [ "$(ssh_failure_reason 'something else')" = other ]
+}
+
+@test "remote_read_problem classifies read errors" {
+    [ "$(remote_read_problem 'ls: x: No such file or directory')" = missing ]
+    [ "$(remote_read_problem 'ls: x: Operation not permitted')" = denied ]
+    [ "$(remote_read_problem 'ls: x: Permission denied')" = other ]
+}
+
+@test "nearest_existing_dir walks up to a directory that exists" {
+    mkdir -p "$HOME/Library"
+    [ "$(nearest_existing_dir "$HOME/Library/Containers/new.app/Data")" = "$HOME/Library" ]
+}
+
+@test "check_local_writable passes for a destination whose folders don't exist yet" {
+    mkdir -p "$HOME/Library"
+    run check_local_writable "Library/Containers/com.pocketpair.palworld.mac"
+    [ "$status" -eq 0 ]
+}
+
+@test "a denied path stops the run with Full Disk Access instructions and no rsync" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/Containers/com.pocketpair.palworld.mac" "$OLD_HOME/Library/RenPy"
+    only_entry "Library/Containers/com.pocketpair.palworld.mac|Palworld|" "Library/RenPy||"
+    STUB_DENY="com.pocketpair.palworld.mac"
+    export STUB_DENY
+    run main oldmac --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Allow full disk access for remote users"* ]]
+    refute grep -q '^rsync' "$CALLS"
+}
+
+@test "an unreachable host explains how to turn on Remote Login" {
+    setup_remote
+    STUB_SSH_ERR="ssh: connect to host oldmac port 22: Connection refused"
+    export STUB_SSH_ERR
+    run main oldmac --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Remote Login"* ]]
+}
+
+@test "--dry-run only previews, and a path with spaces reaches rsync as one argument" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/Application Support/Paradox Interactive"
+    only_entry "Library/Application Support/Paradox Interactive||"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    grep -q '^rsync' "$CALLS"
+    refute grep -q '^rsync' <(grep -vF '[--dry-run]' "$CALLS")
+    grep -qF '[oldmac:Library/Application Support/Paradox Interactive/]' "$CALLS"
+    grep -qF "[$HOME/Library/Application Support/Paradox Interactive/]" "$CALLS"
+}
+
+@test "missing paths on the old Mac are skipped with a note" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||" "Library/Application Support/Transmit|Transmit|Logs"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Library/Application Support/Transmit"*"not on"* ]]
+    refute grep -qF 'Transmit/]' "$CALLS"
+}
+
+@test "Nix-managed files and entry excludes become anchored rsync excludes" {
+    setup_remote
+    mkdir -p "$OLD_HOME/.claude" "$HOME/.claude"
+    ln -s /nix/store/x "$HOME/.claude/CLAUDE.md"
+    only_entry ".claude||projects/tmp"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    grep -qF '[--exclude=/CLAUDE.md]' "$CALLS"
+    grep -qF '[--exclude=/projects/tmp]' "$CALLS"
+}
+
+@test "entries inside a Syncthing folder on the old Mac are dropped" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/Application Support/Syncthing" "$OLD_HOME/Library/RenPy"
+    cat > "$OLD_HOME/Library/Application Support/Syncthing/config.xml" <<XML
+<configuration><folder id="r" path="~/Library/RenPy"></folder></configuration>
+XML
+    only_entry "Library/RenPy||"
+    run main oldmac --dry-run
+    [[ "$output" == *"Syncthing"* ]]
+    refute grep -qF 'RenPy/]' "$CALLS"
+}
+
+@test "an open app on either Mac stops the run" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy|conductor|"
+    pgrep() { [[ "$*" == *conductor* ]]; }
+    export -f pgrep
+    run main oldmac --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"conductor"* ]]
+    refute grep -q '^rsync' "$CALLS"
+}
+
+@test "sqlite_orphans reports a local WAL whose database is being replaced" {
+    setup_remote
+    HOST=oldmac
+    mkdir -p "$OLD_HOME/app" "$HOME/app"
+    touch "$OLD_HOME/app/conductor.db" "$HOME/app/conductor.db" "$HOME/app/conductor.db-wal" "$HOME/app/other.db-shm"
+    run sqlite_orphans app
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HOME/app/conductor.db-wal" ]
+}
+
+@test "an rsync failure exits non-zero and closes the shared connection" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    STUB_RSYNC_EXIT=255
+    export STUB_RSYNC_EXIT
+    run main oldmac --yes
+    [ "$status" -ne 0 ]
+    [ ! -e "$CONTROL_PATH" ]
+    grep -q -- '-O exit' "$CALLS"
+}

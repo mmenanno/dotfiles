@@ -13,3 +13,10 @@ source_script() {
     # shellcheck disable=SC1090
     source "$REPO_ROOT/bin/$1"
 }
+
+# Succeed only if the command fails (a bare `! cmd` never fails a bats test)
+refute() {
+    if "$@"; then
+        return 1
+    fi
+}

@@ -12,16 +12,15 @@ BASELINE_DIR="${BASELINE_DIR:-$HOME/.local/share/nix-managed-baselines}"
 
 # path (relative to $HOME) | process that must be closed on both Macs |
 # comma-separated rsync excludes (relative to the path)
-# shellcheck disable=SC2034  # read by main and the tests
 MIGRATE_ENTRIES=(
     "Library/Application Support/Paradox Interactive||"
     "Library/Containers/com.pocketpair.palworld.mac|Palworld|"
     "Library/RenPy||"
     "Library/Application Support/Transmit|Transmit|Logs"
-    "Library/Application Support/com.charliemonroe.Downie-4|Downie|"
-    "Library/Containers/com.charliemonroe.Downie-4|Downie|"
-    "Library/Application Support/com.conductor.app|Conductor|agent-binaries,bin,cache.db*"
-    "conductor|Conductor|"
+    "Library/Application Support/com.charliemonroe.Downie-4|Downie 4|"
+    "Library/Containers/com.charliemonroe.Downie-4|Downie 4|"
+    "Library/Application Support/com.conductor.app|conductor|agent-binaries,bin,cache.db*"
+    "conductor|conductor|"
     ".claude||"
     ".claude.json||"
     ".zsh_history||"
@@ -91,9 +90,384 @@ inside_synced_folder() {
     return 1
 }
 
+# ============================================================================
+# Talking to the old Mac
+# ============================================================================
+
+HOST=""
+CONTROL_PATH="${CONTROL_PATH:-/tmp/nx-migrate-$$}"
+REMOTE_RSYNC=/run/current-system/sw/bin/rsync
+
+SSH_OPTS=(
+    -o ControlMaster=auto -o "ControlPath=$CONTROL_PATH" -o ControlPersist=60
+    # ServerAlive bounds a dead connection, since nothing else here times out
+    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4
+)
+
+# Run a command on the old Mac over the shared connection. Each argument is
+# quoted, so paths with spaces survive the remote shell
+remote() {
+    # shellcheck disable=SC2029  # quoted here on purpose, for the remote shell
+    ssh "${SSH_OPTS[@]}" "$HOST" "$(printf '%q ' "$@")"
+}
+
+close_connection() {
+    [[ -n "$HOST" ]] || return 0
+    ssh -o "ControlPath=$CONTROL_PATH" -O exit "$HOST" >/dev/null 2>&1 || true
+}
+
+ssh_failure_reason() {
+    case "$1" in
+        *"Could not resolve hostname"*) echo resolve ;;
+        *"Connection refused"*) echo refused ;;
+        *"timed out"*) echo timeout ;;
+        *"Permission denied"*) echo auth ;;
+        *) echo other ;;
+    esac
+}
+
+remote_read_problem() {
+    case "$1" in
+        *"No such file or directory"*) echo missing ;;
+        *"Operation not permitted"*) echo denied ;;
+        *) echo other ;;
+    esac
+}
+
+explain_ssh_failure() {
+    local reason="$1" err="$2" macs
+    case "$reason" in
+        resolve|timeout)
+            log_error "Can't reach $HOST."
+            log_info "Check the name, and that the old Mac is awake and signed into Tailscale."
+            if declare -F tailscale_macs >/dev/null; then
+                macs="$(tailscale_macs 2>/dev/null || true)"
+                [[ -n "$macs" ]] && log_info "Macs online on your tailnet: $(paste -sd ' ' - <<< "$macs")"
+            fi
+            ;;
+        refused)
+            log_error "$HOST isn't accepting SSH connections."
+            log_info "On the old Mac, turn on Remote Login in System Settings → General → Sharing."
+            ;;
+        auth)
+            log_error "$HOST rejected the login."
+            log_info "Use the old Mac's login password for $(id -un)."
+            ;;
+        *)
+            log_error "Couldn't connect to $HOST: $err"
+            ;;
+    esac
+    return 0
+}
+
+# Print "dir" or "file" for a path on the old Mac. Reading (not just stat-ing)
+# is what macOS privacy protection blocks, so this lists folders and reads a
+# byte of files
+remote_kind() {
+    # shellcheck disable=SC2016  # expanded by the remote shell
+    remote sh -c 'if [ -d "$1" ]; then ls "$1" >/dev/null && echo dir;
+        elif [ -e "$1" ]; then head -c 1 "$1" >/dev/null && echo file;
+        else echo "$1: No such file or directory" >&2; exit 1; fi' _ "$1"
+}
+
+# ============================================================================
+# This Mac
+# ============================================================================
+
+nearest_existing_dir() {
+    local dir="$1"
+    while [[ ! -d "$dir" ]]; do
+        dir="$(dirname "$dir")"
+    done
+    echo "$dir"
+}
+
+# Return 0 if the destination (or the nearest folder that exists) can be
+# written to; otherwise print why
+check_local_writable() {
+    local dir probe
+    dir="$(nearest_existing_dir "$HOME/$1")"
+    if probe="$(mktemp "$dir/.nx-migrate-probe.XXXXXX" 2>&1)"; then
+        rm -f "$probe"
+        return 0
+    fi
+    echo "$probe"
+    return 1
+}
+
+# Print each owning app that is running, and where
+running_apps() {
+    local entry process seen="|"
+    for entry in "${MIGRATE_ENTRIES[@]}"; do
+        process="$(entry_field "$entry" process)"
+        [[ -n "$process" && "$seen" != *"|$process|"* ]] || continue
+        seen+="$process|"
+        if pgrep -x "$process" >/dev/null 2>&1; then
+            echo "$process (this Mac)"
+        fi
+        if remote pgrep -x "$process" >/dev/null 2>&1; then
+            echo "$process (old Mac)"
+        fi
+    done
+    return 0
+}
+
+# ============================================================================
+# rsync
+# ============================================================================
+
+RSYNC_BASE=()
+
+set_rsync_base() {
+    local rsync_path="$REMOTE_RSYNC" xattrs=(-X)
+    if ! remote test -x "$REMOTE_RSYNC" 2>/dev/null; then
+        # The built-in rsync (openrsync) doesn't support extended attributes
+        rsync_path=/usr/bin/rsync
+        xattrs=()
+    fi
+    RSYNC_BASE=(-aH "${xattrs[@]}" --partial --mkpath
+        -e "ssh -o ControlPath=$CONTROL_PATH -o ControlMaster=no"
+        "--rsync-path=$rsync_path")
+}
+
+# Print rsync arguments for one entry, one per line: excludes, then source and
+# destination. Remote paths go unescaped; rsync 3.2.4+ protects them itself
+rsync_paths() {
+    local entry="$1" kind="$2" relpath excludes pattern slash=""
+    local -a parts=()
+    relpath="$(entry_field "$entry" path)"
+    excludes="$(entry_field "$entry" excludes)"
+    IFS=',' read -r -a parts <<< "$excludes"
+    for pattern in "${parts[@]}"; do
+        [[ -n "$pattern" ]] && echo "--exclude=/$pattern"
+    done
+    while IFS= read -r pattern; do
+        [[ -n "$pattern" ]] && echo "--exclude=/$pattern"
+    done < <(nix_managed_excludes "$relpath")
+    [[ "$kind" == dir ]] && slash=/
+    echo "$HOST:$relpath$slash"
+    echo "$HOME/$relpath$slash"
+}
+
+# Files an itemized rsync dry run would copy
+itemized_files() {
+    awk '/^>f/ { sub(/^[^ ]+ /, ""); print }' | sort
+}
+
+# Print destination files that are newer than the old Mac's copy: the ones a
+# --update run would skip
+newer_on_destination() {
+    local entry="$1" kind="$2" args=()
+    mapfile -t args < <(rsync_paths "$entry" "$kind")
+    comm -23 \
+        <(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes "${args[@]}" 2>/dev/null | itemized_files) \
+        <(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --update "${args[@]}" 2>/dev/null | itemized_files)
+}
+
+# Print local SQLite -wal/-shm files that would end up next to a database
+# copied from the old Mac without a matching file from there
+sqlite_orphans() {
+    local relpath="$1" remote_list f db
+    [[ -d "$HOME/$relpath" ]] || return 0
+    # shellcheck disable=SC2016  # expanded by the remote shell
+    remote_list="$(remote sh -c 'cd "$1" && find . -name "*.db" -o -name "*.db-wal" -o -name "*.db-shm"' _ "$relpath" 2>/dev/null || true)"
+    while IFS= read -r -d '' f; do
+        f="./${f#"$HOME/$relpath"/}"
+        db="${f%-wal}"
+        db="${db%-shm}"
+        if grep -qxF "$db" <<< "$remote_list" && ! grep -qxF "$f" <<< "$remote_list"; then
+            echo "$HOME/$relpath/${f#./}"
+        fi
+    done < <(find "$HOME/$relpath" \( -name '*.db-wal' -o -name '*.db-shm' \) -print0)
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+show_help() {
+    cat << 'HELP'
+nx migrate - copy app data, saves and history from your old Mac
+
+USAGE:
+    nx migrate [host] [--dry-run] [--yes]
+
+    host       The old Mac's Tailscale name, <name>.local or IP address.
+               Leave it out to pick from the Macs on your tailnet.
+    --dry-run  Run the checks and show what would be copied, then stop.
+    --yes      Don't ask before copying.
+
+BEFORE RUNNING, ON THE OLD MAC:
+    System Settings → General → Sharing → Remote Login: on, with
+    "Allow full disk access for remote users" ticked.
+HELP
+}
+
+on_exit() {
+    close_connection
+}
+
+on_signal() {
+    trap - INT TERM EXIT
+    close_connection
+    kill -INT $$
+}
+
+# Load the old Mac's Syncthing folders, so nothing is copied into them
+load_synced_folders() {
+    local config
+    config="$(mktemp)"
+    if remote cat "Library/Application Support/Syncthing/config.xml" > "$config" 2>/dev/null; then
+        syncthing_folder_paths "$config"
+    fi
+    rm -f "$config"
+}
+
 main() {
-    log_error "not implemented yet"
-    exit 1
+    local dry_run=false assume_yes=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run) dry_run=true ;;
+            --yes|-y) assume_yes=true ;;
+            -h|--help) show_help; return 0 ;;
+            -*) log_error "Unknown option: $arg"; show_help; return 1 ;;
+            *) HOST="$arg" ;;
+        esac
+    done
+    if [[ -z "$HOST" ]] && declare -F pick_host >/dev/null; then
+        HOST="$(pick_host)" || return 1
+    fi
+    if [[ -z "$HOST" ]]; then
+        log_error "Which Mac? Run: nx migrate <host>"
+        return 1
+    fi
+
+    trap on_exit EXIT
+    trap on_signal INT TERM
+    caffeinate -ims -w $$ &
+
+    # 1. Reachable, with one connection (and one password prompt) for the run
+    log_info "Connecting to $HOST..."
+    local err
+    if ! err="$(remote true 2>&1 >/dev/null)"; then
+        explain_ssh_failure "$(ssh_failure_reason "$err")" "$err"
+        return 1
+    fi
+
+    local -a synced=()
+    mapfile -t synced < <(load_synced_folders)
+
+    # 2. Readable on the old Mac
+    local entry relpath kind errfile
+    local -a ready=() kinds=() denied=()
+    errfile="$(mktemp)"
+    for entry in "${MIGRATE_ENTRIES[@]}"; do
+        relpath="$(entry_field "$entry" path)"
+        if (( ${#synced[@]} )) && inside_synced_folder "$relpath" "${synced[@]}"; then
+            log_warning "$relpath is inside a Syncthing folder; Syncthing copies it, skipping"
+            continue
+        fi
+        if kind="$(remote_kind "$relpath" 2>"$errfile")"; then
+            ready+=("$entry")
+            kinds+=("$kind")
+        elif [[ "$(remote_read_problem "$(cat "$errfile")")" == missing ]]; then
+            log_info "$relpath is not on the old Mac, skipping"
+        else
+            denied+=("$relpath: $(cat "$errfile")")
+        fi
+    done
+    rm -f "$errfile"
+    if (( ${#denied[@]} )); then
+        log_error "The old Mac wouldn't let SSH read:"
+        printf '    %s\n' "${denied[@]}" >&2
+        log_info "On the old Mac: System Settings → General → Sharing → Remote Login (i) → tick \"Allow full disk access for remote users\", then re-run."
+        return 1
+    fi
+
+    # 3. Writable here
+    local -a blocked=()
+    local why
+    for entry in "${ready[@]}"; do
+        relpath="$(entry_field "$entry" path)"
+        why="$(check_local_writable "$relpath")" || blocked+=("$relpath: $why")
+    done
+    if (( ${#blocked[@]} )); then
+        log_error "Can't write to these on this Mac:"
+        printf '    %s\n' "${blocked[@]}" >&2
+        log_info "Give your terminal Full Disk Access (System Settings → Privacy & Security), or approve the prompt macOS showed, then restart it and re-run."
+        return 1
+    fi
+
+    # 4. Apps closed on both Macs
+    local running
+    running="$(running_apps)"
+    if [[ -n "$running" ]]; then
+        log_error "Quit these first, so their data isn't copied mid-write:"
+        printf '    %s\n' "${running//$'\n'/$'\n'    }" >&2
+        return 1
+    fi
+
+    # 5-6. Preview
+    set_rsync_base
+    local i f stats files size newer all_newer=""
+    local -a args=()
+    log_info "Preview:"
+    for i in "${!ready[@]}"; do
+        entry="${ready[$i]}"
+        relpath="$(entry_field "$entry" path)"
+        mapfile -t args < <(rsync_paths "$entry" "${kinds[$i]}")
+        if ! stats="$(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --stats -h "${args[@]}")"; then
+            log_error "Couldn't preview $relpath; check the connection to $HOST and re-run."
+            return 1
+        fi
+        files="$(awk -F': ' '/Number of regular files transferred/ {print $2}' <<< "$stats")"
+        size="$(awk -F': ' '/Total transferred file size/ {print $2}' <<< "$stats")"
+        echo "    $relpath: ${files:-0} files, ${size:-0 bytes}"
+        newer="$(newer_on_destination "$entry" "${kinds[$i]}")"
+        if [[ -n "$newer" ]]; then
+            while IFS= read -r f; do
+                all_newer+="    $relpath/$f"$'\n'
+            done <<< "$newer"
+        fi
+    done
+    if [[ -n "$all_newer" ]]; then
+        log_warning "These are newer on this Mac and will be replaced by the old Mac's copy:"
+        printf '%s' "$all_newer" >&2
+    fi
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run: nothing copied."
+        return 0
+    fi
+    if [[ "$assume_yes" != true ]] && ! confirm "Copy from $HOST?"; then
+        log_info "Nothing copied."
+        return 0
+    fi
+
+    # 7. Copy, dropping SQLite side files that won't match the copied database
+    local orphan prefs=false
+    for i in "${!ready[@]}"; do
+        entry="${ready[$i]}"
+        relpath="$(entry_field "$entry" path)"
+        log_info "Copying $relpath..."
+        mapfile -t args < <(rsync_paths "$entry" "${kinds[$i]}")
+        if [[ "${kinds[$i]}" == dir ]]; then
+            while IFS= read -r orphan; do
+                rm -f "$orphan"
+            done < <(sqlite_orphans "$relpath")
+        fi
+        if ! rsync "${RSYNC_BASE[@]}" --info=progress2 "${args[@]}"; then
+            log_error "Copying $relpath failed. Re-run nx migrate to pick up where it stopped."
+            return 1
+        fi
+        [[ "$relpath" == Library/Preferences* ]] && prefs=true
+    done
+
+    # 8. macOS caches preferences in memory and would write its copy back
+    if [[ "$prefs" == true ]]; then
+        killall cfprefsd 2>/dev/null || true
+    fi
+
+    log_success "Copied from $HOST."
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
