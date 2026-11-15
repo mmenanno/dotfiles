@@ -16,9 +16,6 @@ _:
     VPNOnDemandIsUserConfigured = true;
     DidSetVPNOnDemandIsUserConfigured = true;
     
-    # Onboarding flow preference
-    OnboardingFlow = "hide";
-    
     # Don't restart after Sparkle updates
     restartAfterSparkleUpdate = false;
     
