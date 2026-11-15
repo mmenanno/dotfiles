@@ -152,6 +152,17 @@ in
     "/opt/homebrew/opt/postgresql@17/bin"
   ];
 
+  # Once Xcode is installed (masApps), Homebrew refuses to run until its
+  # license is accepted. Accept it before the Homebrew step; on a fresh Mac
+  # Xcode only appears mid-build, so bootstrap.sh retries the build once
+  system.activationScripts.preActivation.text = ''
+    xcode_dev=/Applications/Xcode.app/Contents/Developer
+    if [ -d "$xcode_dev" ] && ! DEVELOPER_DIR="$xcode_dev" /usr/bin/xcodebuild -license check >/dev/null 2>&1; then
+      echo -e "\033[0;34mℹ\033[0m Accepting the Xcode license (Homebrew needs it)..."
+      DEVELOPER_DIR="$xcode_dev" /usr/bin/xcodebuild -license accept
+    fi
+  '';
+
   nix-homebrew = {
     enable = true;
     enableRosetta = false;
