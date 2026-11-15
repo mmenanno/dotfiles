@@ -7,6 +7,7 @@
 # and must stay compatible with macOS's stock bash 3.2
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
+set -E             # Run the ERR trap for failures inside functions too
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -238,6 +239,11 @@ install_nix() {
     log_success "Nix installed successfully."
 }
 
+# git, ignoring the user's global and system config
+dotfiles_git() {
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git "$@"
+}
+
 # Function to clone or update dotfiles
 setup_dotfiles() {
     local clone_url="$DOTFILES_REPO"
@@ -246,24 +252,22 @@ setup_dotfiles() {
         log_info "Dotfiles directory exists. Checking for updates..."
         cd "$DOTFILES_DIR"
         
-        # Check if repository needs updating
-        git fetch origin main >/dev/null 2>&1
-        local local_commit
-        local remote_commit
-        local_commit=$(git rev-parse HEAD)
-        remote_commit=$(git rev-parse origin/main 2>/dev/null || echo "")
-        
-        if [[ -n "$remote_commit" && "$local_commit" != "$remote_commit" ]]; then
+        # Talk to GitHub without the user's git config: after the first run
+        # it rewrites https://github.com/ to SSH, which fails until 1Password's
+        # SSH agent is set up. The repo is public, so plain HTTPS works
+        if ! dotfiles_git fetch -q origin main; then
+            log_warning "Couldn't check for updates. Continuing with the current version..."
+        elif [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
             log_info "Updates available. Pulling changes..."
-            if ! git pull origin main; then
-                log_warning "Failed to update dotfiles. Continuing with existing version..."
+            if ! git merge -q --ff-only origin/main; then
+                log_warning "Failed to update dotfiles (local changes?). Continuing with the existing version..."
             fi
         else
             log_success "Dotfiles already up to date."
         fi
     else
         log_info "Cloning dotfiles repository..."
-        if ! git clone "$clone_url" "$DOTFILES_DIR"; then
+        if ! dotfiles_git clone "$clone_url" "$DOTFILES_DIR"; then
             log_error "Failed to clone dotfiles repository."
             exit 1
         fi
