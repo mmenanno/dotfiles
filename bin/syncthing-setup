@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+# Set up this Mac's Syncthing folders from the list Nix writes, through
+# Syncthing's local API. Folders start receive-only, so a new Mac downloads
+# them from Unraid; `promote` switches them to send-only when asked.
+#
+#   syncthing-setup apply                    add the Unraid device and missing folders
+#   syncthing-setup status                   show each managed folder's mode and progress
+#   syncthing-setup promote [--revert] [--yes]
+
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "${BASH_SOURCE[0]%/*}/shared"
+export USE_ICON_STYLE=true
+
+SYNCTHING_SPEC="${SYNCTHING_SPEC:-$HOME/.config/dotfiles/syncthing.json}"
+SYNCTHING_CONFIG="${SYNCTHING_CONFIG:-$HOME/Library/Application Support/Syncthing/config.xml}"
+STATE_DIR="$HOME/.local/state/syncthing-setup"
+ST_ADDRESS=""
+ST_KEY=""
+
+# ============================================================================
+# API
+# ============================================================================
+
+load_api_credentials() {
+    ST_ADDRESS="$(xmllint --xpath 'string(//gui/address)' "$SYNCTHING_CONFIG" 2>/dev/null || true)"
+    ST_KEY="$(xmllint --xpath 'string(//gui/apikey)' "$SYNCTHING_CONFIG" 2>/dev/null || true)"
+    [[ -n "$ST_ADDRESS" && -n "$ST_KEY" ]]
+}
+
+# The only network call: everything else goes through here
+st_api() {
+    local method="$1" path="$2" body="${3:-}"
+    local args=(-fsS --max-time 15 -X "$method" -H "X-API-Key: $ST_KEY")
+    [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" --data "$body")
+    curl "${args[@]}" "http://$ST_ADDRESS$path"
+}
+
+# Return 0 once Syncthing's API answers, starting the app if it isn't running
+st_ready() {
+    if st_api GET /rest/system/ping >/dev/null 2>&1; then
+        return 0
+    fi
+    open -a Syncthing >/dev/null 2>&1 || return 1
+    local deadline=$((SECONDS + 30))
+    while (( SECONDS < deadline )); do
+        st_api GET /rest/system/ping >/dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
+spec() {
+    jq -r "$1" "$SYNCTHING_SPEC"
+}
+
+unraid_id() {
+    spec '.unraidDeviceId // ""'
+}
+
+# Expand a leading ~/ so paths written either way compare equal
+expand_home() {
+    # A literal "~/" prefix, as Syncthing stores home-relative paths
+    # shellcheck disable=SC2088
+    local path="$1" tilde='~/'
+    [[ "$path" == "$tilde"* ]] && path="$HOME/${path#"$tilde"}"
+    echo "${path%/}"
+}
+
+# Common preconditions; prints why and returns 1 if the API can't be used
+connect() {
+    if [[ ! -f "$SYNCTHING_SPEC" ]]; then
+        log_info "Syncthing: no folder list at $SYNCTHING_SPEC; run nx up first"
+        return 1
+    fi
+    if [[ ! -f "$SYNCTHING_CONFIG" ]] || ! load_api_credentials; then
+        log_info "Syncthing isn't set up yet; open Syncthing once, then run nx up again"
+        return 1
+    fi
+    if ! st_ready; then
+        log_info "Syncthing isn't responding; open it and run nx up again"
+        return 1
+    fi
+}
+
+# ============================================================================
+# apply
+# ============================================================================
+
+cmd_apply() {
+    connect || return 0
+
+    local unraid
+    unraid="$(unraid_id)"
+    if [[ -z "$unraid" ]]; then
+        log_info "Syncthing: skipped; add syncthing_device_id to Nix/Server in 1Password (NIX_SYNCTHING_UNRAID_ID)"
+        return 0
+    fi
+
+    local devices folders
+    devices="$(st_api GET /rest/config/devices)" || { log_warning "Syncthing: couldn't read devices"; return 0; }
+    folders="$(st_api GET /rest/config/folders)" || { log_warning "Syncthing: couldn't read folders"; return 0; }
+
+    if ! jq -e --arg id "$unraid" 'any(.[]; .deviceID == $id)' <<< "$devices" >/dev/null; then
+        local device
+        device="$(st_api GET /rest/config/defaults/device | jq -c \
+            --arg id "$unraid" --arg name "$(spec '.unraidName')" \
+            '. + {deviceID: $id, name: $name, addresses: ["dynamic"]}')"
+        st_api PUT "/rest/config/devices/$unraid" "$device" >/dev/null
+        log_success "Syncthing: added $(spec '.unraidName')"
+    fi
+
+    local defaults count i id label path
+    defaults="$(st_api GET /rest/config/defaults/folder)"
+    count="$(spec '.folders | length')"
+    mkdir -p "$STATE_DIR"
+    for ((i = 0; i < count; i++)); do
+        id="$(spec ".folders[$i].id")"
+        label="$(spec ".folders[$i].label")"
+        path="$(spec ".folders[$i].path")"
+
+        if jq -e --arg id "$id" 'any(.[]; .id == $id)' <<< "$folders" >/dev/null; then
+            continue
+        fi
+        local taken
+        taken="$(jq -r '.[].path // empty' <<< "$folders" | while IFS= read -r p; do
+            [[ "$(expand_home "$p")" == "$(expand_home "$path")" ]] && echo yes; done)"
+        if [[ -n "$taken" ]]; then
+            log_warning "Syncthing: $label ($path) is already used by another folder; leaving it alone"
+            continue
+        fi
+
+        local folder
+        folder="$(jq -c \
+            --arg id "$id" --arg label "$label" --arg path "$path" --arg dev "$unraid" \
+            --argjson extra "$(spec '.folderDefaults')" \
+            '. + $extra + {id: $id, label: $label, path: $path, type: "receiveonly",
+                devices: [{deviceID: $dev}]}' <<< "$defaults")"
+        st_api PUT "/rest/config/folders/$id" "$folder" >/dev/null
+        st_api POST "/rest/db/ignores?folder=$id" \
+            "$(spec ".folders[$i] | {ignore: .ignores}" | jq -c .)" >/dev/null
+        touch "$STATE_DIR/$id.pending"
+        log_success "Syncthing: added $label (receive-only until you run nx syncthing promote)"
+    done
+}
+
+# ============================================================================
+# status
+# ============================================================================
+
+pending() {
+    [[ -f "$STATE_DIR/$1.pending" ]]
+}
+
+cmd_status() {
+    connect || return 0
+    local folders count i id label type mode st pct
+    folders="$(st_api GET /rest/config/folders)"
+    count="$(spec '.folders | length')"
+    for ((i = 0; i < count; i++)); do
+        id="$(spec ".folders[$i].id")"
+        label="$(spec ".folders[$i].label")"
+        type="$(jq -r --arg id "$id" '.[] | select(.id == $id) | .type' <<< "$folders")"
+        case "$type" in
+            "") echo "    $label: not set up"; continue ;;
+            receiveonly) mode="receive-only" ;;
+            sendonly) mode="send-only" ;;
+            *) mode="$type" ;;
+        esac
+        pending "$id" && mode+=" (pending)"
+        st="$(st_api GET "/rest/db/status?folder=$id")"
+        pct="$(jq -r 'if (.globalBytes // 0) > 0
+            then ((.globalBytes - .needBytes) * 100 / .globalBytes | floor) else 100 end' <<< "$st")"
+        echo "    $label: $mode, $pct% synced ($(jq -r '.state // "unknown"' <<< "$st"))"
+    done
+}
+
+# ============================================================================
+# promote
+# ============================================================================
+
+cmd_promote() {
+    local revert=false assume_yes=false arg
+    for arg in "$@"; do
+        case "$arg" in
+            --revert) revert=true ;;
+            --yes|-y) assume_yes=true ;;
+            *) log_error "Unknown option: $arg"; return 1 ;;
+        esac
+    done
+    connect || return 0
+
+    local ids=() f
+    for f in "$STATE_DIR"/*.pending; do
+        [[ -e "$f" ]] && ids+=("$(basename "$f" .pending)")
+    done
+    if (( ${#ids[@]} == 0 )); then
+        log_success "Syncthing: every managed folder is already send-only"
+        return 0
+    fi
+
+    local unraid connected
+    unraid="$(unraid_id)"
+    connected="$(st_api GET /rest/system/connections | jq -r --arg id "$unraid" '.connections[$id].connected // false')"
+    if [[ "$connected" != true ]]; then
+        log_warning "Syncthing: $(spec '.unraidName') isn't connected, so nothing can be checked. Try again once it is."
+        return 0
+    fi
+
+    if [[ "$assume_yes" != true ]]; then
+        log_info "Once promoted, this Mac's changes go to Unraid. Pause Syncthing on the old Mac first if you're still using it."
+        confirm "Promote ready folders to send-only?" || return 0
+    fi
+
+    local id label st need global changed state
+    for id in "${ids[@]}"; do
+        label="$(jq -r --arg id "$id" '.folders[] | select(.id == $id) | .label' "$SYNCTHING_SPEC")"
+        st="$(st_api GET "/rest/db/status?folder=$id")"
+        need="$(jq -r '.needFiles // 0' <<< "$st")"
+        global="$(jq -r '.globalFiles // 0' <<< "$st")"
+        changed="$(jq -r '.receiveOnlyChangedFiles // 0' <<< "$st")"
+        state="$(jq -r '.state // ""' <<< "$st")"
+
+        if (( changed > 0 )); then
+            if [[ "$revert" == true ]]; then
+                st_api POST "/rest/db/revert?folder=$id" >/dev/null
+                log_info "$label: reverted $changed local changes; run promote again once it has re-synced"
+            else
+                log_warning "$label: $changed files changed on this Mac. Click Revert Local Changes in Syncthing, or run nx syncthing promote --revert"
+            fi
+            continue
+        fi
+        if (( need > 0 || global == 0 )) || [[ "$state" != idle ]]; then
+            log_info "$label: still syncing ($need files to go, $state); try again later"
+            continue
+        fi
+        st_api PATCH "/rest/config/folders/$id" '{"type":"sendonly"}' >/dev/null
+        rm -f "$STATE_DIR/$id.pending"
+        log_success "$label: now send-only"
+    done
+}
+
+main() {
+    local cmd="${1:-status}"
+    shift || true
+    case "$cmd" in
+        apply) cmd_apply ;;
+        status) cmd_status ;;
+        promote) cmd_promote "$@" ;;
+        -h|--help|help)
+            sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            ;;
+        *) log_error "Unknown command: $cmd"; return 1 ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
