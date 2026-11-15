@@ -1,4 +1,4 @@
-{ config, ... }:
+{ config, lib, ... }:
 
 {
   home.file = {
@@ -21,4 +21,13 @@
       config.lib.file.mkOutOfStoreSymlink
         "${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
   };
+
+  # The files above make Home Manager create ~/.config/op with the default
+  # 755, and the 1Password CLI refuses to run until it's 700 ("its permissions
+  # are too broad")
+  home.activation.opConfigPermissions = lib.hm.dag.entryAfter [ "linkGeneration" "deployMutableFiles" ] ''
+    if [ -d "$HOME/.config/op" ]; then
+      run chmod 700 "$HOME/.config/op"
+    fi
+  '';
 }
