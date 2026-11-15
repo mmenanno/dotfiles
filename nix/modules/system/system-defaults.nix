@@ -135,21 +135,23 @@ in
     };
   };
 
-  # Terminal.app: MesloLGS Nerd Font 11pt on the default profile (whichever it
-  # is: Basic on older macOS, Clear Dark on newer). Runs after the fonts step,
-  # so the font exists on a fresh Mac
-  system.activationScripts.postActivation.text = ''
-    terminal_profiles=$(su ${username} -c "osascript -l JavaScript '${../../files/terminal-font.js}' com.apple.Terminal MesloLGSNFM-Regular 11" 2>/dev/null || echo "error")
-    case "$terminal_profiles" in
-      no-profiles) echo -e "\033[0;34mℹ\033[0m Terminal.app has no saved profiles yet; open it once and run nx up again to set its font" ;;
-      no-font|error) echo -e "\033[1;33m!\033[0m Couldn't set Terminal.app's font ($terminal_profiles)" ;;
-      *) echo -e "\033[0;32m✓\033[0m Terminal.app font set to MesloLGS Nerd Font 11pt ($terminal_profiles)" ;;
-    esac
-  '';
+  system.activationScripts = {
+    # Terminal.app: MesloLGS Nerd Font 11pt on the default profile (whichever it
+    # is: Basic on older macOS, Clear Dark on newer). Runs after the fonts step,
+    # so the font exists on a fresh Mac
+    postActivation.text = ''
+      terminal_profiles=$(su ${username} -c "osascript -l JavaScript '${../../files/terminal-font.js}' com.apple.Terminal MesloLGSNFM-Regular 11" 2>/dev/null || echo "error")
+      case "$terminal_profiles" in
+        no-profiles) echo -e "\033[0;34mℹ\033[0m Terminal.app has no saved profiles yet; open it once and run nx up again to set its font" ;;
+        no-font|error) echo -e "\033[1;33m!\033[0m Couldn't set Terminal.app's font ($terminal_profiles)" ;;
+        *) echo -e "\033[0;32m✓\033[0m Terminal.app font set to MesloLGS Nerd Font 11pt ($terminal_profiles)" ;;
+      esac
+    '';
 
-  system.activationScripts.extraActivation.text = ''
-    # Force reload of preference cache to apply natural scrolling setting
-    echo -e "\033[0;34mℹ\033[0m Reloading trackpad preferences..."
-    killall cfprefsd 2>/dev/null || true
-  '';
+    extraActivation.text = ''
+      # Force reload of preference cache to apply natural scrolling setting
+      echo -e "\033[0;34mℹ\033[0m Reloading trackpad preferences..."
+      killall cfprefsd 2>/dev/null || true
+    '';
+  };
 }
