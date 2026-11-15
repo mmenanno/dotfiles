@@ -253,7 +253,9 @@ running_apps() {
 RSYNC_BASE=()
 
 set_rsync_base() {
-    local rsync_path="$REMOTE_RSYNC" xattrs=(-X)
+    # com.apple.macl is per-device sandbox state that macOS won't let even
+    # Full Disk Access read, so it's never copied
+    local rsync_path="$REMOTE_RSYNC" xattrs=(-X "--filter=-x com.apple.macl")
     if ! remote test -x "$REMOTE_RSYNC" 2>/dev/null; then
         # The built-in rsync (openrsync) doesn't support extended attributes
         rsync_path=/usr/bin/rsync
@@ -464,15 +466,22 @@ main() {
     set_rsync_base
     local i f stats files size newer all_newer=""
     local -a args=()
+    local code
     log_info "Preview:"
     for i in "${!ready[@]}"; do
         entry="${ready[$i]}"
         relpath="$(entry_field "$entry" path)"
         mapfile -t args < <(rsync_paths "$entry" "${kinds[$i]}")
-        if ! stats="$(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --stats -h "${args[@]}")"; then
-            log_error "Couldn't preview $relpath; check the connection to $HOST and re-run."
-            return 1
-        fi
+        code=0
+        stats="$(rsync "${RSYNC_BASE[@]}" --dry-run --itemize-changes --stats -h "${args[@]}")" || code=$?
+        case "$code" in
+            0|24) ;;
+            23) log_warning "Some files or attributes in $relpath couldn't be read on the old Mac; the rest will copy" ;;
+            *)
+                log_error "Couldn't preview $relpath (rsync exit $code). Check the connection to $HOST and re-run."
+                return 1
+                ;;
+        esac
         files="$(awk -F': ' '/Number of regular files transferred/ {print $2}' <<< "$stats")"
         size="$(awk -F': ' '/Total transferred file size/ {print $2}' <<< "$stats")"
         echo "    $relpath: ${files:-0} files, ${size:-0 bytes}"
@@ -508,10 +517,11 @@ main() {
                 rm -f "$orphan"
             done < <(sqlite_orphans "$relpath" "$(entry_field "$entry" excludes)")
         fi
-        local code=0
+        code=0
         rsync "${RSYNC_BASE[@]}" --info=progress2 "${args[@]}" || code=$?
         case "$code" in
             0) ;;
+            23) log_warning "Some files or attributes in $relpath couldn't be read on the old Mac; the rest copied" ;;
             24) log_warning "Some files in $relpath changed while copying (an app on the old Mac may be writing); the rest copied" ;;
             *)
                 log_error "Copying $relpath failed (rsync exit $code). Re-run nx migrate to pick up where it stopped."

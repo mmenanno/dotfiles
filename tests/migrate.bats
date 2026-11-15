@@ -106,6 +106,7 @@ setup_remote() {
         [[ -n "${STUB_NOISE:-}" ]] && echo "$STUB_NOISE"
         (cd "$OLD_HOME" && HOME="$OLD_HOME" bash -c "$cmd")
     }
+    # shellcheck disable=SC2329  # called by bin/migrate
     rsync() {
         {
             printf 'rsync'
@@ -338,4 +339,36 @@ SH
     only_entry "Library/RenPy||"
     run main oldmac --dry-run
     grep -q 'PreferredAuthentications=publickey,keyboard-interactive,password' "$CALLS"
+}
+
+@test "protected macOS attributes are never copied" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy"
+    only_entry "Library/RenPy||"
+    # The old Mac has Nix's rsync, so extended attributes are copied
+    mkdir -p "$OLD_HOME/run/current-system/sw/bin"
+    REMOTE_RSYNC="$OLD_HOME/run/current-system/sw/bin/rsync"
+    printf '#!/bin/sh\n' > "$REMOTE_RSYNC"
+    chmod +x "$REMOTE_RSYNC"
+    run main oldmac --dry-run
+    [ "$status" -eq 0 ]
+    grep -qF '[-X]' "$CALLS"
+    grep -qF '[--filter=-x com.apple.macl]' "$CALLS"
+}
+
+@test "unreadable files or attributes (rsync 23) warn instead of blaming the connection" {
+    setup_remote
+    mkdir -p "$OLD_HOME/Library/RenPy" "$OLD_HOME/.claude"
+    only_entry "Library/RenPy||" ".claude||"
+    # shellcheck disable=SC2329  # replaces the stub from setup_remote
+    rsync() {
+        { printf 'rsync'; printf ' [%s]' "$@"; printf '\n'; } >> "$CALLS"
+        return 23
+    }
+    export -f rsync
+    run main oldmac --yes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"couldn't be read"* ]]
+    [[ "$output" != *"check the connection"* ]]
+    [ "$(grep -v -- '--dry-run' "$CALLS" | grep -c '^rsync')" -eq 2 ]
 }
