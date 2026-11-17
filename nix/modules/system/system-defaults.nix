@@ -56,6 +56,8 @@ in
       AppleShowAllExtensions = true;
       FXEnableExtensionChangeWarning = false;
       _FXSortFoldersFirst = false;
+      NewWindowTarget = "Home";
+      ShowMountedServersOnDesktop = true;
     };
 
     dock = {

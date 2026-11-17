@@ -14,6 +14,8 @@ _:
 
     "com.apple.finder" = {
       FXRemoveOldTrashItems = true;
+      WarnOnEmptyTrash = false;
+      ShowRecentTags = false; # Tags section in the sidebar
     };
 
     # Menu bar items, under the keys Control Center itself writes
