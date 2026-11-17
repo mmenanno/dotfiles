@@ -21,6 +21,7 @@ MIGRATE_ENTRIES=(
     "Library/Application Support/Transmit|Transmit|Logs"
     "Library/Application Support/com.charliemonroe.Downie-4|Downie 4|"
     "Library/Containers/com.charliemonroe.Downie-4|Downie 4|"
+    "Library/Containers/com.apple.Safari/Data/Library/WebKit/WebExtensions/Default/net.tampermonkey.SafariWebExt.Extension (G3XV72R5TC)|Safari|"
     "Library/Application Support/com.conductor.app|conductor|agent-binaries,bin,cache.db*"
     "conductor|conductor|"
     ".claude||"

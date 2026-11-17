@@ -44,7 +44,7 @@ Once the new Mac is set up, two commands bring over what Nix and 1Password don't
 **Files (`nx migrate`):** app data, game saves, Claude Code and Conductor history, and a few dotfiles. The list is `MIGRATE_ENTRIES` in `bin/migrate`.
 
 1. On the old Mac, open **System Settings → General → Sharing**, turn on **Remote Login**, and in its (i) panel tick **Allow full disk access for remote users**.
-2. Quit Conductor, Transmit, Downie and Palworld on both Macs.
+2. Quit Conductor, Transmit, Downie, Palworld and Safari (for Tampermonkey's scripts) on both Macs.
 3. Run `nx migrate` to pick the old Mac from your tailnet, or `nx migrate <tailscale-name>`. Add `--dry-run` to only check and preview. It asks for the old Mac's password once, checks everything before copying, shows a preview (including files that are newer on this Mac), and asks before copying. Re-running is safe.
 
 **Syncthing (`nx syncthing`):** `nx up` adds the Unraid device and your folders (declared in `nix/modules/home/syncthing.nix`) as receive-only, so they download without changing anything on Unraid.
