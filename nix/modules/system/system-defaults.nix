@@ -140,6 +140,13 @@ in
     # profile (Terminal's is Basic on older macOS, Clear Dark on newer). Runs
     # after the fonts step, so the font exists on a fresh Mac
     postActivation.text = ''
+      # Display never sleeps on the power adapter. AC only: nix-darwin's
+      # power.sleep.display would also change the battery setting
+      if [ "$(pmset -g custom | awk '/^AC Power/{ac=1} ac && $1=="displaysleep"{print $2; exit}')" != "0" ]; then
+        pmset -c displaysleep 0
+        echo -e "\033[0;32m✓\033[0m Display set to never turn off on the power adapter"
+      fi
+
       terminal_profiles=$(su ${username} -c "osascript -l JavaScript '${../../files/terminal-font.js}' com.apple.Terminal MesloLGSNFM-Regular 11" 2>/dev/null || echo "error")
       case "$terminal_profiles" in
         no-profiles) echo -e "\033[0;34mℹ\033[0m Terminal.app has no saved profiles yet; open it once and run nx up again to set its font" ;;
