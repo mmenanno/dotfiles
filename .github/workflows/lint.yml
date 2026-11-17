@@ -96,7 +96,7 @@ jobs:
           done
 
       - name: Static analysis with statix
-        run: nix run nixpkgs#statix -- check ./nix
+        run: nix run --inputs-from ./nix --option flake-registry "" nixpkgs#statix -- check ./nix
 
       - name: Find dead code with deadnix
-        run: nix run nixpkgs#deadnix -- --fail ./nix
+        run: nix run --inputs-from ./nix --option flake-registry "" nixpkgs#deadnix -- --fail ./nix
