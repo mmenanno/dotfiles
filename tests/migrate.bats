@@ -71,6 +71,7 @@ XML
         "Library/Application Support/Transmit" \
         "Library/Application Support/com.charliemonroe.Downie-4" \
         "Library/Containers/com.charliemonroe.Downie-4" \
+        "Library/Containers/com.apple.Safari/Data/Library/WebKit/WebExtensions/Default/net.tampermonkey.SafariWebExt.Extension (G3XV72R5TC)" \
         "Library/Application Support/com.conductor.app" \
         "conductor" \
         ".claude" \
