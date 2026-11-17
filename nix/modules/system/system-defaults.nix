@@ -140,12 +140,18 @@ in
     # profile (Terminal's is Basic on older macOS, Clear Dark on newer). Runs
     # after the fonts step, so the font exists on a fresh Mac
     postActivation.text = ''
-      # Display never sleeps on the power adapter. AC only: nix-darwin's
-      # power.sleep.display would also change the battery setting
-      if [ "$(pmset -g custom | awk '/^AC Power/{ac=1} ac && $1=="displaysleep"{print $2; exit}')" != "0" ]; then
-        pmset -c displaysleep 0
-        echo -e "\033[0;32m✓\033[0m Display set to never turn off on the power adapter"
-      fi
+      # Display sleep per power source (minutes, 0 = never). nix-darwin's
+      # power.sleep.display can only set one value for both
+      set_display_sleep() {
+        local section="$1" flag="$2" minutes="$3" label="$4" current
+        current=$(pmset -g custom | awk -v s="$section" '$0 ~ "^"s{in_s=1; next} /^[A-Z].*:$/{in_s=0} in_s && $1=="displaysleep"{print $2; exit}')
+        if [ "$current" != "$minutes" ]; then
+          pmset "$flag" displaysleep "$minutes"
+          echo -e "\033[0;32m✓\033[0m Display sleep on $label set to $minutes min (0 = never)"
+        fi
+      }
+      set_display_sleep "AC Power" -c 0 "power adapter"
+      set_display_sleep "Battery Power" -b 10 "battery"
 
       terminal_profiles=$(su ${username} -c "osascript -l JavaScript '${../../files/terminal-font.js}' com.apple.Terminal MesloLGSNFM-Regular 11" 2>/dev/null || echo "error")
       case "$terminal_profiles" in
