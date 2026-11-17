@@ -17,6 +17,7 @@ let
     ./home/zsh.nix
     ./home/starship.nix
     ./home/home-manager-system-defaults.nix
+    ./home/finder.nix
     ./home/vscode.nix
     ./home/mise.nix
     ./home/modern-cli-tools.nix
