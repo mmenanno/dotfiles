@@ -448,6 +448,7 @@ in
         text = ''
           #!/bin/bash
           input=$(cat)
+          { mkdir -p "$HOME/.claude/state" && printf '%s' "$input" | jq -c 'select(.rate_limits) | {rate_limits: {five_hour: (.rate_limits.five_hour // null | if . then {used_percentage, resets_at} else null end), seven_day: (.rate_limits.seven_day // null | if . then {used_percentage, resets_at} else null end)}, updated_at: now}' > "$HOME/.claude/state/plan-usage.json.tmp" && [ -s "$HOME/.claude/state/plan-usage.json.tmp" ] && mv "$HOME/.claude/state/plan-usage.json.tmp" "$HOME/.claude/state/plan-usage.json" || rm -f "$HOME/.claude/state/plan-usage.json.tmp"; } 2>/dev/null || true
           info=$(echo "$input" | node "${hooksDir}/statusline.js" 2>/dev/null || true)
           star=$(STARSHIP_SHELL=fish STARSHIP_CONFIG="$HOME/.config/starship.toml" starship prompt 2>/dev/null | head -1 || true)
           if [ -n "$info" ] && [ -n "$star" ]; then
