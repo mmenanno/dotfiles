@@ -16,6 +16,7 @@ _:
       FXRemoveOldTrashItems = true;
       WarnOnEmptyTrash = false;
       ShowRecentTags = false; # Tags section in the sidebar
+      FXPreferredGroupBy = "Kind"; # default "Group By" for folders without their own
     };
 
     # Menu bar items, under the keys Control Center itself writes
