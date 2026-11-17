@@ -47,6 +47,7 @@ in
     ./home/gemini.nix
     ./home/torrent-file-icon.nix
     ./home/syncthing.nix
+    ./home/screen-lock.nix
   ];
 
   # Work machine system modules (excludes personal apps/services)
